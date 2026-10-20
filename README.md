@@ -6,6 +6,19 @@ Licensed under the GNU GPL v3. Parts are derived from
 [b2](https://github.com/tom-seddon/b2) (Tom Seddon, GPLv3); see the file
 headers.
 
+## Download
+
+Get `MacBeeb-VERSION.dmg` from the
+[latest release](https://github.com/JamesRandall/macbeeb/releases/latest)
+and drag MacBeeb to Applications. It needs macOS 26, runs natively on Apple
+silicon and Intel, is notarised, and updates itself (MacBeeb > Check for
+Updates…). The ROMs it needs, and the Z80's and Master 512's system discs,
+are built in.
+
+For AI agents, the app includes an MCP server, which runs a machine of its
+own, or with `--attach` drives the one in the running app:
+`claude mcp add macbeeb -- /Applications/MacBeeb.app/Contents/MacOS/macbeeb-mcp --attach`.
+
 ## Layout
 
 | Path | What |
