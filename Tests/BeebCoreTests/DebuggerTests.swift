@@ -267,6 +267,20 @@ struct DebuggerTests {
         #expect(try busTrace(debugging: true) == busTrace(debugging: false))
     }
 
+    @Test func tvMetadataMapsCellsToScreenMemory() throws {
+        let m = machine()
+        let tv = TVOutput()
+        tv.recordsMetadata = true
+        m.tv = tv
+        m.run(seconds: 0.1)
+        #expect(tv.lastMetadata.count == TVOutput.metadataWidth * TVOutput.metadataHeight)
+        // Mode 7's screen is at &7C00-&7FE7.
+        let sources = tv.lastMetadata.compactMap(VideoSource.init(metadata:)).filter(\.display)
+        #expect(!sources.isEmpty)
+        #expect(sources.allSatisfy { $0.teletext && (0x7C00...0x7FFF).contains($0.address) })
+        #expect(Set(sources.map(\.address)).count > 900)
+    }
+
     @Test func memorySpaces() throws {
         let m = machine(.master128, secondProcessor: true)
         let names = m.memoryRegions.map(\.space)

@@ -1,0 +1,172 @@
+import BeebCore
+
+/// What a debugger front end wants to see.
+public struct DebugView: Sendable, Equatable {
+    public var cpu: DebugCPU = .host
+    /// Where the disassembly starts; nil follows the PC.
+    public var disassemblyStart: UInt16?
+    public var disassemblyLines = 48
+    public var memorySpace: MemorySpace = .cpu(.host)
+    public var memoryAddress = 0
+    public var memoryLength = 512
+    public var traceCount = 200
+
+    public init() {}
+}
+
+/// Everything a debugger front end shows, gathered on the emulation thread
+/// in one go.
+public struct DebugSnapshot: Sendable {
+    public struct CPUState: Sendable, Equatable {
+        public var cpu: DebugCPU
+        public var a, x, y, s, p: UInt8
+        public var pc: UInt16
+        public var atInstruction: Bool
+    }
+
+    public struct Line: Sendable, Equatable, Identifiable {
+        public var address: UInt16
+        public var bytes: [UInt8]
+        public var text: String
+        public var isPC: Bool
+        public var breakpoints: [Int]
+        public var id: UInt16 { address }
+    }
+
+    public struct TraceLine: Sendable, Equatable, Identifiable {
+        public var index: Int
+        public var entry: TraceEntry
+        public var text: String
+        public var id: Int { index }
+    }
+
+    public var view: DebugView
+    public var model: BBCMicro.Model
+    public var stopReason: StopReason?
+    public var isRunningCommand: Bool
+    public var cycles: UInt64
+    public var cpus: [CPUState]
+    public var disassembly: [Line]
+    public var memory: [UInt8?]
+    /// The stack from S+1 up to &1FF (at most 48 bytes).
+    public var stack: [(address: UInt16, value: UInt8)]
+    public var breakpoints: [Breakpoint]
+    public var hardware: [HardwareSection]
+    public var tracing: Bool
+    public var trace: [TraceLine]
+    public var log: [DebugLogEntry]
+    public var regions: [MemoryRegion]
+
+    public var hasSecondProcessor: Bool { cpus.count > 1 }
+
+    public func state(_ cpu: DebugCPU) -> CPUState? {
+        cpus.first { $0.cpu == cpu }
+    }
+
+    public init(machine m: BBCMicro, view requested: DebugView) {
+        var view = requested
+        if m.debugCPU(view.cpu) == nil {
+            view.cpu = .host
+        }
+        self.view = view
+        model = m.model
+        let debugger = m.debugger
+        stopReason = debugger.stopReason
+        isRunningCommand = debugger.isRunningCommand
+        cycles = m.cycles
+        cpus = DebugCPU.allCases.compactMap { cpu in
+            guard let c = m.debugCPU(cpu) else { return nil }
+            return CPUState(cpu: cpu, a: c.a, x: c.x, y: c.y, s: c.s, p: c.p,
+                            pc: m.instructionAddress(cpu), atInstruction: c.isAboutToExecute)
+        }
+
+        let cpu = view.cpu
+        let pc = m.instructionAddress(cpu)
+        let read = { (a: UInt16) in m.debugRead(.cpu(cpu), Int(a)) ?? 0xFF }
+        let disassembler = m.disassembler(cpu)
+        // Instructions known to have run are reliable places to start.
+        let known = Set(debugger.tracing ? debugger.trace(view.cpu).last(256).filter { !$0.interrupt }.map(\.pc) : [])
+        let start = view.disassemblyStart ?? Self.start(before: pc, known: known, disassembler: disassembler, read: read)
+        var address = start
+        var lines: [Line] = []
+        let executeBreakpoints = debugger.breakpoints.filter { $0.cpu == cpu && $0.kind.contains(.execute) }
+        for _ in 0..<view.disassemblyLines {
+            let (text, length) = disassembler.disassemble(at: address, read: read)
+            let bytes = (0..<length).map { read(address &+ UInt16($0)) }
+            lines.append(Line(address: address, bytes: bytes, text: text, isPC: address == pc,
+                              breakpoints: executeBreakpoints.filter { $0.start == address }.map(\.id)))
+            let next = address &+ UInt16(length)
+            if next < address { break }
+            address = next
+        }
+        disassembly = lines
+
+        memory = (0..<view.memoryLength).map { m.debugRead(view.memorySpace, view.memoryAddress + $0) }
+        if let s = m.debugCPU(cpu)?.s {
+            stack = (Int(s) + 1..<min(0x100, Int(s) + 49)).map { offset in
+                let a = UInt16(0x100 + offset)
+                return (a, read(a))
+            }
+        } else {
+            stack = []
+        }
+        breakpoints = debugger.breakpoints
+        hardware = m.hardwareState
+        tracing = debugger.tracing
+        if tracing {
+            let entries = debugger.trace(cpu).last(view.traceCount)
+            trace = entries.enumerated().map { index, e in
+                let text: String
+                if e.interrupt {
+                    text = "— interrupt —"
+                } else {
+                    let bytes = [e.bytes.0, e.bytes.1, e.bytes.2]
+                    text = disassembler.disassemble(at: e.pc) { bytes[Int($0 &- e.pc) % 3] }.text
+                }
+                return TraceLine(index: index, entry: e, text: text)
+            }
+        } else {
+            trace = []
+        }
+        log = Array(debugger.log.suffix(200))
+        regions = m.memoryRegions
+    }
+
+    /// A disassembly start a few instructions before `pc` that lands on it:
+    /// preferably one in `known` (addresses instructions ran from).
+    static func start(before pc: UInt16, known: Set<UInt16> = [], disassembler: M6502Disassembler,
+                      read: (UInt16) -> UInt8) -> UInt16 {
+        func lands(from start: UInt16) -> Int? {
+            var address = start
+            var count = 0
+            while address != pc && count < 30 {
+                let next = address &+ UInt16(disassembler.disassemble(at: address, read: read).length)
+                if next > pc && address < pc { return nil }
+                address = next
+                count += 1
+            }
+            return address == pc ? count : nil
+        }
+        for back in stride(from: 24, through: 1, by: -1) where known.contains(pc &- UInt16(back)) {
+            if lands(from: pc &- UInt16(back)) != nil {
+                return pc &- UInt16(back)
+            }
+        }
+        for back in stride(from: 24, through: 1, by: -1) {
+            var address = pc &- UInt16(back)
+            var count = 0
+            while address != pc && count < 30 {
+                let length = disassembler.disassemble(at: address, read: read).length
+                let next = address &+ UInt16(length)
+                // Stepped over the PC: this start is out of step.
+                if next > pc && address < pc { break }
+                address = next
+                count += 1
+            }
+            if address == pc && count >= 4 {
+                return pc &- UInt16(back)
+            }
+        }
+        return pc
+    }
+}

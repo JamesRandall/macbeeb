@@ -91,6 +91,15 @@ Tools: `run_command`, `type_text`, `press_keys`, `load_disc`, `eject_disc`,
 
 ## Debugging
 
+Debug > Show Debugger (⌥⌘D) opens the debugger for a machine window. It has
+disassembly with a breakpoint gutter, a memory editor for every address
+space with changes highlighted, registers and flags you can edit, the
+stack, breakpoints (ranges, watchpoints, conditions, log points), every
+device's state, the instruction trace and log output, for either CPU.
+Continue/pause is ⌃⌘Y, step over/into/out are F6/F7/F8, and the Step By
+menu goes by cycle, scanline, frame or interrupt. While it's open, the
+machine window shows the screen address under the mouse.
+
 `Debugger` (in BeebCore) does breakpoints on execute, read or write, over
 ranges, with conditions (`A == &41 && [&70] > 3`), hit counts, ROM bank
 qualifiers and log points; stepping by instruction, over, out, cycle,

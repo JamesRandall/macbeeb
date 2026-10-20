@@ -278,6 +278,18 @@ public final class Debugger {
         stop(.requested)
     }
 
+    /// Starts `command` on `cpu` and returns at once: the machine stops
+    /// when it's done, as it runs normally. (`.stepCycle` isn't
+    /// supported: run one cycle instead.)
+    public func begin(_ command: RunCommand, cpu: DebugCPU = .host) {
+        precondition(command != .stepCycle)
+        resume()
+        arm(command, cpu: cpu)
+    }
+
+    /// Whether a command from `begin` is still running.
+    public var isRunningCommand: Bool { command != nil }
+
     /// Runs `command` on `cpu`, using `advance` to run the machine (so
     /// recording and the display keep up), for at most `maxCycles`. Returns
     /// why it stopped, or nil if the time ran out.
@@ -335,6 +347,11 @@ public final class Debugger {
         guard stopReason == nil else { return }
         stopReason = reason
         machine.stopRequested = true
+        // Whatever was running is done.
+        if command != nil {
+            command = nil
+            updateHooks()
+        }
     }
 
     // MARK: Tracing

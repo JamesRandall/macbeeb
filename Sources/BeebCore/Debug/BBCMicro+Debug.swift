@@ -262,3 +262,31 @@ extension BBCMicro {
         debuggerIfCreated?.stopReason != nil
     }
 }
+
+/// Where a cell of the TV picture came from.
+public struct VideoSource: Sendable, Equatable {
+    /// The screen memory address read for it.
+    public var address: UInt16
+    /// The CRTC's raster within the character row.
+    public var raster: UInt8
+    /// In the display area (not border or blanking).
+    public var display: Bool
+    public var teletext: Bool
+
+    /// Decodes a TV metadata word; nil if nothing was recorded there.
+    public init?(metadata: UInt32) {
+        guard metadata & 0x2000_0000 != 0 else { return nil }
+        address = UInt16(truncatingIfNeeded: metadata)
+        raster = UInt8(truncatingIfNeeded: metadata >> 16)
+        display = metadata & 0x8000_0000 != 0
+        teletext = metadata & 0x4000_0000 != 0
+    }
+}
+
+extension BBCMicro {
+    @inline(__always)
+    static func videoMetadata(address: UInt16, raster: UInt8, display: Bool, teletext: Bool) -> UInt32 {
+        UInt32(address) | UInt32(raster & 0x1F) << 16 | 0x2000_0000
+            | (display ? 0x8000_0000 : 0) | (teletext ? 0x4000_0000 : 0)
+    }
+}

@@ -41,6 +41,9 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
     public struct Frame: Sendable {
         public var pixels: [UInt32]
         public var number: Int
+        /// While inspecting: where each 8x2-pixel cell came from (see
+        /// `VideoSource`), `TVOutput.metadataWidth` per row.
+        public var metadata: [UInt32]?
         public static let width = TVOutput.width
         public static let height = TVOutput.height
     }
@@ -52,6 +55,15 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
     private let commands = Mutex<[Command]>([])
     let latestFrame = Mutex<Frame?>(nil)
     private let latestLights = Mutex(BBCMicro.Lights())
+    private let latestDebugStop = Mutex<StopReason?>(nil)
+    private let inspecting = Atomic<Bool>(false)
+
+    /// Turns on frame metadata, so the screen can be inspected.
+    public func setInspecting(_ on: Bool) {
+        inspecting.store(on, ordering: .relaxed)
+    }
+
+    var isInspecting: Bool { inspecting.load(ordering: .relaxed) }
     private let running = Atomic<Bool>(true)
     private let audioActive = Atomic<Bool>(false)
     private let emulatedCycles = Atomic<Int>(0)
@@ -207,8 +219,11 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
                 }
             }
 
-            if paused {
+            let stop = session.machine.debuggerIfCreated?.stopReason
+            latestDebugStop.withLock { $0 = stop }
+            if paused || stop != nil {
                 Thread.sleep(forTimeInterval: 0.005)
+                resetWallClock()
                 continue
             }
 
@@ -241,6 +256,20 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
         emulatedCycles.store(Int(session.machine.cycles), ordering: .relaxed)
         let lights = session.machine.lights
         latestLights.withLock { $0 = lights }
+    }
+
+    /// Why the debugger has stopped the machine, if it has.
+    public var debugStop: StopReason? {
+        latestDebugStop.withLock { $0 }
+    }
+
+    /// Runs `body` on the emulation thread, without blocking the caller.
+    public func performAsync<T: Sendable>(_ body: @escaping @Sendable (MachineSession) throws -> T) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            send(.perform { session in
+                continuation.resume(with: Result { try body(session) })
+            })
+        }
     }
 
     /// The machine's indicator lights, as of the last slice.
@@ -288,9 +317,14 @@ final class HostSession: MachineSession {
                     recorder = nil
                 }
             }
+            let inspecting = host.isInspecting
+            if tv.recordsMetadata != inspecting {
+                tv.recordsMetadata = inspecting
+            }
             if tv.frameCount != lastPublishedFrame {
                 lastPublishedFrame = tv.frameCount
-                let frame = EmulatorHost.Frame(pixels: tv.lastFrame, number: tv.frameCount)
+                let frame = EmulatorHost.Frame(pixels: tv.lastFrame, number: tv.frameCount,
+                                               metadata: inspecting ? tv.lastMetadata : nil)
                 host.latestFrame.withLock { $0 = frame }
             }
         }

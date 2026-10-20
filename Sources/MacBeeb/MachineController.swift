@@ -29,6 +29,32 @@ final class MachineController {
     /// Whether a 6502 Second Processor is fitted. Remembered like the model.
     private(set) var secondProcessor: Bool
     private static let secondProcessorDefaultsKey = "MacBeebSecondProcessor"
+    /// Identifies this machine to its debugger window.
+    let id = UUID()
+    /// Open machines, for finding a debugger window's machine.
+    static var all: [UUID: MachineController] = [:]
+    /// The debugger's view of this machine.
+    @ObservationIgnored private(set) lazy var debugger = DebuggerModel(host: host)
+    /// Set when the debugger stops the machine, so the window opens.
+    var debuggerRequested = false
+    @ObservationIgnored private var lastDebugStop: StopReason?
+    /// Why the debugger has stopped the machine, if it has.
+    private(set) var debugStop: StopReason?
+    /// The TV pixel under the mouse, while the debugger's open.
+    var hoveredPixel: (x: Int, y: Int)?
+
+    /// What's under the mouse: the screen address it came from.
+    var inspection: String? {
+        guard let (x, y) = hoveredPixel, debugger.isVisible,
+              let metadata = host.frame?.metadata else { return nil }
+        let index = (y / 2) * TVOutput.metadataWidth + x / 8
+        guard index < metadata.count, let source = VideoSource(metadata: metadata[index]) else {
+            return "x \(x), line \(y / 2): blanking"
+        }
+        let place = source.display ? "&\(hex(source.address, 4))" + (source.teletext ? "" : ", raster \(source.raster)") : "border"
+        return "x \(x), line \(y / 2): \(place)"
+    }
+
     /// The machine's indicator lights, refreshed a few times a second.
     private(set) var lights = BBCMicro.Lights()
     @ObservationIgnored private var lightsTimer: Timer?
@@ -54,9 +80,18 @@ final class MachineController {
                 if lights != self.lights {
                     self.lights = lights
                 }
+                let stop = self.host.debugStop
+                if stop != self.debugStop {
+                    self.debugStop = stop
+                    if stop != nil {
+                        self.debuggerRequested = true
+                        self.debugger.refresh()
+                    }
+                }
             }
         }
         startAgentServer()
+        Self.all[id] = self
         runSelfTestIfRequested()
     }
 
@@ -85,6 +120,21 @@ final class MachineController {
             if let disc {
                 insertDisc(URL(fileURLWithPath: disc))
                 try? await Task.sleep(for: .seconds(25))
+            } else if UserDefaults.standard.bool(forKey: "MacBeebSelfTestDebugger") {
+                // Stop at OSWRCH as the key is echoed, then capture the
+                // debugger window.
+                debugger.addBreakpoint(Breakpoint(start: 0xFFEE))
+                debugger.setTracing(true)
+                try? await Task.sleep(for: .milliseconds(300))
+                host.send(.type("P"))
+                try? await Task.sleep(for: .seconds(2))
+                if let window = NSApp.windows.first(where: { $0.title.hasPrefix("Debugger") }),
+                   let frameView = window.contentView?.superview,
+                   let rep = frameView.bitmapImageRepForCachingDisplay(in: frameView.bounds) {
+                    frameView.cacheDisplay(in: frameView.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?
+                        .write(to: URL(fileURLWithPath: path.replacingOccurrences(of: ".png", with: "-debugger.png")))
+                }
             } else if UserDefaults.standard.bool(forKey: "MacBeebSelfTestMacLayout") {
                 await typeThroughWindowInMacLayout()
             } else {

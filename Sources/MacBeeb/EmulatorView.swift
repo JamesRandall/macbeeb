@@ -8,6 +8,37 @@ import SwiftUI
 final class EmulatorNSView: MTKView {
     var host: EmulatorHost?
     var renderer: Renderer?
+    /// Called with the TV pixel under the mouse (nil when it leaves).
+    var onHover: ((Int, Int)?) -> Void = { _ in }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        onHover(tvPixel(at: convert(event.locationInWindow, from: nil)))
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onHover(nil)
+    }
+
+    /// The TV pixel at a point in the view, allowing for the letterboxing.
+    func tvPixel(at point: CGPoint) -> (Int, Int)? {
+        let size = bounds.size
+        var width = size.width, height = size.width / Renderer.aspect
+        if height > size.height {
+            height = size.height
+            width = height * Renderer.aspect
+        }
+        let u = (point.x - (size.width - width) / 2) / width
+        let v = 1 - (point.y - (size.height - height) / 2) / height
+        guard (0..<1).contains(u), (0..<1).contains(v) else { return nil }
+        return (Int(u * CGFloat(EmulatorHost.Frame.width)), Int(v * CGFloat(EmulatorHost.Frame.height)))
+    }
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -78,11 +109,13 @@ struct EmulatorView: NSViewRepresentable {
     let style: DisplayStyle
     /// Called with the renderer once it exists.
     var onRenderer: (Renderer) -> Void = { _ in }
+    var onHover: ((Int, Int)?) -> Void = { _ in }
 
     func makeNSView(context: Context) -> EmulatorNSView {
         let device = MTLCreateSystemDefaultDevice()
         let view = EmulatorNSView(frame: .zero, device: device)
         view.host = host
+        view.onHover = onHover
         view.colorPixelFormat = .bgra8Unorm
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
         view.preferredFramesPerSecond = 120

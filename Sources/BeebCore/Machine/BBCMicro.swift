@@ -63,6 +63,9 @@ public final class BBCMicro {
     /// cycle, so host cycles alternate 1 and 2 parasite cycles (3MHz).
     var parasiteCredit = 0
 
+    /// What the video is showing now, for the TV's metadata.
+    var videoMetadata: UInt32 = 0
+
     // Debugging.
     public internal(set) var debuggerIfCreated: Debugger?
     /// Set while the debugger wants to see every access.
@@ -899,6 +902,8 @@ public final class BBCMicro {
             }
         }
         let value = ram[Int(address) + videoRAMOffset]
+        videoMetadata = Self.videoMetadata(address: address, raster: output.raster, display: output.display,
+                                           teletext: videoULA.teletext)
         lastVideoByte = value
         if trailingEdge {
             saa5050.byte(ic15Byte, dispen: output.display)
@@ -930,7 +935,7 @@ public final class BBCMicro {
         if crtcLastOutput.vsync { flags |= VideoUnit.vsyncFlag }
         unit.pixels[1] = (unit.pixels[1] & 0x0FFF) | flags << 12
 
-        tv?.update(unit)
+        tv?.update(unit, metadata: videoMetadata)
     }
 
     @inline(__always)

@@ -46,6 +46,24 @@ public final class TVOutput {
     /// Incremented each time `lastFrame` is updated.
     public private(set) var frameCount = 0
 
+    /// Cells of 8 pixels by one scanline: what produced each (see
+    /// `update(_:metadata:)`).
+    public static let metadataWidth = width / 8
+    public static let metadataHeight = height / 2
+    /// Set to record where each cell came from (for the debugger).
+    public var recordsMetadata = false {
+        didSet {
+            if recordsMetadata && metadata == nil {
+                metadata = .allocate(capacity: Self.metadataWidth * (Self.metadataHeight + 1))
+                metadata!.initialize(repeating: 0, count: Self.metadataWidth * (Self.metadataHeight + 1))
+            }
+            if !recordsMetadata { lastMetadata = [] }
+        }
+    }
+    private var metadata: UnsafeMutablePointer<UInt32>?
+    /// The last complete frame's metadata, when recording it.
+    public private(set) var lastMetadata: [UInt32] = []
+
     /// blend[i][j]: gamma-corrected 8-bit blend of 1/3 i and 2/3 j (4-bit
     /// inputs), for scaling 12MHz pixels to the 16MHz grid.
     let blend: [UInt8]
@@ -67,6 +85,7 @@ public final class TVOutput {
     }
 
     deinit {
+        metadata?.deallocate()
         pixels.deallocate()
     }
 
@@ -94,7 +113,7 @@ public final class TVOutput {
 
     /// Consumes one unit of video.
     @inline(__always)
-    public func update(_ unit: VideoUnit) {
+    public func update(_ unit: VideoUnit, metadata meta: UInt32 = 0) {
         let unitIndex = totalUnits
         totalUnits += 1
 
@@ -105,6 +124,9 @@ public final class TVOutput {
                 $0.baseAddress!.update(from: source, count: $0.count)
             }
             frameCount += 1
+            if recordsMetadata, let metadata {
+                lastMetadata = Array(UnsafeBufferPointer(start: metadata, count: Self.metadataWidth * Self.metadataHeight))
+            }
             lastRetraceStart = unitIndex
             // Odd fields start at y=0, even fields at y=2: no visible
             // interlace.
@@ -133,6 +155,9 @@ public final class TVOutput {
             }
             if x < Self.width && y < Self.height {
                 scanOut(unit)
+                if let metadata {
+                    metadata[(y >> 1) * Self.metadataWidth + x >> 3] = meta
+                }
             }
             x += 8
             stateTimer += 1
