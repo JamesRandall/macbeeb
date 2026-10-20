@@ -1,0 +1,8 @@
+.DS_Store
+/.build
+/.swiftpm
+*.xcodeproj/xcuserdata
+*.xcworkspace/xcuserdata
+DerivedData/
+# Reference emulators are local study material, not part of macbeeb.
+/reference
