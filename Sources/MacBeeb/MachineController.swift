@@ -112,6 +112,7 @@ final class MachineController {
             }
         }
         startAgentServer()
+        DocumentationCapture.start(for: self)
         Self.all[id] = self
         runSelfTestIfRequested()
     }
