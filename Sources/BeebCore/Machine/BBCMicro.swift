@@ -34,6 +34,7 @@ public final class BBCMicro {
         /// The Master's ACCCON IRR bit.
         public static let acccon: UInt8 = 1 << 2
         public static let acia: UInt8 = 1 << 3
+        public static let tube: UInt8 = 1 << 4
     }
 
     public enum NMIDevice {
@@ -55,6 +56,12 @@ public final class BBCMicro {
     public let intel8271: Intel8271?
     /// The Master's disc controller.
     public let wd1770: WD1770?
+    /// The 6502 Second Processor, if fitted, and the Tube to it.
+    public let secondProcessor: SecondProcessor?
+    public internal(set) var tube = Tube()
+    /// Alternates host cycles of 1 and 2 parasite cycles: 3MHz.
+    var parasiteDoubleCycle = false
+
     /// The Master's real-time clock and CMOS RAM.
     public var rtc = MC146818()
     var mixer: SoundMixer?
@@ -172,12 +179,15 @@ public final class BBCMicro {
         /// Banks that are RAM. (On the B+ 128K, 0, 1, 12 and 13; on the
         /// Master, 4-7.)
         public var sidewaysRAMBanks: Set<Int>
+        /// A 6502 Second Processor on the Tube, with this ROM (TUBE110).
+        public var secondProcessorROM: [UInt8]?
 
         public init(model: Model = .modelB, os: [UInt8], sidewaysROMs: [Int: [UInt8]],
-                    sidewaysRAMBanks: Set<Int>? = nil) {
+                    sidewaysRAMBanks: Set<Int>? = nil, secondProcessorROM: [UInt8]? = nil) {
             self.model = model
             self.os = os
             self.sidewaysROMs = sidewaysROMs
+            self.secondProcessorROM = secondProcessorROM
             let standardRAMBanks: Set<Int> = switch model {
             case .modelB: []
             case .bPlus: [0, 1, 12, 13]
@@ -187,7 +197,7 @@ public final class BBCMicro {
         }
 
         enum CodingKeys: CodingKey {
-            case model, os, sidewaysROMs, sidewaysRAMBanks
+            case model, os, sidewaysROMs, sidewaysRAMBanks, secondProcessorROM
         }
 
         public init(from decoder: Decoder) throws {
@@ -196,6 +206,7 @@ public final class BBCMicro {
             os = try c.decode([UInt8].self, forKey: .os)
             sidewaysROMs = try c.decode([Int: [UInt8]].self, forKey: .sidewaysROMs)
             sidewaysRAMBanks = try c.decodeIfPresent(Set<Int>.self, forKey: .sidewaysRAMBanks) ?? []
+            secondProcessorROM = try c.decodeIfPresent([UInt8].self, forKey: .secondProcessorROM)
         }
     }
 
@@ -264,6 +275,8 @@ public final class BBCMicro {
             teletextBases = (0x7C00, 0x7C00)
             rtc.setTime(Date())
         }
+
+        secondProcessor = configuration.secondProcessorROM.map(SecondProcessor.init(rom:))
 
         updatePaging()
         oldSystemVIAPB = systemVIA.b.p
@@ -389,6 +402,7 @@ public final class BBCMicro {
                 }
             case 0xFE40: return systemVIA.peek(Int(address))
             case 0xFE60: return userVIA.peek(Int(address))
+        case 0xFEE0 where tubeAccessible: return tube.hostPeek(Int(address))
             default: break
             }
             return 0xFF
@@ -396,6 +410,7 @@ public final class BBCMicro {
         switch address & 0xFFE0 {
         case 0xFE40: return systemVIA.peek(Int(address))
         case 0xFE60: return userVIA.peek(Int(address))
+        case 0xFEE0 where tubeAccessible: return tube.hostPeek(Int(address))
         case 0xFE80:
             if let fdc = intel8271 { return fdc.peek(Int(address)) }
             return address & 0x1C == 0x04 ? wd1770!.peek(Int(address)) : 0xFF
@@ -427,6 +442,8 @@ public final class BBCMicro {
             return systemVIA.read(Int(address))
         case 0xFE60:
             return userVIA.read(Int(address))
+        case 0xFEE0 where tubeAccessible:
+            return tube.hostRead(Int(address))
         case 0xFE80:
             if let fdc = intel8271 {
                 return fdc.read(Int(address))
@@ -490,6 +507,8 @@ public final class BBCMicro {
             systemVIA.write(Int(address), value)
         case 0xFE60:
             userVIA.write(Int(address), value)
+        case 0xFEE0 where tubeAccessible:
+            tube.hostWrite(Int(address), value)
         case 0xFE80:
             if let fdc = intel8271 {
                 fdc.write(Int(address), value)
@@ -506,6 +525,12 @@ public final class BBCMicro {
                 unmappedIOWriteObserver?(address, value)
             }
         }
+    }
+
+    /// Whether the host sees the (external) Tube: always on the B and B+;
+    /// on the Master, while ACCCON's ITU bit selects the external Tube.
+    var tubeAccessible: Bool {
+        secondProcessor != nil && (model != .master128 || acccon & 0x10 == 0)
     }
 
     // MARK: Master I/O
@@ -541,6 +566,8 @@ public final class BBCMicro {
             return systemVIA.read(Int(address))
         case 0xFE60:
             return userVIA.read(Int(address))
+        case 0xFEE0 where tubeAccessible:
+            return tube.hostRead(Int(address))
         default:
             break
         }
@@ -591,6 +618,8 @@ public final class BBCMicro {
             systemVIA.write(Int(address), value)
         case 0xFE60:
             userVIA.write(Int(address), value)
+        case 0xFEE0 where tubeAccessible:
+            tube.hostWrite(Int(address), value)
         default:
             if address < 0xFE00 {
                 unmappedIOWriteObserver?(address, value)
@@ -681,8 +710,13 @@ public final class BBCMicro {
             resetting = down
             if down {
                 cpu.halt()
+                secondProcessor?.cpu.halt()
             } else {
                 cpu.reset()
+                if let secondProcessor {
+                    secondProcessor.reset()
+                    tube.reset()
+                }
             }
             return
         }
@@ -772,6 +806,16 @@ public final class BBCMicro {
                     opcodeFetched()
                 }
             }
+        }
+
+        // Second processor, at 3MHz.
+        if let secondProcessor {
+            secondProcessor.step(tube: &tube)
+            if parasiteDoubleCycle {
+                secondProcessor.step(tube: &tube)
+            }
+            parasiteDoubleCycle.toggle()
+            cpu.setIRQ(IRQDevice.tube, tubeAccessible && tube.hostIRQ)
         }
 
         // Video.

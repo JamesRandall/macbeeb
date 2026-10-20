@@ -16,6 +16,9 @@ struct MachineToolbar: CustomizableToolbarContent {
                     }
                 }
                 .pickerStyle(.inline)
+                Divider()
+                Toggle("6502 Second Processor", isOn: Binding(get: { machine.secondProcessor },
+                                                             set: { machine.setSecondProcessor($0) }))
             } label: {
                 Label("Model", systemImage: "desktopcomputer")
             }

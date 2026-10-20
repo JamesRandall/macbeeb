@@ -114,6 +114,9 @@ in Settings > Keyboard, by the character the Mac's layout types, with the
 BBC's Shift pressed or released per key as needed. Custom mappings put any
 BBC key on any Mac key, in either mode.
 
+Any of them can have a 6502 Second Processor (Machine > Model, `--tube`):
+a 3MHz 65C02 with 64K on the Tube, booting Tube OS 1.10, following b2.
+
 Save states (`.beebstate`) and snapshots capture everything, discs and disc
 controllers included, so a restored machine carries on cycle for cycle.
 

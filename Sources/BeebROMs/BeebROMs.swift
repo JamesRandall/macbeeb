@@ -8,6 +8,7 @@ public enum BeebROMs {
         case dfs12 = "dfs12"
         case dfs226 = "dfs226"
         case bPlusMOS = "bplus-mos"
+        case tube110 = "tube110"
         case mos320 = "mos320-mos"
         case mos320Terminal = "mos320-terminal"
         case mos320View = "mos320-view"
@@ -49,7 +50,18 @@ extension BeebROMs {
     ///   sideways RAM in 0, 1, 12 and 13.
     /// - Master 128: MOS 3.20 and its ROMs in banks 9-15, as b2; sideways
     ///   RAM in 4-7.
-    public static func configuration(for model: BBCMicro.Model) -> BBCMicro.Configuration {
+    ///
+    /// With `secondProcessor`, a 6502 Second Processor (Tube OS 1.10) is
+    /// fitted.
+    public static func configuration(for model: BBCMicro.Model, secondProcessor: Bool = false) -> BBCMicro.Configuration {
+        var configuration = standardConfiguration(for: model)
+        if secondProcessor {
+            configuration.secondProcessorROM = data(.tube110)
+        }
+        return configuration
+    }
+
+    private static func standardConfiguration(for model: BBCMicro.Model) -> BBCMicro.Configuration {
         switch model {
         case .modelB:
             return BBCMicro.Configuration(os: data(.os12), sidewaysROMs: [15: data(.basic2), 14: data(.dfs12)])

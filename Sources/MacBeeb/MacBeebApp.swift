@@ -99,6 +99,11 @@ struct MacBeebApp: App {
                 }
                 .pickerStyle(.inline)
                 .disabled(machine == nil)
+                Toggle("6502 Second Processor", isOn: Binding(
+                    get: { machine?.secondProcessor ?? false },
+                    set: { machine?.setSecondProcessor($0) }
+                ))
+                .disabled(machine == nil)
             }
         }
 
@@ -145,7 +150,7 @@ struct MachineWindow: View {
     }
 
     private var title: String {
-        let name = machine.model.displayName
+        let name = machine.model.displayName + (machine.secondProcessor ? " + 6502 Second Processor" : "")
         var title = machine.discNames[0].map { "\(name) — \($0)" } ?? name
         if machine.paused {
             title += " (Paused)"

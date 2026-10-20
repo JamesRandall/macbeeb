@@ -45,6 +45,9 @@ extension BBCMicro {
         var paste: Paste?
         var serial: SerialULA
         var tape: Tape.State?
+        var tube: Tube
+        var parasiteDoubleCycle: Bool
+        var secondProcessor: SecondProcessorState?
 
         /// Whether the snapshot has a tape in the recorder.
         public var hasTape: Bool { tape != nil }
@@ -65,18 +68,22 @@ extension BBCMicro {
                  systemVIAIRQ: systemVIAIRQ, userVIAIRQ: userVIAIRQ,
                  keyColumns: keyColumns, keyScanColumn: keyScanColumn, notJoystickButtons: notJoystickButtons, resetting: resetting,
                  keyEvents: keyEvents, paste: paste, serial: serial,
-                 tape: tape?.state, crtcLastOutput: crtcLastOutput,
+                 tape: tape?.state, tube: tube, parasiteDoubleCycle: parasiteDoubleCycle,
+                 secondProcessor: secondProcessor.map(SecondProcessorState.init),
+                 crtcLastOutput: crtcLastOutput,
                  ic15Byte: ic15Byte, unit: unit)
     }
 
     public enum RestoreError: Error {
         case unsupportedVersion(Int)
         case wrongModel(Model)
+        case wrongSecondProcessor
     }
 
     public func restore(_ s: Snapshot) throws {
         guard s.version == Snapshot.currentVersion else { throw RestoreError.unsupportedVersion(s.version) }
         guard s.model == model else { throw RestoreError.wrongModel(s.model) }
+        guard (s.secondProcessor != nil) == (secondProcessor != nil) else { throw RestoreError.wrongSecondProcessor }
         cycles = s.cycles
         cpu.restore(s.cpu)
         systemVIA = s.systemVIA
@@ -111,6 +118,11 @@ extension BBCMicro {
         keyEvents = s.keyEvents
         paste = s.paste
         serial = s.serial
+        tube = s.tube
+        parasiteDoubleCycle = s.parasiteDoubleCycle
+        if let secondProcessor, let state = s.secondProcessor {
+            state.restore(into: secondProcessor)
+        }
         if let state = s.tape {
             if let tape {
                 tape.restore(state)
@@ -124,5 +136,24 @@ extension BBCMicro {
         ic15Byte = s.ic15Byte
         unit = s.unit
         updateOpcodeHooks()
+    }
+}
+
+/// The second processor's CPU, RAM and boot mode.
+struct SecondProcessorState: Codable, Sendable {
+    var cpu: M6502.Snapshot
+    var ram: Data
+    var bootMode: Bool
+
+    init(_ p: SecondProcessor) {
+        cpu = p.cpu.snapshot
+        ram = Data(bytes: p.ram, count: 0x10000)
+        bootMode = p.bootMode
+    }
+
+    func restore(into p: SecondProcessor) {
+        p.cpu.restore(cpu)
+        ram.withUnsafeBytes { p.ram.update(from: $0.bindMemory(to: UInt8.self).baseAddress!, count: min(ram.count, 0x10000)) }
+        p.bootMode = bootMode
     }
 }

@@ -26,6 +26,9 @@ final class MachineController {
     @ObservationIgnored weak var renderer: Renderer?
 
     private static let modelDefaultsKey = "MacBeebModel"
+    /// Whether a 6502 Second Processor is fitted. Remembered like the model.
+    private(set) var secondProcessor: Bool
+    private static let secondProcessorDefaultsKey = "MacBeebSecondProcessor"
     /// The machine's indicator lights, refreshed a few times a second.
     private(set) var lights = BBCMicro.Lights()
     @ObservationIgnored private var lightsTimer: Timer?
@@ -34,7 +37,9 @@ final class MachineController {
         let model = UserDefaults.standard.string(forKey: Self.modelDefaultsKey)
             .flatMap(BBCMicro.Model.init(rawValue:)) ?? .modelB
         self.model = model
-        let configuration = BeebROMs.configuration(for: model)
+        let secondProcessor = UserDefaults.standard.bool(forKey: Self.secondProcessorDefaultsKey)
+        self.secondProcessor = secondProcessor
+        let configuration = BeebROMs.configuration(for: model, secondProcessor: secondProcessor)
         host = EmulatorHost {
             BBCMicro(configuration: configuration)
         }
@@ -159,7 +164,19 @@ final class MachineController {
         guard newModel != model else { return }
         model = newModel
         UserDefaults.standard.set(newModel.rawValue, forKey: Self.modelDefaultsKey)
-        host.send(.changeMachine(BeebROMs.configuration(for: newModel)))
+        changeMachine()
+    }
+
+    /// Fits or removes the 6502 Second Processor, which power cycles.
+    func setSecondProcessor(_ fitted: Bool) {
+        guard fitted != secondProcessor else { return }
+        secondProcessor = fitted
+        UserDefaults.standard.set(fitted, forKey: Self.secondProcessorDefaultsKey)
+        changeMachine()
+    }
+
+    private func changeMachine() {
+        host.send(.changeMachine(BeebROMs.configuration(for: model, secondProcessor: secondProcessor)))
     }
 
     func togglePause() {
@@ -356,6 +373,7 @@ final class MachineController {
             let file = try SaveStateFile(data: Data(contentsOf: url))
             host.send(.loadState(file))
             model = file.configuration.model
+            secondProcessor = file.configuration.secondProcessorROM != nil
             discNames = [:]
             tapeName = file.snapshot.hasTape ? "Tape" : nil
             NSDocumentController.shared.noteNewRecentDocumentURL(url)

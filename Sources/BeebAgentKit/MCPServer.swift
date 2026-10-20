@@ -120,9 +120,9 @@ extension ToolResult {
 
 /// What agents are told about the machine when they connect.
 public let mcpInstructions = """
-This server drives an emulated BBC Micro: a Model B (6502 at 2MHz, OS 1.20, BBC BASIC 2, Acorn DFS 1.20) \
-or a Master 128 (65C12, MOS 3.20, BASIC 4, DFS 2.24, ADFS, 128K with shadow RAM), each with two disc drives. \
-get_status says which; power_cycle with model switches. \
+This server drives an emulated BBC Micro: a Model B (6502 at 2MHz, OS 1.20, BBC BASIC 2, Acorn DFS 1.20), \
+a B+ 128K, or a Master 128 (65C12, MOS 3.20, BASIC 4, DFS 2.24, ADFS, 128K with shadow RAM), each with two disc drives \
+and optionally a 6502 Second Processor. get_status says which; power_cycle with model/second_processor switches. \
 Time is emulated time: waits are exact and run much faster than real time.
 
 Typical use: run_command for BASIC lines and * commands (fast, returns the OS's output and the screen); \

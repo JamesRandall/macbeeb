@@ -2,7 +2,7 @@
 //
 //   beeb [--load DISC.ssd:FILE] [--seconds N] [--type TEXT] [--screenshot FILE.png] [--text]
 //        [--record FILE.mp4|.mov [--codec h264|hevc|proRes]] [--disc FILE.ssd|.dsd [--boot]]
-//        [--master | --bplus] [--tape FILE.uef|.csw]
+//        [--master | --bplus] [--tube] [--tape FILE.uef|.csw]
 //
 // Boots a Model B (OS 1.2, BASIC 2) or with --master a Master 128, types TEXT (with \n for Return), runs
 // for N seconds of emulated time after typing finishes (default 3), then
@@ -31,6 +31,7 @@ var shiftBreak = false
 var codec = VideoRecorder.Codec.h264
 var model = BBCMicro.Model.modelB
 var tapePath: String?
+var secondProcessor = false
 
 var arguments = CommandLine.arguments.dropFirst()
 while let argument = arguments.popFirst() {
@@ -66,6 +67,8 @@ while let argument = arguments.popFirst() {
         model = .master128
     case "--bplus":
         model = .bPlus
+    case "--tube":
+        secondProcessor = true
     case "--text":
         printText = true
     case "--pcs":
@@ -78,7 +81,7 @@ while let argument = arguments.popFirst() {
     }
 }
 
-let machine = BBCMicro(configuration: BeebROMs.configuration(for: model))
+let machine = BBCMicro(configuration: BeebROMs.configuration(for: model, secondProcessor: secondProcessor))
 if let tapePath {
     do {
         machine.tape = try Tape(image: [UInt8](Data(contentsOf: URL(fileURLWithPath: tapePath))))

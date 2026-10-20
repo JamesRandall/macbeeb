@@ -54,9 +54,10 @@ for variant in M6502.Variant.allCases {
     memory.deallocate()
 }
 
-// The whole Model B: CPU, VIAs, CRTC, ULA, teletext, with and without the TV.
-for withTV in [false, true] {
-    let machine = BBCMicro(os: BeebROMs.data(.os12), sidewaysROMs: [15: BeebROMs.data(.basic2)])
+// The whole Model B: CPU, VIAs, CRTC, ULA, teletext, with and without the
+// TV and the second processor.
+for (withTV, secondProcessor) in [(false, false), (true, false), (true, true)] {
+    let machine = BBCMicro(configuration: BeebROMs.configuration(for: .modelB, secondProcessor: secondProcessor))
     if withTV {
         machine.tv = TVOutput()
     }
@@ -72,5 +73,7 @@ for withTV in [false, true] {
     machine.run(seconds: emulatedSeconds)
     let elapsed = clock.now - start
     let elapsedSeconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
-    print(String(format: "Model B %@ %.0fx real time", withTV ? "with TV   " : "headless  ", emulatedSeconds / elapsedSeconds))
+    let name = withTV ? (secondProcessor ? "with TV and 6502 2P" : "with TV") : "headless"
+    print("Model B " + name.padding(toLength: 20, withPad: " ", startingAt: 0)
+          + String(format: "%.0fx real time", emulatedSeconds / elapsedSeconds))
 }

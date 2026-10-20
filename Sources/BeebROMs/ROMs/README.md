@@ -10,4 +10,5 @@ included, as b2 and jsbeeb do, so the emulator works out of the box.
 | dfs12.rom | Acorn DFS 1.20 (8271) | jsbeeb |
 | dfs226.rom | Acorn DFS 2.26 (1770) | b2 |
 | bplus-mos.rom | BBC Model B+ MOS 2.00 | b2 |
+| tube110.rom | 6502 Second Processor Tube OS 1.10 | b2 |
 | mos320-*.rom | Master 128 MOS 3.20 set: MOS, Terminal (F), View (E), ADFS (D), BASIC 4 (C), Edit (B), ViewSheet (A), DFS 2.24 (9) | b2 |

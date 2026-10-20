@@ -109,7 +109,7 @@ public final class AgentTools: Sendable {
                     return "drive \(drive): \"\(title)\""
                 }
                 return """
-                model: \(modelDescription(m.model))
+                model: \(modelDescription(m.model))\(m.secondProcessor != nil ? " with a 6502 Second Processor" : "")
                 emulated time: \(String(format: "%.3f", Double(m.cycles) / 2_000_000))s
                 PC=&\(hex(pc, 4)) A=&\(hex(cpu.a)) X=&\(hex(cpu.x)) Y=&\(hex(cpu.y)) S=&\(hex(cpu.s)) P=&\(hex(cpu.p))
                 screen mode: \(m.peek(0x355))
@@ -121,17 +121,25 @@ public final class AgentTools: Sendable {
 
         Tool(definition: ToolDefinition(
             name: "power_cycle",
-            description: "Switch the BBC off and on again. Discs stay in the drives. Runs until the BASIC prompt. With model, switches to that machine: model_b (OS 1.20, BASIC 2, DFS 1.20), b_plus (B+ 128K: MOS 2.00, BASIC 2, DFS 2.26, shadow RAM) or master_128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS, View, ViewSheet, Edit; 1770 disc controller, shadow RAM, sideways RAM in banks 4-7).",
+            description: "Switch the BBC off and on again. Discs stay in the drives. Runs until the BASIC prompt. With model, switches to that machine: model_b (OS 1.20, BASIC 2, DFS 1.20), b_plus (B+ 128K: MOS 2.00, BASIC 2, DFS 2.26, shadow RAM) or master_128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS, View, ViewSheet, Edit; 1770 disc controller, shadow RAM, sideways RAM in banks 4-7). With second_processor, fits or removes a 6502 Second Processor (3MHz 65C02, 64K, on the Tube): BASIC is copied across and runs in the second processor (PAGE &800, HIMEM &8000), and the host just does the I/O.",
             inputSchema: schema(["model": ["type": "string", "enum": ["model_b", "b_plus", "master_128"],
-                                           "description": "Machine to switch to (default: keep the current one)"] as JSONValue])
+                                           "description": "Machine to switch to (default: keep the current one)"] as JSONValue,
+                                 "second_processor": prop("boolean", "Fit a 6502 Second Processor (default: keep as is)")])
         )) { context, args in
-            var model: BBCMicro.Model?
+            var requestedModel: BBCMicro.Model?
             if let name = args["model"]?.stringValue {
                 guard let named = agentModels[name] else { throw ToolFailure("model must be model_b, b_plus or master_128") }
-                model = named
+                requestedModel = named
             }
-            let configuration = model.map(BeebROMs.configuration(for:))
+            let model = requestedModel
+            let secondProcessor = args["second_processor"]?.boolValue
             return .text(try context.perform { session in
+                var configuration: BBCMicro.Configuration?
+                if model != nil || secondProcessor != nil {
+                    let current = session.machine
+                    configuration = BeebROMs.configuration(for: model ?? current.model,
+                                                           secondProcessor: secondProcessor ?? (current.secondProcessor != nil))
+                }
                 session.powerCycle(configuration: configuration)
                 runUntilIdle(session, maxSeconds: 10)
                 return summary(session)
