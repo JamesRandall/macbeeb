@@ -15,6 +15,10 @@ let package = Package(
         .executable(name: "beeb-bench", targets: ["beeb-bench"]),
         .executable(name: "m6502-gen", targets: ["m6502-gen"]),
     ],
+    dependencies: [
+        // Software updates for the app.
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
+    ],
     targets: [
         // The emulation core: pure Swift, no UI or platform frameworks.
         //
@@ -44,7 +48,10 @@ let package = Package(
         // The Mac app.
         .executableTarget(
             name: "MacBeeb",
-            dependencies: ["BeebCore", "BeebHost", "BeebCapture", "BeebROMs", "BeebAgentKit"]
+            dependencies: ["BeebCore", "BeebHost", "BeebCapture", "BeebROMs", "BeebAgentKit",
+                           .product(name: "Sparkle", package: "Sparkle")],
+            // Sparkle.framework is embedded in Contents/Frameworks.
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
 
         // 6502 state machine generator. Run `swift run m6502-gen` after

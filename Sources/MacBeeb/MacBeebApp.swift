@@ -13,6 +13,10 @@ struct MacBeebApp: App {
         }
         .defaultSize(width: 960, height: 768)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { Updates.shared.checkForUpdates() }
+                    .disabled(!Updates.shared.isAvailable)
+            }
             CommandGroup(replacing: .newItem) {
                 Button("Open Disc…") { machine?.openDisc() }
                     .keyboardShortcut("o")
@@ -135,12 +139,15 @@ struct MachineWindow: View {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Needed when run as a plain executable (swift run) rather than an
         // app bundle.
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
+        // Starts the background update checks.
+        _ = Updates.shared
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

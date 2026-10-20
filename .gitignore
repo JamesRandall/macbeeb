@@ -7,3 +7,6 @@ DerivedData/
 # Reference emulators are local study material, not part of macbeeb.
 /reference
 /.build-*
+
+# Local secrets (notarisation credentials).
+.env*.local

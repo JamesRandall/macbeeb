@@ -31,6 +31,22 @@ make test      # optimised; the CPU suites run billions of cycles
 make bench
 ```
 
+### Releases
+
+`scripts/release.sh 1.0` builds a universal app signed with the Developer
+ID, notarises and staples it and a DMG, and makes the Sparkle update zip and
+`appcast.xml` (keeping earlier releases listed). `--publish` then tags the
+commit and creates the GitHub release with all three. The app checks
+`https://github.com/JamesRandall/macbeeb/releases/latest/download/appcast.xml`,
+so updates reach users only once the repo's releases are public.
+
+It reads `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` and
+`CSC_NAME` from `.env.local` (ignored by git). The Sparkle EdDSA key is in
+the login keychain under the account `macbeeb`; create it once with
+`.build/artifacts/sparkle/Sparkle/bin/generate_keys --account macbeeb`, and
+keep a backup (`-x FILE` exports it): losing it means existing installs
+can't verify new updates.
+
 `Sources/BeebCore/CPU/M6502+Generated.swift` is generated. After changing
 `Sources/M6502GenKit`, run `make generate`; a test fails if it's stale.
 
