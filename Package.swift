@@ -27,7 +27,7 @@ let package = Package(
         ),
 
         // The standard ROM images (Acorn copyright, not GPL).
-        .target(name: "BeebROMs", resources: [.copy("ROMs")]),
+        .target(name: "BeebROMs", dependencies: ["BeebCore"], resources: [.copy("ROMs")]),
 
         // Screenshots (and later, video recording).
         .target(name: "BeebCapture", dependencies: ["BeebCore"]),
@@ -38,7 +38,7 @@ let package = Package(
         .executableTarget(name: "beeb", dependencies: ["BeebCore", "BeebCapture", "BeebROMs"]),
 
         // Tools for AI agents to drive a machine, and the MCP server.
-        .target(name: "BeebAgentKit", dependencies: ["BeebCore", "BeebHost", "BeebCapture"]),
+        .target(name: "BeebAgentKit", dependencies: ["BeebCore", "BeebHost", "BeebCapture", "BeebROMs"]),
         .executableTarget(name: "macbeeb-mcp", dependencies: ["BeebAgentKit", "BeebCore", "BeebHost", "BeebROMs"]),
 
         // The Mac app.

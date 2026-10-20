@@ -84,3 +84,16 @@ struct AgentToolsTests {
         #expect(unknown?["error"]?["code"]?.intValue == -32601)
     }
 }
+
+struct AgentSnapshotTests {
+    @Test func snapshotAndRestore() {
+        let tools = AgentToolsTests().makeTools()
+        _ = tools.call("run_command", arguments: ["text": "A%=1"])
+        _ = tools.call("save_snapshot", arguments: ["name": "before"])
+        _ = tools.call("run_command", arguments: ["text": "A%=2"])
+        let restored = tools.call("restore_snapshot", arguments: ["name": "before"])
+        #expect(!restored.isError)
+        let output = AgentToolsTests().text(tools.call("run_command", arguments: ["text": "PRINT A%"]))
+        #expect(output.contains("         1"))
+    }
+}

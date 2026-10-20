@@ -10,7 +10,7 @@
 // foreground, pixels[2] and [3] the glyph bits for the two output rows (6
 // pixels each, at 12MHz).
 
-public struct VideoUnit: Sendable {
+public struct VideoUnit: Sendable, Codable {
     public enum Kind: UInt16 {
         case bitmap16MHz = 0
         case bitmap12MHz = 1

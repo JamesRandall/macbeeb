@@ -40,6 +40,7 @@ make bench
 swift run -c release beeb --type 'PRINT 1+1\n' --text
 swift run -c release beeb --type 'MODE 2\nDRAW 640,512\n' --screenshot out.png
 swift run -c release beeb --load disc.ssd:PROGRAM --type 'RUN\n' --seconds 5 --text
+swift run -c release beeb --master --type '*ROMS\n' --text
 ```
 
 `--pcs` and `--trace N` show where the CPU is spending its time.
@@ -53,7 +54,7 @@ Time is emulated time, so waits are exact and run faster than real time.
 
 ```
 swift build -c release --product macbeeb-mcp
-claude mcp add macbeeb -- "$(pwd)/.build/release/macbeeb-mcp"            # its own headless BBC
+claude mcp add macbeeb -- "$(pwd)/.build/release/macbeeb-mcp"            # its own headless BBC (--master for a Master 128)
 claude mcp add macbeeb -- "$(pwd)/.build/release/macbeeb-mcp" --attach   # the app's BBC, as you watch
 ```
 
@@ -64,10 +65,11 @@ The app bundle includes it too, at `MacBeeb.app/Contents/MacOS/macbeeb-mcp`.
 Tools: `run_command`, `type_text`, `press_keys`, `load_disc`, `eject_disc`,
 `load_program`, `run`, `run_until_idle`, `run_until_address`,
 `read_screen_text`, `screenshot`, `peek`, `poke`, `disassemble`,
-`get_status`, `press_break`, `power_cycle`, `start_recording`,
-`stop_recording`.
+`get_status`, `press_break`, `power_cycle` (which can switch model),
+`save_snapshot`, `restore_snapshot`, `save_state`, `load_state`,
+`start_recording`, `stop_recording`.
 
-## The Model B
+## The machines
 
 `BBCMicro` follows b2's per-cycle machine loop: CPU with 1MHz cycle
 stretching, system and user VIAs, 6845 CRTC, Video ULA, SAA5050, keyboard
@@ -79,8 +81,18 @@ Seddon's timing suites, RMW and BCD tests, jsbeeb's IRQ timing results, and
 an IRQ-load test where real Model Bs give 1066-1072 (macbeeb: 1070).
 
 Sound is the SN76489 through b2's filter model; discs are an Intel 8271
-(ported from jsbeeb/beebjit) with DFS 1.20. Still to come: tape, serial
-(the ACIA is a stub), joysticks, the Master.
+(ported from jsbeeb/beebjit) with DFS 1.20. Analogue joysticks come from
+game controllers.
+
+The Master 128 (Machine > Model) adds the 65C12, MOS 3.20 and its ROMs,
+b2's paging (shadow RAM, ANDY, HAZEL, the VDU driver's view of shadow RAM),
+sideways RAM in banks 4-7, the MC146818 clock and CMOS RAM, the keypad, and
+a WD1770 (ported from jsbeeb/beebjit) with DFS 2.24 and ADFS.
+
+Save states (`.beebstate`) and snapshots capture everything, discs and disc
+controllers included, so a restored machine carries on cycle for cycle.
+
+Still to come: tape and serial (the ACIA is a stub).
 
 ## The 6502
 

@@ -78,6 +78,43 @@ public struct BeebKey: RawRepresentable, Hashable, Sendable {
     public static let f7 = BeebKey(rawValue: 0x16)
     public static let f8 = BeebKey(rawValue: 0x76)
     public static let f9 = BeebKey(rawValue: 0x77)
+
+    // The Master's keypad (columns 10-15, which the Model B doesn't have).
+    public static let keypad0 = BeebKey(rawValue: 0x6A)
+    public static let keypad1 = BeebKey(rawValue: 0x6B)
+    public static let keypad2 = BeebKey(rawValue: 0x7C)
+    public static let keypad3 = BeebKey(rawValue: 0x6C)
+    public static let keypad4 = BeebKey(rawValue: 0x7A)
+    public static let keypad5 = BeebKey(rawValue: 0x7B)
+    public static let keypad6 = BeebKey(rawValue: 0x1A)
+    public static let keypad7 = BeebKey(rawValue: 0x1B)
+    public static let keypad8 = BeebKey(rawValue: 0x2A)
+    public static let keypad9 = BeebKey(rawValue: 0x2B)
+    public static let keypadHash = BeebKey(rawValue: 0x5A)
+    public static let keypadStar = BeebKey(rawValue: 0x5B)
+    public static let keypadComma = BeebKey(rawValue: 0x5C)
+    public static let keypadSlash = BeebKey(rawValue: 0x4A)
+    public static let keypadDelete = BeebKey(rawValue: 0x4B)
+    public static let keypadStop = BeebKey(rawValue: 0x4C)
+    public static let keypadPlus = BeebKey(rawValue: 0x3A)
+    public static let keypadMinus = BeebKey(rawValue: 0x3B)
+    public static let keypadReturn = BeebKey(rawValue: 0x3C)
+
+    public var isKeypad: Bool { column >= 10 && self != .breakKey }
+
+    /// For a keypad key, the main keyboard key that types the same thing
+    /// unshifted, if there is one (for the Model B).
+    public var mainKeyboardEquivalent: BeebKey? {
+        Self.keypadEquivalents[self]
+    }
+
+    private static let keypadEquivalents: [BeebKey: BeebKey] = [
+        .keypad0: .digit0, .keypad1: .digit1, .keypad2: .digit2, .keypad3: .digit3, .keypad4: .digit4,
+        .keypad5: .digit5, .keypad6: .digit6, .keypad7: .digit7, .keypad8: .digit8, .keypad9: .digit9,
+        .keypadComma: .comma, .keypadSlash: .slash, .keypadDelete: .delete, .keypadStop: .stop,
+        .keypadMinus: .minus, .keypadReturn: .returnKey,
+    ]
+
     /// Not a key: resets the CPU when released.
     public static let breakKey = BeebKey(rawValue: 0x7F)
 
@@ -135,5 +172,10 @@ extension BeebKey {
         "UP": .up, "DOWN": .down, "LEFT": .left, "RIGHT": .right,
         "F0": .f0, "F1": .f1, "F2": .f2, "F3": .f3, "F4": .f4,
         "F5": .f5, "F6": .f6, "F7": .f7, "F8": .f8, "F9": .f9,
+        "KP0": .keypad0, "KP1": .keypad1, "KP2": .keypad2, "KP3": .keypad3, "KP4": .keypad4,
+        "KP5": .keypad5, "KP6": .keypad6, "KP7": .keypad7, "KP8": .keypad8, "KP9": .keypad9,
+        "KP#": .keypadHash, "KP*": .keypadStar, "KP,": .keypadComma, "KP/": .keypadSlash,
+        "KPDELETE": .keypadDelete, "KP.": .keypadStop, "KP+": .keypadPlus, "KP-": .keypadMinus,
+        "KPRETURN": .keypadReturn,
     ]
 }

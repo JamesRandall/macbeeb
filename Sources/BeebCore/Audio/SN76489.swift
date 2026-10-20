@@ -2,8 +2,8 @@
 //
 // A port of b2's SN76489.cpp (Copyright (C) Tom Seddon, GPLv3).
 
-public struct SN76489 {
-    struct Channel {
+public struct SN76489: Codable, Sendable {
+    struct Channel: Codable {
         /// Period, as set by the %1xx0xxxx and %0xxxxxxx commands.
         var frequency: UInt16 = 1023
         /// 15 = loudest.

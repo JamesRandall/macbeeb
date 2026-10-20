@@ -7,6 +7,8 @@
 // is a flux reversal. A standard track is 3125 words (200ms at 300rpm), so
 // one word is one FM byte (clock and data bits interleaved) or two MFM bytes.
 
+import Foundation
+
 /// IBM floppy format constants and FM/MFM/CRC helpers.
 public enum IBMDiscFormat {
     public static let bytesPerTrack = 3125
@@ -16,6 +18,8 @@ public enum IBMDiscFormat {
     public static let dataMarkDataPattern: UInt8 = 0xFB
     public static let deletedDataMarkDataPattern: UInt8 = 0xF8
     public static let mfmA1Sync: UInt32 = 0x4489
+    /// The index mark's sync.
+    public static let mfmC2Sync: UInt32 = 0x5224
     static let stdSync00s = 6
     static let stdGap1FFs = 16
     static let stdGap2FFs = 11
@@ -91,7 +95,7 @@ public enum IBMDiscFormat {
     }
 }
 
-struct Track {
+struct Track: Equatable, Sendable {
     /// Room for longer-than-standard tracks.
     static let capacity = IBMDiscFormat.bytesPerTrack * 2
 
@@ -101,6 +105,44 @@ struct Track {
     init(fill byte: UInt8) {
         let word = UInt32(byte) * 0x0101_0101
         pulses = [UInt32](repeating: word, count: Self.capacity)
+    }
+
+    init(pulses: [UInt32], length: Int) {
+        self.pulses = pulses
+        self.length = length
+    }
+}
+
+/// Encoded as the length and the pulse words, little endian, less any
+/// trailing zeros: a blank track is a few bytes, a standard one 12.5KB.
+extension Track: Codable {
+    private enum CodingKeys: String, CodingKey { case length, pulses }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(length, forKey: .length)
+        let used = (pulses.lastIndex { $0 != 0 } ?? -1) + 1
+        var bytes = Data(count: used * 4)
+        bytes.withUnsafeMutableBytes { raw in
+            for i in 0..<used { raw.storeBytes(of: pulses[i].littleEndian, toByteOffset: i * 4, as: UInt32.self) }
+        }
+        try container.encode(bytes, forKey: .pulses)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        length = try container.decode(Int.self, forKey: .length)
+        let bytes = try container.decode(Data.self, forKey: .pulses)
+        guard (1...Self.capacity).contains(length), bytes.count % 4 == 0, bytes.count <= Self.capacity * 4 else {
+            throw DecodingError.dataCorruptedError(forKey: .pulses, in: container, debugDescription: "Bad track")
+        }
+        var pulses = [UInt32](repeating: 0, count: Self.capacity)
+        bytes.withUnsafeBytes { raw in
+            for i in 0..<bytes.count / 4 {
+                pulses[i] = UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: i * 4, as: UInt32.self))
+            }
+        }
+        self.pulses = pulses
     }
 }
 
@@ -384,6 +426,88 @@ public final class Disc {
     /// A blank, unformatted disc.
     public init() {
         tracks = [Track](repeating: Track(fill: 0), count: 2 * IBMDiscFormat.tracksPerDisc)
+    }
+
+    // MARK: State
+
+    /// Everything about the disc: both sides' surfaces and its flags.
+    ///
+    /// In memory a snapshot shares each track's buffer with the disc (copy
+    /// on write), so it costs a few KB until the disc is next written, and
+    /// then a track (25KB) per track written. Encoded, it's the pulse words
+    /// of each formatted track: about 12.5KB a track, so 1MB for an 80-track
+    /// single-sided disc (1.3MB in JSON's base64), which compresses well (LZFSE
+    /// takes a mostly empty DFS disc to 14KB); unformatted tracks take a few
+    /// bytes.
+    public struct State: Codable, Sendable, Equatable {
+        fileprivate var tracks: [Track]
+        fileprivate var tracksUsed: Int
+        fileprivate var isDoubleSided: Bool
+        fileprivate var is40Track: Bool
+        fileprivate var writeProtected: Bool
+        fileprivate var isModified: Bool
+        fileprivate var dirtyUpper: Bool?
+        fileprivate var dirtyTrack: Int?
+
+        fileprivate init(tracks: [Track], tracksUsed: Int, isDoubleSided: Bool, is40Track: Bool,
+                         writeProtected: Bool, isModified: Bool, dirtyUpper: Bool?, dirtyTrack: Int?) {
+            self.tracks = tracks
+            self.tracksUsed = tracksUsed
+            self.isDoubleSided = isDoubleSided
+            self.is40Track = is40Track
+            self.writeProtected = writeProtected
+            self.isModified = isModified
+            self.dirtyUpper = dirtyUpper
+            self.dirtyTrack = dirtyTrack
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case tracks, tracksUsed, isDoubleSided, is40Track, writeProtected, isModified, dirtyUpper, dirtyTrack
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            tracks = try c.decode([Track].self, forKey: .tracks)
+            tracksUsed = try c.decode(Int.self, forKey: .tracksUsed)
+            isDoubleSided = try c.decode(Bool.self, forKey: .isDoubleSided)
+            is40Track = try c.decode(Bool.self, forKey: .is40Track)
+            writeProtected = try c.decode(Bool.self, forKey: .writeProtected)
+            isModified = try c.decode(Bool.self, forKey: .isModified)
+            dirtyUpper = try c.decodeIfPresent(Bool.self, forKey: .dirtyUpper)
+            dirtyTrack = try c.decodeIfPresent(Int.self, forKey: .dirtyTrack)
+            let trackRange = 0..<IBMDiscFormat.tracksPerDisc
+            guard tracks.count == 2 * IBMDiscFormat.tracksPerDisc, (0...trackRange.upperBound).contains(tracksUsed),
+                  dirtyTrack.map(trackRange.contains) ?? true else {
+                throw DecodingError.dataCorruptedError(forKey: .tracks, in: c, debugDescription: "Bad disc state")
+            }
+        }
+    }
+
+    public var state: State {
+        State(tracks: tracks, tracksUsed: tracksUsed, isDoubleSided: isDoubleSided, is40Track: is40Track,
+              writeProtected: writeProtected, isModified: isModified, dirtyUpper: dirty?.upper, dirtyTrack: dirty?.track)
+    }
+
+    /// Leaves `onTrackWritten` as it is.
+    public func restore(_ state: State) {
+        precondition(state.tracks.count == 2 * IBMDiscFormat.tracksPerDisc, "Not a disc's state")
+        tracks = state.tracks
+        tracksUsed = state.tracksUsed
+        isDoubleSided = state.isDoubleSided
+        is40Track = state.is40Track
+        writeProtected = state.writeProtected
+        isModified = state.isModified
+        if let upper = state.dirtyUpper, let track = state.dirtyTrack {
+            dirty = (upper, track)
+        } else {
+            dirty = nil
+        }
+    }
+
+    /// A disc in a saved state.
+    public init(state: State) {
+        tracks = []
+        restore(state)
     }
 
     @inline(__always)

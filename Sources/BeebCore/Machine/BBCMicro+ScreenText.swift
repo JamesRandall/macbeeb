@@ -13,18 +13,17 @@ extension BBCMicro {
             return teletext
         }
 
-        let mode = Int(peek(0x355))
-        let topLeft = UInt16(peek(0x351)) << 8 | UInt16(peek(0x350))
-        let bytesPerRow = Int(UInt16(peek(0x353)) << 8 | UInt16(peek(0x352)))
-        let bytesPerCharacter = Int(peek(0x34F))
-        let screenStart = 0x8000 - Int(peek(0x354)) << 8
+        let mode = Int(peekMainRAM(0x355))
+        let topLeft = UInt16(peekMainRAM(0x351)) << 8 | UInt16(peekMainRAM(0x350))
+        let bytesPerRow = Int(UInt16(peekMainRAM(0x353)) << 8 | UInt16(peekMainRAM(0x352)))
+        let bytesPerCharacter = Int(peekMainRAM(0x34F))
+        let screenStart = 0x8000 - Int(peekMainRAM(0x354)) << 8
         guard [8, 16, 32].contains(bytesPerCharacter), bytesPerRow > 0, screenStart >= 0x1000 else { return [] }
         let columns = bytesPerRow / bytesPerCharacter
         let rows = [3, 6].contains(mode) ? 25 : 32
         let bitsPerPixel = bytesPerCharacter / 8
 
-        // OS font for characters 32-126 is at &C000.
-        let font = (0..<95).map { ch in (0..<8).map { peek(0xC000 + UInt16(ch * 8 + $0)) } }
+        let font = (32..<127).map(fontGlyph)
         var glyphs: [[UInt8]: Character] = [:]
         for (index, rows) in font.enumerated() {
             glyphs[rows] = glyphs[rows] ?? Character(UnicodeScalar(UInt8(32 + index)))
@@ -36,7 +35,7 @@ extension BBCMicro {
             if a >= 0x8000 {
                 a -= 0x8000 - screenStart
             }
-            return peek(UInt16(a))
+            return peekScreen(UInt16(a))
         }
 
         var lines: [String] = []

@@ -4,8 +4,8 @@
 // the Hitachi part's behaviour in detail: vertical adjust latching,
 // interlace, and the dummy raster.
 
-public struct CRTC6845 {
-    public struct Output {
+public struct CRTC6845: Codable, Sendable {
+    public struct Output: Codable, Sendable {
         public var hsync = false
         public var vsync = false
         /// If set, fetch from `address`/`raster` and use as display data.

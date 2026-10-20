@@ -60,3 +60,16 @@ struct ModelBTests {
 }
 
 import Foundation
+
+struct JoystickTests {
+    @Test func advalReadsJoystick() {
+        let machine = bootModelB()
+        machine.setJoystick(0, x: -1, y: 1, fire: true)
+        // ADVAL needs a conversion cycle on each channel.
+        machine.run(seconds: 0.2)
+        machine.paste("PRINT ADVAL(1) DIV 256;\",\";ADVAL(2) DIV 256;\",\";ADVAL(0) AND 3\n")
+        #expect(machine.runUntilIdle())
+        // Left and up read high; fire button 0 is bit 0 of ADVAL(0).
+        #expect(machine.teletextScreenText()?.contains { $0.hasSuffix("255,255,1") } == true, "\(machine.teletextScreenText() ?? [])")
+    }
+}

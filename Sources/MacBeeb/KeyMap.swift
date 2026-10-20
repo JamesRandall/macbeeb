@@ -46,6 +46,12 @@ enum KeyMap {
         0x7A: .f1, 0x78: .f2, 0x63: .f3, 0x76: .f4, 0x60: .f5,
         0x61: .f6, 0x62: .f7, 0x64: .f8, 0x65: .f9, 0x6D: .f0,
         0x6F: .breakKey,
+
+        // Keypad (the Master's; the Model B uses the main keys).
+        0x52: .keypad0, 0x53: .keypad1, 0x54: .keypad2, 0x55: .keypad3, 0x56: .keypad4,
+        0x57: .keypad5, 0x58: .keypad6, 0x59: .keypad7, 0x5B: .keypad8, 0x5C: .keypad9,
+        0x41: .keypadStop, 0x43: .keypadStar, 0x45: .keypadPlus, 0x4E: .keypadMinus,
+        0x4B: .keypadSlash, 0x4C: .keypadReturn, 0x51: .keypadHash, 0x47: .keypadDelete,
     ]
 
     /// Caps Lock: macOS reports it as a toggle, not as presses.

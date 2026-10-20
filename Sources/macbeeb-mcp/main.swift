@@ -1,6 +1,7 @@
 // macbeeb-mcp: an MCP server that lets AI agents drive a BBC Micro.
 //
-//   macbeeb-mcp            run a headless BBC Micro of its own
+//   macbeeb-mcp            run a headless BBC Micro of its own (a Model B,
+//                          or with --master a Master 128)
 //   macbeeb-mcp --attach   drive the running MacBeeb app's machine
 //
 // Add to Claude Code with: claude mcp add macbeeb -- /path/to/macbeeb-mcp
@@ -17,9 +18,9 @@ let tools: ToolProvider
 if arguments.contains("--attach") {
     tools = AppConnection()
 } else {
-    let os = BeebROMs.data(.os12), basic = BeebROMs.data(.basic2), dfs = BeebROMs.data(.dfs12)
+    let configuration = BeebROMs.configuration(for: arguments.contains("--master") ? .master128 : .modelB)
     let session = HeadlessSession {
-        BBCMicro(os: os, sidewaysROMs: [15: basic, 14: dfs])
+        BBCMicro(configuration: configuration)
     }
     session.machine.runUntilIdle()
     tools = AgentTools(context: session)

@@ -17,8 +17,8 @@
 // C1 and (input mode) C2 return to 1, and the machine then pulls low
 // whatever its devices are driving.
 
-public struct VIA6522 {
-    public struct Port {
+public struct VIA6522: Codable, Sendable {
+    public struct Port: Codable, Sendable {
         /// Output register.
         var or: UInt8 = 0
         var ddr: UInt8 = 0

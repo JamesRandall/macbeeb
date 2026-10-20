@@ -66,7 +66,7 @@ struct DiscSystemTests {
         let screen = machine.teletextScreenText() ?? []
         #expect(screen.contains("SAVED OK"), "\(screen)")
         // And it's on the disc.
-        let disc = try #require(machine.fdc.drives[0].disc)
+        let disc = try #require(machine.drives[0].disc)
         let catalogue = try DFSDisc(side: disc.toSSDOrDSD())
         #expect(catalogue.file(named: "NEW") != nil)
     }

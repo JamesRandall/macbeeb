@@ -1,4 +1,5 @@
 import AppKit
+import BeebCore
 import SwiftUI
 
 @main
@@ -31,6 +32,14 @@ struct MacBeebApp: App {
                 Button("Save Screenshot…") { machine?.saveScreenshot() }
                     .keyboardShortcut("s")
                     .disabled(machine == nil)
+                Divider()
+                Button("Save State…") { machine?.saveState() }
+                    .keyboardShortcut("s", modifiers: [.command, .shift])
+                    .disabled(machine == nil)
+                Button("Load State…") { machine?.loadState() }
+                    .keyboardShortcut("l", modifiers: [.command, .shift])
+                    .disabled(machine == nil)
+                Divider()
                 Button(machine?.recordingURL == nil ? "Start Recording…" : "Stop Recording") { machine?.toggleRecording() }
                     .keyboardShortcut("r", modifiers: [.command, .option])
                     .disabled(machine == nil)
@@ -55,6 +64,17 @@ struct MacBeebApp: App {
                     .keyboardShortcut("b", modifiers: [.command, .shift])
                 Button("Power Cycle") { machine?.powerCycle() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
+                Divider()
+                Picker("Model", selection: Binding(
+                    get: { machine?.model ?? .modelB },
+                    set: { machine?.setModel($0) }
+                )) {
+                    ForEach(BBCMicro.Model.allCases, id: \.self) { model in
+                        Text(model.displayName).tag(model)
+                    }
+                }
+                .pickerStyle(.inline)
+                .disabled(machine == nil)
             }
         }
     }
@@ -70,19 +90,29 @@ struct MachineWindow: View {
             .focusedSceneValue(machine)
             .navigationTitle(title)
             .dropDestination(for: URL.self) { urls, _ in
-                guard let url = urls.first(where: { ["ssd", "dsd"].contains($0.pathExtension.lowercased()) }) else {
-                    return false
-                }
-                machine.insertDisc(url)
-                return true
+                guard let url = urls.first else { return false }
+                return open(url)
             }
             .onOpenURL { url in
-                machine.insertDisc(url)
+                _ = open(url)
             }
     }
 
+    private func open(_ url: URL) -> Bool {
+        switch url.pathExtension.lowercased() {
+        case "ssd", "dsd":
+            machine.insertDisc(url)
+        case SaveStateFile.fileExtension:
+            machine.loadState(url)
+        default:
+            return false
+        }
+        return true
+    }
+
     private var title: String {
-        var title = machine.discNames[0].map { "BBC Micro — \($0)" } ?? "BBC Micro"
+        let name = machine.model.displayName
+        var title = machine.discNames[0].map { "\(name) — \($0)" } ?? name
         if machine.paused {
             title += " (Paused)"
         }

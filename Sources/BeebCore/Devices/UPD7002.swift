@@ -2,7 +2,7 @@
 //
 // A port of b2's adc.cpp (Copyright (C) Tom Seddon, GPLv3).
 
-public struct UPD7002 {
+public struct UPD7002: Codable, Sendable {
     static let conversionTime10Bit: UInt16 = 10_000
     static let conversionTime8Bit: UInt16 = 4_000
 

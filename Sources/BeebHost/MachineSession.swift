@@ -11,13 +11,21 @@ public protocol MachineSession: AnyObject {
     /// Runs the machine, keeping attached things (recording, display) up
     /// to date.
     func advance(cycles: Int)
-    func powerCycle()
+    /// Power off and on again, optionally as a different machine. Discs
+    /// stay in their drives.
+    func powerCycle(configuration: BBCMicro.Configuration?)
     func startRecording(to url: URL, codec: VideoRecorder.Codec) throws
     func stopRecording() throws
     var isRecording: Bool { get }
+    /// Swaps in a different machine (e.g. one restored from a save state).
+    func replace(with machine: BBCMicro)
 }
 
 extension MachineSession {
+    public func powerCycle() {
+        powerCycle(configuration: nil)
+    }
+
     public func advance(seconds: Double) {
         advance(cycles: Int(seconds * 2_000_000))
     }
@@ -43,7 +51,7 @@ public protocol MachineContext: Sendable {
 public final class HeadlessSession: MachineSession, MachineContext, @unchecked Sendable {
     public private(set) var machine: BBCMicro
     public private(set) var tv: TVOutput
-    private let makeMachine: () -> BBCMicro
+    private var makeMachine: () -> BBCMicro
     private var recorder: MachineRecorder?
     private let lock = NSLock()
 
@@ -75,8 +83,11 @@ public final class HeadlessSession: MachineSession, MachineContext, @unchecked S
         }
     }
 
-    public func powerCycle() {
-        let discs = (0..<2).map { machine.fdc.drives[$0].disc }
+    public func powerCycle(configuration: BBCMicro.Configuration?) {
+        if let configuration {
+            makeMachine = { BBCMicro(configuration: configuration) }
+        }
+        let discs = (0..<2).map { machine.drives[$0].disc }
         let recording = recorder
         recorder = nil
         try? recording?.finish()
@@ -101,4 +112,15 @@ public final class HeadlessSession: MachineSession, MachineContext, @unchecked S
     }
 
     public var isRecording: Bool { recorder != nil }
+
+    public func replace(with newMachine: BBCMicro) {
+        try? recorder?.finish()
+        recorder = nil
+        machine = newMachine
+        // Power cycles keep to the new machine's model and ROMs.
+        let configuration = newMachine.configuration
+        makeMachine = { BBCMicro(configuration: configuration) }
+        tv = TVOutput()
+        machine.tv = tv
+    }
 }

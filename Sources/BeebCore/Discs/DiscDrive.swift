@@ -65,6 +65,65 @@ public final class DiscDrive {
         self.id = id
     }
 
+    // MARK: State
+
+    /// Everything about the drive, including the disc in it (see
+    /// `Disc.State` for its size), the head's angle and the spindle's speed.
+    public struct State: Codable, Sendable, Equatable {
+        fileprivate var disc: Disc.State?
+        fileprivate var writeProtectSwitch: Bool
+        fileprivate var tracksPerStep: Int
+        fileprivate var track: Int
+        fileprivate var isSideUpper: Bool
+        fileprivate var headPosition: Int
+        fileprivate var pulsePosition: Int
+        fileprivate var in32usMode: Bool
+        fileprivate var spinning: Bool
+        fileprivate var seekSteps: Int?
+        fileprivate var speedThen: Double
+        fileprivate var speedTime: Int
+        fileprivate var atFullSpeed: Bool
+        fileprivate var timer: Int
+        fileprivate var stepPulses: Int
+    }
+
+    public var state: State {
+        State(disc: disc?.state, writeProtectSwitch: writeProtectSwitch, tracksPerStep: tracksPerStep,
+              track: track, isSideUpper: isSideUpper, headPosition: headPosition, pulsePosition: pulsePosition,
+              in32usMode: in32usMode, spinning: spinning, seekSteps: seekSteps, speedThen: speedThen,
+              speedTime: speedTime, atFullSpeed: atFullSpeed, timer: timer, stepPulses: stepPulses)
+    }
+
+    /// Restores the drive and its disc. A saved disc goes back into the
+    /// `Disc` already in the drive if there is one (keeping its
+    /// `onTrackWritten`), or a new one; a saved empty drive ejects. Leaves
+    /// `onEvent` as it is.
+    public func restore(_ state: State) {
+        if let discState = state.disc {
+            if let disc {
+                disc.restore(discState)
+            } else {
+                disc = Disc(state: discState)
+            }
+        } else {
+            disc = nil
+        }
+        writeProtectSwitch = state.writeProtectSwitch
+        tracksPerStep = state.tracksPerStep == 2 ? 2 : 1
+        track = min(max(state.track, 0), IBMDiscFormat.tracksPerDisc - 1)
+        isSideUpper = state.isSideUpper
+        headPosition = min(max(state.headPosition, 0), Track.capacity - 1)
+        pulsePosition = state.pulsePosition == 16 ? 16 : 0
+        in32usMode = state.in32usMode
+        spinning = state.spinning
+        seekSteps = state.seekSteps
+        speedThen = state.speedThen
+        speedTime = state.speedTime
+        atFullSpeed = state.atFullSpeed
+        timer = state.timer
+        stepPulses = state.stepPulses
+    }
+
     /// Inserts (or with nil, ejects) a disc. Leaves the 40/80 switch
     /// following the disc's layout.
     public func insert(_ disc: Disc?) {

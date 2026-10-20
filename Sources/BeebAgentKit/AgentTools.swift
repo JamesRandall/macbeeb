@@ -1,7 +1,9 @@
 import BeebCapture
 import BeebCore
 import BeebHost
+import BeebROMs
 import Foundation
+import Synchronization
 
 /// A tool's result, in MCP's content model.
 public struct ToolResult: Sendable {
@@ -32,6 +34,8 @@ struct ToolFailure: Error {
 /// so waits are exact and run as fast as the host can manage.
 public final class AgentTools: Sendable {
     let context: MachineContext
+    /// Named in-memory snapshots, for quick experiments.
+    static let slots = Mutex<[String: SaveStateFile]>([:])
 
     public init(context: MachineContext) {
         self.context = context
@@ -65,6 +69,15 @@ public final class AgentTools: Sendable {
         ])
     }
 
+    static let agentModels: [String: BBCMicro.Model] = ["model_b": .modelB, "master_128": .master128]
+
+    static func modelDescription(_ model: BBCMicro.Model) -> String {
+        switch model {
+        case .modelB: "BBC Micro Model B (OS 1.20, BASIC 2, DFS 1.20)"
+        case .master128: "BBC Master 128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS 2.03)"
+        }
+    }
+
     static func prop(_ type: String, _ description: String) -> JSONValue {
         ["type": .string(type), "description": .string(description)]
     }
@@ -90,12 +103,12 @@ public final class AgentTools: Sendable {
                 // the opcode being fetched.
                 let pc = cpu.isAboutToExecute ? cpu.abus : cpu.pc
                 let discs = (0..<2).map { drive -> String in
-                    guard let disc = m.fdc.drives[drive].disc else { return "drive \(drive): empty" }
+                    guard let disc = m.drives[drive].disc else { return "drive \(drive): empty" }
                     let title = (try? DFSDisc(side: disc.toSSDOrDSD(force: true)).title) ?? "?"
                     return "drive \(drive): \"\(title)\""
                 }
                 return """
-                model: BBC Micro Model B (OS 1.20, BASIC 2, DFS 1.20)
+                model: \(modelDescription(m.model))
                 emulated time: \(String(format: "%.3f", Double(m.cycles) / 2_000_000))s
                 PC=&\(hex(pc, 4)) A=&\(hex(cpu.a)) X=&\(hex(cpu.x)) Y=&\(hex(cpu.y)) S=&\(hex(cpu.s)) P=&\(hex(cpu.p))
                 screen mode: \(m.peek(0x355))
@@ -107,11 +120,18 @@ public final class AgentTools: Sendable {
 
         Tool(definition: ToolDefinition(
             name: "power_cycle",
-            description: "Switch the BBC off and on again. Discs stay in the drives. Runs until the BASIC prompt.",
-            inputSchema: schema()
-        )) { context, _ in
-            .text(try context.perform { session in
-                session.powerCycle()
+            description: "Switch the BBC off and on again. Discs stay in the drives. Runs until the BASIC prompt. With model, switches to that machine: model_b (OS 1.20, BASIC 2, DFS 1.20) or master_128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS, View, ViewSheet, Edit; 1770 disc controller, shadow RAM, sideways RAM in banks 4-7).",
+            inputSchema: schema(["model": ["type": "string", "enum": ["model_b", "master_128"],
+                                           "description": "Machine to switch to (default: keep the current one)"] as JSONValue])
+        )) { context, args in
+            var model: BBCMicro.Model?
+            if let name = args["model"]?.stringValue {
+                guard let named = agentModels[name] else { throw ToolFailure("model must be model_b or master_128") }
+                model = named
+            }
+            let configuration = model.map(BeebROMs.configuration(for:))
+            return .text(try context.perform { session in
+                session.powerCycle(configuration: configuration)
                 runUntilIdle(session, maxSeconds: 10)
                 return summary(session)
             })
@@ -386,6 +406,57 @@ public final class AgentTools: Sendable {
                 case .failure(let error):
                     throw ToolFailure("\(error)")
                 }
+            })
+        },
+
+        Tool(definition: ToolDefinition(
+            name: "save_snapshot",
+            description: "Remember the machine's exact state under a name (in memory), to come back to with restore_snapshot. Restoring continues exactly, cycle for cycle: good for trying things.",
+            inputSchema: schema(["name": prop("string", "Snapshot name (default \"default\")")])
+        )) { context, args in
+            let name = args["name"]?.stringValue ?? "default"
+            let file = try context.perform { session in SaveStateFile(session.machine) }
+            slots.withLock { $0[name] = file }
+            return .text("saved snapshot \"\(name)\" at t=\(String(format: "%.2f", Double(file.snapshot.cycles) / 2_000_000))s")
+        },
+
+        Tool(definition: ToolDefinition(
+            name: "restore_snapshot",
+            description: "Go back to a snapshot taken with save_snapshot (machine, memory and discs).",
+            inputSchema: schema(["name": prop("string", "Snapshot name (default \"default\")")])
+        )) { context, args in
+            let name = args["name"]?.stringValue ?? "default"
+            guard let file = slots.withLock({ $0[name] }) else { throw ToolFailure("no snapshot named \(name)") }
+            return .text(try context.perform { session in
+                session.replace(with: try file.makeMachine())
+                session.advance(cycles: 0)
+                return summary(session, extra: "restored \"\(name)\"")
+            })
+        },
+
+        Tool(definition: ToolDefinition(
+            name: "save_state",
+            description: "Save the machine's exact state (including ROMs and discs) to a .beebstate file.",
+            inputSchema: schema(["path": prop("string", "Output path")], required: ["path"])
+        )) { context, args in
+            guard let path = args["path"]?.stringValue else { throw ToolFailure("path is required") }
+            let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+            let data = try context.perform { session in try SaveStateFile(session.machine).data() }
+            try data.write(to: url, options: .atomic)
+            return .text("saved \(data.count) bytes to \(url.path)")
+        },
+
+        Tool(definition: ToolDefinition(
+            name: "load_state",
+            description: "Load a .beebstate file, replacing the machine.",
+            inputSchema: schema(["path": prop("string", "Path to the .beebstate file")], required: ["path"])
+        )) { context, args in
+            guard let path = args["path"]?.stringValue else { throw ToolFailure("path is required") }
+            let file = try SaveStateFile(data: Data(contentsOf: URL(fileURLWithPath: (path as NSString).expandingTildeInPath)))
+            return .text(try context.perform { session in
+                session.replace(with: try file.makeMachine())
+                session.advance(cycles: 0)
+                return summary(session, extra: "loaded state from \(file.created)")
             })
         },
 

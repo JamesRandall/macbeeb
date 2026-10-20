@@ -116,13 +116,13 @@ public final class Intel8271 {
         public static let needData: UInt8 = 0x04
     }
 
-    private enum ParamAccept { case none, command, specify }
+    fileprivate enum ParamAccept: UInt8, Codable { case none, command, specify }
 
-    private enum IndexPulse { case none, timeout, spindown, startReadID, startFormat, stopFormat }
+    fileprivate enum IndexPulse: UInt8, Codable { case none, timeout, spindown, startReadID, startFormat, stopFormat }
 
-    private enum TimerState { case none, seekStep, postSeek }
+    fileprivate enum TimerState: UInt8, Codable { case none, seekStep, postSeek }
 
-    private enum State {
+    fileprivate enum Phase: UInt8, Codable {
         case null, idle
         case syncingForIDWait, syncingForID, checkIDMarker, inID, inIDCRC
         case syncingForData, checkDataMarker, inData, inDataCRC, skipGap2
@@ -131,7 +131,7 @@ public final class Intel8271 {
         case formatDataCRC2, formatDataCRC3, formatGap4
     }
 
-    private enum Call {
+    fileprivate enum Call: UInt8, Codable {
         case uninitialised, unchanged, seek, readID, read, write, format
         case formatGap1OrGap3FFs, formatGap1OrGap300s, formatGap2FFs, formatGap200s, formatData
     }
@@ -175,7 +175,7 @@ public final class Intel8271 {
 
     private var shiftRegister: UInt32 = 0
     private var numShifts = 0
-    private var state = State.null
+    private var phase = Phase.null
     private var stateCount = 0
     private var stateIsIndexPulse = false
     private var crc: UInt16 = 0
@@ -185,6 +185,85 @@ public final class Intel8271 {
         precondition(drives.count == 2)
         self.drives = drives
         powerOnReset()
+    }
+
+    // MARK: State
+
+    /// Everything about the controller and its drives (and their discs; see
+    /// `DiscDrive.restore`), mid-command or not.
+    public struct State: Codable, Sendable, Equatable {
+        fileprivate var drives: [DiscDrive.State]
+        fileprivate var nmi: Bool
+        fileprivate var time: Int
+        fileprivate var timerAt: Int
+        fileprivate var nmiLowUntil: Int
+        fileprivate var currentDrive: Int?
+        fileprivate var ready: Bool
+        fileprivate var readyPulses: Int
+        fileprivate var lastIndexTime: Int
+        fileprivate var paramCallback: ParamAccept
+        fileprivate var indexPulseCallback: IndexPulse
+        fileprivate var timerState: TimerState
+        fileprivate var callContext: Call
+        fileprivate var didSeekStep: Bool
+        fileprivate var regs: [UInt8]
+        fileprivate var isResultReady: Bool
+        fileprivate var status: UInt8
+        fileprivate var mmioData: UInt8
+        fileprivate var mmioClocks: UInt8
+        fileprivate var driveOut: UInt8
+        fileprivate var shiftRegister: UInt32
+        fileprivate var numShifts: Int
+        fileprivate var phase: Phase
+        fileprivate var stateCount: Int
+        fileprivate var stateIsIndexPulse: Bool
+        fileprivate var crc: UInt16
+        fileprivate var onDiscCRC: UInt16
+    }
+
+    public var state: State {
+        State(drives: drives.map(\.state), nmi: nmi, time: time, timerAt: timerAt, nmiLowUntil: nmiLowUntil,
+              currentDrive: currentDrive.flatMap { drive in drives.firstIndex { $0 === drive } },
+              ready: ready, readyPulses: readyPulses, lastIndexTime: lastIndexTime,
+              paramCallback: paramCallback, indexPulseCallback: indexPulseCallback, timerState: timerState,
+              callContext: callContext, didSeekStep: didSeekStep, regs: (0..<32).map { regs[$0] },
+              isResultReady: isResultReady, status: status, mmioData: mmioData, mmioClocks: mmioClocks,
+              driveOut: driveOut, shiftRegister: shiftRegister, numShifts: numShifts, phase: phase,
+              stateCount: stateCount, stateIsIndexPulse: stateIsIndexPulse, crc: crc, onDiscCRC: onDiscCRC)
+    }
+
+    /// Restores the controller and its drives. Leaves the drives' and
+    /// discs' callbacks as they are.
+    public func restore(_ state: State) {
+        precondition(state.drives.count == drives.count && state.regs.count == 32, "Not an 8271's state")
+        for (drive, driveState) in zip(drives, state.drives) { drive.restore(driveState) }
+        nmi = state.nmi
+        time = state.time
+        timerAt = state.timerAt
+        nmiLowUntil = state.nmiLowUntil
+        currentDrive = state.currentDrive.flatMap { drives.indices.contains($0) ? drives[$0] : nil }
+        ready = state.ready
+        readyPulses = state.readyPulses
+        lastIndexTime = state.lastIndexTime
+        paramCallback = state.paramCallback
+        indexPulseCallback = state.indexPulseCallback
+        timerState = state.timerState
+        callContext = state.callContext
+        didSeekStep = state.didSeekStep
+        for i in 0..<32 { regs[i] = state.regs[i] }
+        isResultReady = state.isResultReady
+        status = state.status
+        mmioData = state.mmioData
+        mmioClocks = state.mmioClocks
+        driveOut = state.driveOut
+        shiftRegister = state.shiftRegister
+        numShifts = state.numShifts
+        phase = state.phase
+        stateCount = state.stateCount
+        stateIsIndexPulse = state.stateIsIndexPulse
+        crc = state.crc
+        onDiscCRC = state.onDiscCRC
+        updateNextEvent()
     }
 
     // MARK: Clock
@@ -392,7 +471,7 @@ public final class Intel8271 {
         // overwrite it below.
         mmioData = regs[R.internalData]
 
-        switch state {
+        switch phase {
         case .null, .idle:
             break
         case .syncingForIDWait, .syncingForID, .checkIDMarker, .inID, .inIDCRC,
@@ -408,7 +487,7 @@ public final class Intel8271 {
     }
 
     private func shiftDataBit(_ bit: Bool) {
-        switch state {
+        switch phase {
         case .syncingForIDWait:
             stateCount += 1
             // The controller needs 4 bytes to recover after a header before
@@ -420,7 +499,7 @@ public final class Intel8271 {
                 stateCount += 1
             } else if stateCount >= 32 && stateCount & 1 != 0 {
                 // A 1 data bit while in sync starts a marker byte.
-                setState(state == .syncingForID ? .checkIDMarker : .checkDataMarker)
+                setState(phase == .syncingForID ? .checkIDMarker : .checkDataMarker)
                 shiftRegister = 3
                 numShifts = 2
             } else {
@@ -434,7 +513,7 @@ public final class Intel8271 {
             let dataByte = Self.extractBits(shiftRegister << 1)
             // The 8271 doesn't deliver bytes with missing clock bits in the
             // middle of a synced stream.
-            if clockByte == 0xFF || state == .checkIDMarker || state == .checkDataMarker || state == .skipGap2 {
+            if clockByte == 0xFF || phase == .checkIDMarker || phase == .checkDataMarker || phase == .skipGap2 {
                 byteCallbackReading(dataByte, clockByte)
             }
             shiftRegister = 0
@@ -478,7 +557,7 @@ public final class Intel8271 {
             statusRaise(Status.nmi | Status.needData)
         }
 
-        switch state {
+        switch phase {
         case .skipGap2:
             // The ROM skips 11 bytes; with sync start-up the practical
             // minimum gap is 12 plus 2 of sync. The 8271 formats to 17.
@@ -656,7 +735,7 @@ public final class Intel8271 {
             statusRaise(Status.nmi | Status.needData)
         }
 
-        switch state {
+        switch phase {
         case .writeRun:
             callbackWriteRun()
         case .writeDataMark:
@@ -676,14 +755,14 @@ public final class Intel8271 {
             }
         case .writeCRC2, .formatIDCRC2, .formatDataCRC2:
             mmioData = UInt8(crc & 0xFF)
-            setState(state == .writeCRC2 ? .writeCRC3 : state == .formatIDCRC2 ? .formatIDCRC3 : .formatDataCRC3)
+            setState(phase == .writeCRC2 ? .writeCRC3 : phase == .formatIDCRC2 ? .formatIDCRC3 : .formatDataCRC3)
         case .writeCRC3, .formatIDCRC3, .formatDataCRC3:
             mmioData = 0xFF
             setState(.dynamicDispatch)
         case .dynamicDispatch:
             callbackDynamicDispatch()
         case .formatWriteIDMarker, .formatWriteDataMarker:
-            mmioData = state == .formatWriteIDMarker ? IBMDiscFormat.idMarkDataPattern : IBMDiscFormat.dataMarkDataPattern
+            mmioData = phase == .formatWriteIDMarker ? IBMDiscFormat.idMarkDataPattern : IBMDiscFormat.dataMarkDataPattern
             mmioClocks = IBMDiscFormat.markClockPattern
             crc = IBMDiscFormat.crcAdd(IBMDiscFormat.crcInit(mfm: false), mmioData)
             setState(.dynamicDispatch)
@@ -874,8 +953,8 @@ public final class Intel8271 {
         driveOut = value
     }
 
-    private func setState(_ newState: State) {
-        state = newState
+    private func setState(_ newState: Phase) {
+        phase = newState
         stateCount = 0
         if newState == .syncingForID || newState == .syncingForData {
             shiftRegister = 0

@@ -103,7 +103,7 @@ public final class M6502 {
     var deviceNMIFlags: UInt8 = 0
 
     /// Address of the last opcode fetched.
-    public private(set) var opcodePC: UInt16 = 0
+    public internal(set) var opcodePC: UInt16 = 0
 
     let opcodes: UnsafePointer<OpcodeEntry>
     let interruptState: State

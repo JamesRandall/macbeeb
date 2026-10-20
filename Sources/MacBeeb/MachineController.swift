@@ -13,19 +13,26 @@ import UniformTypeIdentifiers
 final class MachineController {
     let host: EmulatorHost
     private let audio: AudioOutput
+    private var joysticks: Joysticks?
     private(set) var paused = false
     private(set) var speedLimited = true
+    /// The emulated model. New windows start with the last one chosen.
+    private(set) var model: BBCMicro.Model
+
+    private static let modelDefaultsKey = "MacBeebModel"
 
     init() {
-        let os = BeebROMs.data(.os12)
-        let basic = BeebROMs.data(.basic2)
-        let dfs = BeebROMs.data(.dfs12)
+        let model = UserDefaults.standard.string(forKey: Self.modelDefaultsKey)
+            .flatMap(BBCMicro.Model.init(rawValue:)) ?? .modelB
+        self.model = model
+        let configuration = BeebROMs.configuration(for: model)
         host = EmulatorHost {
-            BBCMicro(os: os, sidewaysROMs: [15: basic, 14: dfs])
+            BBCMicro(configuration: configuration)
         }
         audio = AudioOutput(host: host)
         host.start()
         audio.start()
+        joysticks = Joysticks(host: host)
         startAgentServer()
         runSelfTestIfRequested()
     }
@@ -71,6 +78,14 @@ final class MachineController {
 
     func powerCycle() {
         host.send(.powerCycle)
+    }
+
+    /// Switches model, which power cycles. Discs stay in the drives.
+    func setModel(_ newModel: BBCMicro.Model) {
+        guard newModel != model else { return }
+        model = newModel
+        UserDefaults.standard.set(newModel.rawValue, forKey: Self.modelDefaultsKey)
+        host.send(.changeMachine(BeebROMs.configuration(for: newModel)))
     }
 
     func togglePause() {
@@ -189,6 +204,40 @@ final class MachineController {
         let codec: VideoRecorder.Codec = url.pathExtension.lowercased() == "mov" ? .proRes : .h264
         host.send(.startRecording(url, codec))
         recordingURL = url
+    }
+
+    static let stateType = UTType(filenameExtension: SaveStateFile.fileExtension) ?? .data
+
+    func saveState() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [Self.stateType]
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        panel.nameFieldStringValue = "BBC Micro \(formatter.string(from: Date())).\(SaveStateFile.fileExtension)"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        host.send(.saveState(url) { error in
+            guard let error else { return }
+            Task { @MainActor in NSAlert(error: error).runModal() }
+        })
+    }
+
+    func loadState() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [Self.stateType]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        loadState(url)
+    }
+
+    func loadState(_ url: URL) {
+        do {
+            let file = try SaveStateFile(data: Data(contentsOf: url))
+            host.send(.loadState(file))
+            model = file.configuration.model
+            discNames = [:]
+            NSDocumentController.shared.noteNewRecentDocumentURL(url)
+        } catch {
+            NSAlert(error: error).runModal()
+        }
     }
 
     func pressBreak() {

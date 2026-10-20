@@ -2,8 +2,9 @@
 //
 //   beeb [--load DISC.ssd:FILE] [--seconds N] [--type TEXT] [--screenshot FILE.png] [--text]
 //        [--record FILE.mp4|.mov [--codec h264|hevc|proRes]] [--disc FILE.ssd|.dsd [--boot]]
+//        [--master]
 //
-// Boots a Model B (OS 1.2, BASIC 2), types TEXT (with \n for Return), runs
+// Boots a Model B (OS 1.2, BASIC 2) or with --master a Master 128, types TEXT (with \n for Return), runs
 // for N seconds of emulated time after typing finishes (default 3), then
 // writes a screenshot and/or prints the Mode 7 screen text.
 
@@ -28,6 +29,7 @@ var recordPath: String?
 var discPath: String?
 var shiftBreak = false
 var codec = VideoRecorder.Codec.h264
+var model = BBCMicro.Model.modelB
 
 var arguments = CommandLine.arguments.dropFirst()
 while let argument = arguments.popFirst() {
@@ -56,6 +58,8 @@ while let argument = arguments.popFirst() {
     case "--codec":
         guard let value = arguments.popFirst().flatMap(VideoRecorder.Codec.init(rawValue:)) else { usage() }
         codec = value
+    case "--master":
+        model = .master128
     case "--text":
         printText = true
     case "--pcs":
@@ -68,8 +72,7 @@ while let argument = arguments.popFirst() {
     }
 }
 
-let machine = BBCMicro(os: BeebROMs.data(.os12),
-                       sidewaysROMs: [15: BeebROMs.data(.basic2), 14: BeebROMs.data(.dfs12)])
+let machine = BBCMicro(configuration: BeebROMs.configuration(for: model))
 if let discPath {
     do {
         let bytes = [UInt8](try Data(contentsOf: URL(fileURLWithPath: discPath)))
@@ -188,9 +191,5 @@ if let screenshotPath {
 }
 
 if printText {
-    if let lines = machine.teletextScreenText() {
-        print(lines.joined(separator: "\n"))
-    } else {
-        FileHandle.standardError.write(Data("beeb: not in Mode 7; can't read screen text\n".utf8))
-    }
+    print(machine.screenText().joined(separator: "\n"))
 }

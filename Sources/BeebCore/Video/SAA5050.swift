@@ -7,12 +7,12 @@
 // The data sheet says LOSE to display is "typically" 2.6us, modelled by a
 // buffer that delays output by 4 units (2us).
 
-public struct SAA5050 {
-    enum Charset: Int {
+public struct SAA5050: Codable, Sendable {
+    enum Charset: Int, Codable {
         case alpha = 0, contiguousGraphics, separatedGraphics
     }
 
-    struct Output {
+    struct Output: Codable {
         var fg: UInt8 = 0
         var bg: UInt8 = 0
         var data0: UInt8 = 0

@@ -1,7 +1,7 @@
 // Typing, and reading text back off the screen.
 
 extension BBCMicro {
-    struct KeyEvent {
+    struct KeyEvent: Codable {
         var cycle: UInt64
         var key: BeebKey
         var down: Bool
@@ -64,12 +64,12 @@ extension BBCMicro {
 
     // MARK: Paste
 
-    /// OS 1.2 entry points.
+    /// OS entry point.
     static let osrdch: UInt16 = 0xFFE0
-    /// In OSRDCH's loop waiting for a key.
-    static let osIdleAddress: UInt16 = 0xE581
+    /// In OSRDCH's loop waiting for a key (OS 1.20 or MOS 3.20).
+    var osIdleAddress: UInt16 { model == .master128 ? 0xE7D7 : 0xE581 }
 
-    struct Paste {
+    struct Paste: Codable {
         var text: [UInt8]
         var index = 0
         /// Waiting for OSRDCH to be called: a key is held to wake it.
@@ -103,7 +103,7 @@ extension BBCMicro {
             reachedWatchAddress = true
             stopRequested = true
         }
-        if watchForIdle && address == Self.osIdleAddress && paste == nil && keyEvents.isEmpty {
+        if watchForIdle && address == osIdleAddress && paste == nil && keyEvents.isEmpty {
             reachedIdle = true
             stopRequested = true
         }
@@ -261,8 +261,9 @@ extension BBCMicro {
         for row in 0..<rows {
             var line = ""
             for column in 0..<columns {
-                let address = (start &+ UInt16(row * columns + column)) & 0x3FF | 0x7C00
-                line.append(Self.teletextCharacter(ram[Int(address)]))
+                let ma = start &+ UInt16(row * columns + column)
+                let address = ma & 0x3FF | (ma & 0x800 == 0 ? teletextBases.0 : teletextBases.1)
+                line.append(Self.teletextCharacter(peekScreen(address)))
             }
             while line.last == " " { line.removeLast() }
             lines.append(line)

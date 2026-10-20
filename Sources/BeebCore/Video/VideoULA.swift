@@ -3,7 +3,7 @@
 // A port of the non-NuLA part of b2's VideoULA.cpp (Copyright (C) Tom
 // Seddon, GPLv3).
 
-public struct VideoULA {
+public struct VideoULA: Codable, Sendable {
     /// Control register (&FE20).
     public internal(set) var control: UInt8 = 0
     /// Logical colour -> physical colour (0-15, already XORed with 7).

@@ -12,8 +12,11 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
         case paste(String)
         case type(String)
         case releaseAllKeys
+        case joystick(Int, x: Double, y: Double, fire: Bool)
         /// Power off and on again. Discs stay in their drives.
         case powerCycle
+        /// Power cycles into a different machine (e.g. another model).
+        case changeMachine(BBCMicro.Configuration)
         case loadProgram(disc: [UInt8], file: String)
         /// Puts a disc image in a drive; nil ejects. `onWrite` gets the
         /// updated image whenever the BBC writes to the disc.
@@ -27,6 +30,10 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
         /// Stops recording; `completion` gets any error (on the emulation
         /// thread).
         case stopRecording(completion: @Sendable (Error?) -> Void)
+        /// Saves the machine's state to a file; `completion` gets any error.
+        case saveState(URL, completion: @Sendable (Error?) -> Void)
+        /// Replaces the machine with one restored from a save state.
+        case loadState(SaveStateFile)
         /// Runs a closure on the emulation thread with the session.
         case perform(@Sendable (MachineSession) -> Void)
     }
@@ -144,8 +151,13 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
                     machine.type(text)
                 case .releaseAllKeys:
                     machine.releaseAllKeys()
+                case .joystick(let index, let x, let y, let fire):
+                    machine.setJoystick(index, x: x, y: y, fire: fire)
                 case .powerCycle:
                     session.powerCycle()
+                    resetWallClock()
+                case .changeMachine(let configuration):
+                    session.powerCycle(configuration: configuration)
                     resetWallClock()
                 case .loadProgram(let disc, let file):
                     machine.loadProgram(disc: disc, file: file)
@@ -173,6 +185,20 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
                         completion(nil)
                     } catch {
                         completion(error)
+                    }
+                case .saveState(let url, let completion):
+                    do {
+                        try SaveStateFile(session.machine).data().write(to: url, options: .atomic)
+                        completion(nil)
+                    } catch {
+                        completion(error)
+                    }
+                case .loadState(let file):
+                    do {
+                        session.replace(with: try file.makeMachine())
+                        resetWallClock()
+                    } catch {
+                        NSLog("MacBeeb: can't load state: \(error)")
                     }
                 case .perform(let body):
                     body(session)
@@ -218,7 +244,7 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
 /// The emulation thread's state.
 final class HostSession: MachineSession {
     private unowned let host: EmulatorHost
-    private let makeMachine: () -> BBCMicro
+    private var makeMachine: () -> BBCMicro
     private(set) var machine: BBCMicro
     private(set) var tv: TVOutput
     private var recorder: MachineRecorder?
@@ -263,8 +289,11 @@ final class HostSession: MachineSession {
         host.didAdvance(self)
     }
 
-    func powerCycle() {
-        let discs = (0..<2).map { machine.fdc.drives[$0].disc }
+    func powerCycle(configuration: BBCMicro.Configuration?) {
+        if let configuration {
+            makeMachine = { BBCMicro(configuration: configuration) }
+        }
+        let discs = (0..<2).map { machine.drives[$0].disc }
         try? recorder?.finish()
         recorder = nil
         machine = makeMachine()
@@ -306,4 +335,15 @@ final class HostSession: MachineSession {
     }
 
     var isRecording: Bool { recorder != nil }
+
+    func replace(with newMachine: BBCMicro) {
+        try? recorder?.finish()
+        recorder = nil
+        machine = newMachine
+        // Power cycles keep to the new machine's model and ROMs.
+        let configuration = newMachine.configuration
+        makeMachine = { BBCMicro(configuration: configuration) }
+        tv = TVOutput()
+        attach()
+    }
 }
