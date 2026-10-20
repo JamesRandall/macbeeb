@@ -203,9 +203,8 @@ BBC key on any Mac key, in either mode.
 The Master Compact is a Master without the Tube, analogue port, keypad,
 cassette or clock: MOS 5.10 with ADFS, BASIC 4 and Utils, a 1772 with
 3.5" drives, a digital joystick (on the user VIA), and its settings in a
-PCD8572 EEPROM. It boots ADFS, so it wants .adf/.adl discs; ADFS images can
-be read on any 1770 machine (writes stay in the machine and save states,
-not the file, for now).
+PCD8572 EEPROM. It boots ADFS, so it wants .adf/.adl discs; ADFS images work
+on any 1770 machine, and writes go back to the file as with DFS discs.
 
 Any of them except the Compact can have a 6502 Second Processor (Machine > Model, `--tube`):
 a 3MHz 65C02 with 64K on the Tube, booting Tube OS 1.10, following b2.

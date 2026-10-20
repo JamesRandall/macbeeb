@@ -726,8 +726,7 @@ public final class Disc {
 
         public static let extensions = ["ssd", "dsd", "adf", "ads", "adm", "adl"]
 
-        /// Whether `Disc` can write it back (ADFS images can't yet).
-        public var isWritable: Bool { self == .ssd || self == .dsd }
+
     }
 
     public static func fromImage(_ bytes: [UInt8], format: ImageFormat) throws -> Disc {
@@ -736,6 +735,15 @@ public final class Disc {
         case .dsd: try fromDSD(bytes)
         case .adf: try fromADF(bytes)
         case .adl: try fromADL(bytes)
+        }
+    }
+
+    /// The disc as an image file of `format`.
+    public func toImage(_ format: ImageFormat) throws -> [UInt8] {
+        switch format {
+        case .ssd, .dsd: try toSSDOrDSD()
+        case .adf: toADFS(doubleSided: false)
+        case .adl: toADFS(doubleSided: true)
         }
     }
 
@@ -754,6 +762,28 @@ public final class Disc {
     /// ADFS L: both sides, interleaved by track.
     public static func fromADL(_ bytes: [UInt8]) throws -> Disc {
         try fromADFS(bytes, doubleSided: true)
+    }
+
+    /// The disc's 256-byte MFM sectors as an ADFS image (40 or 80 tracks, so
+    /// other tools accept it).
+    public func toADFS(doubleSided: Bool) -> [UInt8] {
+        let sides = doubleSided ? 2 : 1
+        let trackSize = Self.adfsSectorsPerTrack * Self.ssdSectorSize
+        var result = [UInt8](repeating: 0, count: Self.ssdTracks * sides * trackSize)
+        var numTracks = 0
+        for track in 0..<min(tracksUsed, Self.ssdTracks) {
+            for side in 0..<sides {
+                for sector in tracks[Self.trackIndex(side == 1, track)].findSectors() {
+                    guard sector.isMFM, !sector.hasDataCRCError, let data = sector.data, data.count == Self.ssdSectorSize,
+                          sector.sectorNumber < Self.adfsSectorsPerTrack, sector.trackNumber < Self.ssdTracks else { continue }
+                    let offset = (sector.trackNumber * sides + side) * trackSize + sector.sectorNumber * Self.ssdSectorSize
+                    result.replaceSubrange(offset..<offset + Self.ssdSectorSize, with: data)
+                    numTracks = max(numTracks, sector.trackNumber + 1)
+                }
+            }
+        }
+        let tracks = numTracks <= 40 ? 40 : Self.ssdTracks
+        return Array(result[0..<tracks * sides * trackSize])
     }
 
     static func fromADFS(_ data: [UInt8], doubleSided: Bool) throws -> Disc {

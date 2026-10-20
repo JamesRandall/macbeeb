@@ -364,9 +364,9 @@ final class HostSession: MachineSession {
         }
         do {
             let disc = try Disc.fromImage(image, format: format)
-            if let onWrite, format.isWritable {
+            if let onWrite {
                 disc.onTrackWritten = { [unowned disc] _, _ in
-                    if let bytes = try? disc.toSSDOrDSD() {
+                    if let bytes = try? disc.toImage(format) {
                         onWrite(bytes)
                     }
                 }
