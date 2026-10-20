@@ -290,15 +290,20 @@ public final class Debugger {
         updateHooks()
     }
 
+    var profiler: Profiler? {
+        didSet { profilingActive = profiler != nil }
+    }
+    var profilingActive = false
+
     /// Forces the hooks on (for searching history).
     var forceHooks = false {
         didSet { updateHooks() }
     }
 
     func updateHooks() {
-        let any = breakpoints.contains { $0.enabled } || command != nil || tracing || forceHooks
+        let any = breakpoints.contains { $0.enabled } || command != nil || tracing || forceHooks || profilingActive
         machine.debugHooks = any
-        machine.debugVideoHooks = command == .nextFrame || command == .nextScanline
+        machine.debugVideoHooks = command == .nextFrame || command == .nextScanline || profilingActive
         machine.secondProcessor?.debugger = any ? self : nil
     }
 
@@ -442,6 +447,14 @@ public final class Debugger {
     /// While rewinding, sees accesses instead of the breakpoints.
     var replayObserver: ((DebugCPU, UInt16, M6502.BusAccess) -> Void)?
 
+    /// Every host cycle, while the hooks are on.
+    @inline(__always)
+    func hostCycle() {
+        if profilingActive, machine.rewinder?.isReplaying != true {
+            profiler!.cycle(.host, pc: machine.cpu.opcodePC)
+        }
+    }
+
     @inline(never)
     func hostAccessed(_ address: UInt16, _ access: M6502.BusAccess) {
         if machine.rewinder?.isReplaying == true {
@@ -457,14 +470,24 @@ public final class Debugger {
             replayObserver?(.parasite, address, access)
             return
         }
+        if profilingActive, let p = machine.secondProcessor {
+            profiler!.cycle(.parasite, pc: p.cpu.opcodePC)
+        }
         accessed(.parasite, address, access, flags: parasiteFlags[Int(address)])
     }
 
     private func accessed(_ cpu: DebugCPU, _ address: UInt16, _ access: M6502.BusAccess, flags: UInt8) {
         let kind: Breakpoint.Kind
         switch access {
-        case .opcode: kind = .execute
+        case .opcode:
+            kind = .execute
+            if profilingActive, let c = machine.debugCPU(cpu) {
+                profiler!.fetch(cpu, address, opcode: c.dbus, interrupt: false)
+            }
         case .interrupt:
+            if profilingActive {
+                profiler!.fetch(cpu, address, opcode: 0, interrupt: true)
+            }
             if tracing { record(cpu, address, interrupt: true) }
             if command == .nextInterrupt && commandCPU == cpu {
                 stop(.interrupt(cpu))
@@ -536,6 +559,9 @@ public final class Debugger {
 
     func video(_ output: CRTC6845.Output, last: CRTC6845.Output) {
         if machine.rewinder?.isReplaying == true { return }
+        if profilingActive && output.vsync && !last.vsync {
+            profiler!.frame()
+        }
         if command == .nextFrame && output.vsync && !last.vsync {
             stop(.frame)
         } else if command == .nextScanline && output.hsync && !last.hsync {

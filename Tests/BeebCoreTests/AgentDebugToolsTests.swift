@@ -110,6 +110,17 @@ struct AgentDebugToolsTests {
         #expect(rewound.contains("now at cycle"), "\(rewound)")
     }
 
+    @Test func profiling() {
+        let tools = makeTools()
+        // spin: INX : JMP spin
+        _ = tools.call("poke", arguments: ["address": "&2000", "bytes": [0xE8, 0x4C, 0x00, 0x20]])
+        _ = tools.call("type_text", arguments: ["text": "CALL &2000\n"])
+        let report = text(tools.call("profile", arguments: ["seconds": .number(0.5), "top": 3]))
+        #expect(report.contains("1000000 cycles, 25 frames"), "\(report)")
+        #expect(report.contains("&2001  JMP $2000"), "\(report)")
+        #expect(report.contains("&2000 page"), "\(report)")
+    }
+
     @Test func secondProcessor() {
         let tools = makeTools(secondProcessor: true)
         let registers = text(tools.call("registers", arguments: [:]))

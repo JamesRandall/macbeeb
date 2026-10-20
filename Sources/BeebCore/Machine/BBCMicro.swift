@@ -858,6 +858,9 @@ public final class BBCMicro {
                 debugger.hostAccessed(address, cpu.access)
             }
         }
+        if debugHooks {
+            debugger.hostCycle()
+        }
 
         // Second processor, at 3MHz. A debugger stop can leave a cycle
         // owed until the next host cycle.

@@ -161,6 +161,23 @@ final class MachineController {
                 showingTimeline = false
                 rewind(seconds: 4)
                 try? await Task.sleep(for: .seconds(0.3))
+            } else if UserDefaults.standard.bool(forKey: "MacBeebSelfTestProfile") {
+                // A busy BASIC loop, profiled, with the Profile tab showing.
+                UserDefaults.standard.set("Profile", forKey: "MacBeebDebuggerTab")
+                host.send(.type("MODE 2\nREPEAT:GCOL0,RND(7):DRAW RND(1280),RND(1024):UNTIL FALSE\n"))
+                try? await Task.sleep(for: .seconds(3))
+                debugger.setProfiling(true)
+                debuggerRequested = true
+                try? await Task.sleep(for: .seconds(2))
+                debugger.setProfiling(false)
+                try? await Task.sleep(for: .seconds(0.5))
+                if let window = NSApp.windows.first(where: { $0.title.hasPrefix("Debugger") }),
+                   let frameView = window.contentView?.superview,
+                   let rep = frameView.bitmapImageRepForCachingDisplay(in: frameView.bounds) {
+                    frameView.cacheDisplay(in: frameView.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?
+                        .write(to: URL(fileURLWithPath: path.replacingOccurrences(of: ".png", with: "-profile.png")))
+                }
             } else if UserDefaults.standard.bool(forKey: "MacBeebSelfTestDebugger") {
                 // Stop at OSWRCH as the key is echoed, then capture the
                 // debugger window.

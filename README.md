@@ -89,7 +89,7 @@ Tools: `run_command`, `type_text`, `press_keys`, `load_disc`, `eject_disc`,
 `list_breakpoints`, `delete_breakpoint`, `continue`, `step` (including
 back), `reverse_continue`, `rewind`, `registers`,
 `set_register`, `memory_regions`, `trace`, `debug_log`, `load_symbols`,
-`lookup_symbol` (with `peek`,
+`lookup_symbol`, `profile` (with `peek`,
 `poke` and `disassemble` taking a CPU and address space).
 
 ## Source-level debugging (VS Code)
@@ -108,6 +108,14 @@ Symbols (ld65 debug info, or label files from ld65 `-Ln`, VICE or
 `load_symbols`, then names in addresses and expressions, `hello.s:19` as a
 breakpoint address, and labelled disassembly. The OS entry points and
 hardware registers are always known.
+
+## Profiling
+
+The profiler counts the cycles spent at every address (stretched cycles
+included), how often each instruction ran, time in interrupt handlers and
+frames, for either CPU. The debugger's Profile tab lists routines (grouped by
+symbol) and the busiest instructions, and colours the disassembly by heat;
+agents use `profile`. It costs nothing when off.
 
 ## Rewind
 

@@ -225,6 +225,16 @@ struct DisassemblyRow: View {
         .font(codeFont)
         .padding(.horizontal, 8)
         .padding(.vertical, 1)
+        .background(alignment: .leading) {
+            // Profile heat: a bar in proportion to the busiest instruction.
+            if let heat = line.heat {
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(Color.orange.opacity(0.12 + 0.3 * heat))
+                        .frame(width: max(3, geometry.size.width * 0.25 * heat))
+                }
+            }
+        }
         .background(line.isPC ? Color.accentColor.opacity(stopped ? 0.18 : 0.08) : .clear)
         .contentShape(Rectangle())
     }
@@ -330,10 +340,10 @@ struct MemoryView: View {
 
 struct DebuggerSidebar: View {
     @Bindable var model: DebuggerModel
-    @State private var tab = Tab.cpu
+    @AppStorage("MacBeebDebuggerTab") private var tab = Tab.cpu
 
     enum Tab: String, CaseIterable {
-        case cpu = "CPU", breakpoints = "Breakpoints", hardware = "Hardware", trace = "Trace", log = "Log"
+        case cpu = "CPU", breakpoints = "Breakpoints", hardware = "Hardware", trace = "Trace", profile = "Profile", log = "Log"
     }
 
     var body: some View {
@@ -350,6 +360,7 @@ struct DebuggerSidebar: View {
             case .breakpoints: BreakpointsView(model: model)
             case .hardware: HardwareView(model: model)
             case .trace: TraceView(model: model)
+            case .profile: ProfileView(model: model)
             case .log: LogView(model: model)
             }
         }
@@ -594,6 +605,62 @@ struct LogView: View {
                 Text("Log points' output appears here. Add a breakpoint with a log message to log instead of stopping.")
                     .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).padding()
             }
+        }
+    }
+}
+
+struct ProfileView: View {
+    @Bindable var model: DebuggerModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Button(model.snapshot?.isProfiling == true ? "Stop Profiling" : "Start Profiling") {
+                    model.setProfiling(!(model.snapshot?.isProfiling ?? false))
+                }
+                Spacer()
+                if let profile = model.snapshot?.profile {
+                    Text(summary(profile)).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .padding(8)
+            Divider()
+            if let profile = model.snapshot?.profile, profile.totalCycles > 0 {
+                List {
+                    Section("Routines") {
+                        ForEach(profile.routines.prefix(30)) { routine in
+                            row(routine.name, routine.cycles, of: profile.totalCycles)
+                        }
+                    }
+                    Section("Busiest instructions") {
+                        ForEach(profile.hottest) { entry in
+                            row("&" + hex(entry.address, 4) + "  ×\(entry.executions)", entry.cycles, of: profile.totalCycles)
+                        }
+                    }
+                }
+            } else {
+                Text("Start profiling to count the cycles spent at every address. The disassembly shows where the time goes; routines are grouped by symbol.")
+                    .font(.callout).foregroundStyle(.secondary).padding()
+                Spacer()
+            }
+        }
+    }
+
+    private func summary(_ p: ProfileReport) -> String {
+        let interrupts = p.totalCycles > 0 ? Double(p.interruptCycles) * 100 / Double(p.totalCycles) : 0
+        return String(format: "%d frames, %.0f cycles/frame, %.1f%% in interrupts", p.frames, p.cyclesPerFrame, interrupts)
+    }
+
+    private func row(_ name: String, _ cycles: Int, of total: Int) -> some View {
+        let share = Double(cycles) / Double(max(total, 1))
+        return HStack {
+            Text(String(format: "%5.1f%%", share * 100)).font(smallCodeFont).frame(width: 56, alignment: .trailing)
+            ZStack(alignment: .leading) {
+                Rectangle().fill(Color.orange.opacity(0.15))
+                Rectangle().fill(Color.orange.opacity(0.6)).frame(width: 60 * share)
+            }
+            .frame(width: 60, height: 6)
+            Text(name).font(smallCodeFont).lineLimit(1)
         }
     }
 }

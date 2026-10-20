@@ -490,6 +490,27 @@ extension AgentTools {
         },
 
         Tool(definition: ToolDefinition(
+            name: "profile",
+            description: "Profile: run for some seconds (of emulated time) counting the cycles spent at every address, then report the busiest routines (by symbol) and instructions, time in interrupt handlers, and cycles per frame (a frame is 40,000 cycles, 1/50s).",
+            inputSchema: schema(["seconds": prop("number", "How long to run (default 1)"),
+                                 "top": prop("integer", "How many instructions to list (default 15)"),
+                                 "cpu": cpuProperty])
+        )) { context, args in
+            let cpu = try cpu(args)
+            let seconds = min(max(args["seconds"]?.doubleValue ?? 1, 0.01), 120)
+            let top = min(max(args["top"]?.intValue ?? 15, 1), 200)
+            return .text(try context.perform { session in
+                let m = session.machine
+                guard m.debugCPU(cpu) != nil else { throw ToolFailure("there's no second processor") }
+                m.debugger.startProfiling()
+                session.advance(seconds: seconds)
+                m.debugger.stopProfiling()
+                guard let report = m.debugger.profileReport(cpu, top: top) else { return "nothing profiled" }
+                return profileText(report, m)
+            })
+        },
+
+        Tool(definition: ToolDefinition(
             name: "debug_log",
             description: "Output from log-point breakpoints (log_message), oldest first.",
             inputSchema: schema(["count": prop("integer", "Show the last this many (default 50)")])
@@ -501,6 +522,25 @@ extension AgentTools {
             })
         },
     ]
+
+    static func profileText(_ r: ProfileReport, _ m: BBCMicro) -> String {
+        func percent(_ n: Int) -> String {
+            String(format: "%5.1f%%", r.totalCycles > 0 ? Double(n) * 100 / Double(r.totalCycles) : 0)
+        }
+        let hz = r.cpu == .host ? 2_000_000.0 : 3_000_000.0
+        var lines = [String(format: "profiled %.2fs on the %@: %d cycles, %d frames (%.0f cycles a frame)",
+                            Double(r.totalCycles) / hz, r.cpu.rawValue, r.totalCycles, r.frames, r.cyclesPerFrame),
+                     "in interrupt handlers: \(percent(r.interruptCycles))", "routines:"]
+        lines += r.routines.prefix(15).map { "  \(percent($0.cycles))  \($0.name)" }
+        lines.append("busiest instructions:")
+        let disassembler = m.disassembler(r.cpu)
+        let symbols = m.debugger.symbols(r.cpu)
+        for e in r.hottest {
+            let text = symbols.annotate(disassembler.disassemble(at: e.address) { m.debugRead(.cpu(r.cpu), Int($0)) ?? 0xFF }.text)
+            lines.append("  \(percent(e.cycles))  &\(hex(e.address, 4))  \(text.padding(toLength: 16, withPad: " ", startingAt: 0)) \(e.executions) runs")
+        }
+        return lines.joined(separator: "\n")
+    }
 
     static func describe(_ b: Breakpoint) -> String {
         let kind = b.kind == .execute ? "execute" : b.kind == .read ? "read" : b.kind == .write ? "write" : "access"

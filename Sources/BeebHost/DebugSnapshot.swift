@@ -33,6 +33,9 @@ public struct DebugSnapshot: Sendable {
         /// Labels at this address.
         public var labels: [String]
         public var source: SourceLocation?
+        /// Share of the profile's cycles spent here, 0-1 (relative to the
+        /// busiest instruction), if profiled.
+        public var heat: Double?
         public var id: UInt16 { address }
     }
 
@@ -59,6 +62,8 @@ public struct DebugSnapshot: Sendable {
     public var trace: [TraceLine]
     public var log: [DebugLogEntry]
     public var regions: [MemoryRegion]
+    public var profile: ProfileReport?
+    public var isProfiling: Bool
 
     public var hasSecondProcessor: Bool { cpus.count > 1 }
 
@@ -100,7 +105,7 @@ public struct DebugSnapshot: Sendable {
             lines.append(Line(address: address, bytes: bytes, text: symbols.annotate(text), isPC: address == pc,
                               breakpoints: executeBreakpoints.filter { $0.start == address }.map(\.id),
                               labels: address < 0xFC00 || address >= 0xFF00 ? symbols.names(at: address) : [],
-                              source: symbols.location(at: address)))
+                              source: symbols.location(at: address), heat: nil))
             let next = address &+ UInt16(length)
             if next < address { break }
             address = next
@@ -136,6 +141,15 @@ public struct DebugSnapshot: Sendable {
         }
         log = Array(debugger.log.suffix(200))
         regions = m.memoryRegions
+        isProfiling = debugger.isProfiling
+        profile = debugger.profileReport(cpu, top: 30)
+        if let profile, let busiest = profile.hottest.first?.cycles, busiest > 0 {
+            for index in disassembly.indices {
+                if let cycles = profile.cyclesByAddress[disassembly[index].address] {
+                    disassembly[index].heat = Double(cycles) / Double(busiest)
+                }
+            }
+        }
     }
 
     /// A disassembly start a few instructions before `pc` that lands on it:

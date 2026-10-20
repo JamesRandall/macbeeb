@@ -173,6 +173,12 @@ final class DebuggerModel {
         }
     }
 
+    func setProfiling(_ on: Bool) {
+        command { m in
+            if on { m.debugger.startProfiling() } else { m.debugger.stopProfiling() }
+        }
+    }
+
     func setTracing(_ on: Bool) {
         command { $0.debugger.setTracing(capacity: on ? 100_000 : 0) }
     }
