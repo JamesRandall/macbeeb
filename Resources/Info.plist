@@ -23,6 +23,19 @@
 		</dict>
 		<dict>
 			<key>CFBundleTypeName</key>
+			<string>BBC Micro Tape Image</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.accidentalfish.macbeeb.uef</string>
+				<string>com.accidentalfish.macbeeb.csw</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
 			<string>MacBeeb Save State</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
@@ -115,6 +128,40 @@
 				<key>public.filename-extension</key>
 				<array>
 					<string>dsd</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>BBC Micro tape image (UEF)</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.accidentalfish.macbeeb.uef</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>uef</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>BBC Micro tape recording (CSW)</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.accidentalfish.macbeeb.csw</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>csw</string>
 				</array>
 			</dict>
 		</dict>

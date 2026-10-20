@@ -153,6 +153,55 @@ final class MachineController {
 
     /// Asks for a disc image, puts it in `drive`, and (for drive 0, if
     /// `boot`) Shift-Breaks to boot it.
+    // MARK: Tape
+
+    static let tapeTypes: [UTType] = [
+        UTType(filenameExtension: "uef") ?? .data,
+        UTType(filenameExtension: "csw") ?? .data,
+    ]
+
+    private(set) var tapeName: String?
+
+    func openTape() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = Self.tapeTypes
+        panel.allowsOtherFileTypes = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        insertTape(url)
+    }
+
+    /// Puts a tape in the recorder and, with `load`, types *TAPE and
+    /// CHAIN "" to load its first program.
+    func insertTape(_ url: URL, load: Bool = true) {
+        let image: [UInt8]
+        do {
+            image = [UInt8](try Data(contentsOf: url))
+            _ = try Tape(image: image)
+        } catch {
+            NSAlert(error: error).runModal()
+            return
+        }
+        host.send(.perform { session in
+            session.machine.tape = try? Tape(image: image)
+            if load {
+                session.machine.paste("*TAPE\nCHAIN \"\"\n")
+            }
+        })
+        tapeName = url.lastPathComponent
+        NSDocumentController.shared.noteNewRecentDocumentURL(url)
+    }
+
+    func rewindTape() {
+        host.send(.perform { $0.machine.tape?.rewind() })
+    }
+
+    func ejectTape() {
+        host.send(.perform { $0.machine.tape = nil })
+        tapeName = nil
+    }
+
+    // MARK: Discs
+
     func openDisc(drive: Int = 0, boot: Bool = true) {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = Self.discTypes
@@ -245,6 +294,7 @@ final class MachineController {
             host.send(.loadState(file))
             model = file.configuration.model
             discNames = [:]
+            tapeName = file.snapshot.hasTape ? "Tape" : nil
             NSDocumentController.shared.noteNewRecentDocumentURL(url)
         } catch {
             NSAlert(error: error).runModal()

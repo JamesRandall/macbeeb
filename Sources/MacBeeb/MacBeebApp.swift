@@ -31,6 +31,14 @@ struct MacBeebApp: App {
                     .disabled(machine?.discNames[0] == nil)
                 Button("Eject Drive 1") { machine?.ejectDisc(drive: 1) }
                     .disabled(machine?.discNames[1] == nil)
+                Divider()
+                Button("Load Tape…") { machine?.openTape() }
+                    .keyboardShortcut("t", modifiers: [.command, .option])
+                    .disabled(machine == nil)
+                Button("Rewind Tape") { machine?.rewindTape() }
+                    .disabled(machine?.tapeName == nil)
+                Button("Eject Tape") { machine?.ejectTape() }
+                    .disabled(machine?.tapeName == nil)
             }
             CommandGroup(replacing: .saveItem) {
                 Button("Save Screenshot…") { machine?.saveScreenshot() }
@@ -118,6 +126,8 @@ struct MachineWindow: View {
         switch url.pathExtension.lowercased() {
         case "ssd", "dsd":
             machine.insertDisc(url)
+        case "uef", "csw":
+            machine.insertTape(url)
         case SaveStateFile.fileExtension:
             machine.loadState(url)
         default:

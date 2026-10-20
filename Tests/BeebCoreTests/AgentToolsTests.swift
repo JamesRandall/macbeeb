@@ -61,6 +61,15 @@ struct AgentToolsTests {
         #expect(text(result).contains("Total: 81"))
     }
 
+    @Test func loadTapeChainsTheProgram() throws {
+        let tools = makeTools()
+        let path = Bundle.module.resourceURL!.appendingPathComponent("Resources/tapes/pugwash.uef").path
+        let result = tools.call("load_tape", arguments: ["path": .string(path), "max_seconds": 40])
+        #expect(!result.isError)
+        #expect(text(result).contains("Pugwash Tune"), "\(text(result))")
+        #expect(text(tools.call("rewind_tape", arguments: [:])) == "rewound")
+    }
+
     @Test func recording() throws {
         let tools = makeTools()
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("macbeeb-agent-test.mp4")

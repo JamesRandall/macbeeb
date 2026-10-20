@@ -43,8 +43,11 @@ extension BBCMicro {
         var resetting: Bool
         var keyEvents: [KeyEvent]
         var paste: Paste?
-        var aciaControl: UInt8
-        var serialULAControl: UInt8
+        var serial: SerialULA
+        var tape: Tape.State?
+
+        /// Whether the snapshot has a tape in the recorder.
+        public var hasTape: Bool { tape != nil }
         var crtcLastOutput: CRTC6845.Output
         var ic15Byte: UInt8
         var unit: VideoUnit
@@ -61,8 +64,8 @@ extension BBCMicro {
                  addressableLatch: addressableLatch, oldSystemVIAPB: oldSystemVIAPB,
                  systemVIAIRQ: systemVIAIRQ, userVIAIRQ: userVIAIRQ,
                  keyColumns: keyColumns, keyScanColumn: keyScanColumn, notJoystickButtons: notJoystickButtons, resetting: resetting,
-                 keyEvents: keyEvents, paste: paste, aciaControl: aciaControl,
-                 serialULAControl: serialULAControl, crtcLastOutput: crtcLastOutput,
+                 keyEvents: keyEvents, paste: paste, serial: serial,
+                 tape: tape?.state, crtcLastOutput: crtcLastOutput,
                  ic15Byte: ic15Byte, unit: unit)
     }
 
@@ -107,8 +110,16 @@ extension BBCMicro {
         resetting = s.resetting
         keyEvents = s.keyEvents
         paste = s.paste
-        aciaControl = s.aciaControl
-        serialULAControl = s.serialULAControl
+        serial = s.serial
+        if let state = s.tape {
+            if let tape {
+                tape.restore(state)
+            } else {
+                tape = Tape(state: state)
+            }
+        } else {
+            tape = nil
+        }
         crtcLastOutput = s.crtcLastOutput
         ic15Byte = s.ic15Byte
         unit = s.unit

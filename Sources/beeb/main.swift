@@ -2,7 +2,7 @@
 //
 //   beeb [--load DISC.ssd:FILE] [--seconds N] [--type TEXT] [--screenshot FILE.png] [--text]
 //        [--record FILE.mp4|.mov [--codec h264|hevc|proRes]] [--disc FILE.ssd|.dsd [--boot]]
-//        [--master]
+//        [--master] [--tape FILE.uef|.csw]
 //
 // Boots a Model B (OS 1.2, BASIC 2) or with --master a Master 128, types TEXT (with \n for Return), runs
 // for N seconds of emulated time after typing finishes (default 3), then
@@ -30,6 +30,7 @@ var discPath: String?
 var shiftBreak = false
 var codec = VideoRecorder.Codec.h264
 var model = BBCMicro.Model.modelB
+var tapePath: String?
 
 var arguments = CommandLine.arguments.dropFirst()
 while let argument = arguments.popFirst() {
@@ -58,6 +59,9 @@ while let argument = arguments.popFirst() {
     case "--codec":
         guard let value = arguments.popFirst().flatMap(VideoRecorder.Codec.init(rawValue:)) else { usage() }
         codec = value
+    case "--tape":
+        guard let value = arguments.popFirst() else { usage() }
+        tapePath = value
     case "--master":
         model = .master128
     case "--text":
@@ -73,6 +77,14 @@ while let argument = arguments.popFirst() {
 }
 
 let machine = BBCMicro(configuration: BeebROMs.configuration(for: model))
+if let tapePath {
+    do {
+        machine.tape = try Tape(image: [UInt8](Data(contentsOf: URL(fileURLWithPath: tapePath))))
+    } catch {
+        FileHandle.standardError.write(Data("beeb: couldn't read tape \(tapePath): \(error)\n".utf8))
+        exit(1)
+    }
+}
 if let discPath {
     do {
         let bytes = [UInt8](try Data(contentsOf: URL(fileURLWithPath: discPath)))

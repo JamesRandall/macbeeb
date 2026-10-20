@@ -183,6 +183,46 @@ public final class AgentTools: Sendable {
         },
 
         Tool(definition: ToolDefinition(
+            name: "load_tape",
+            description: "Put a .uef or .csw tape image in the cassette recorder. With load=true (default), types *TAPE and CHAIN \"\" and runs until the program waits for input (tapes load at real speed: a few KB takes about a minute of emulated time, which runs much faster). Use command for tapes that load another way, e.g. \"*RUN\".",
+            inputSchema: schema(["path": prop("string", "Path to the .uef or .csw file"),
+                                 "load": prop("boolean", "Load the first program (default true)"),
+                                 "command": prop("string", "Command to load with (default CHAIN \"\")"),
+                                 "max_seconds": prop("number", "Longest to wait (default 300)")],
+                                required: ["path"])
+        )) { context, args in
+            guard let path = args["path"]?.stringValue else { throw ToolFailure("path is required") }
+            let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+            let bytes = [UInt8](try Data(contentsOf: url))
+            let load = args["load"]?.boolValue ?? true
+            let command = args["command"]?.stringValue ?? "CHAIN \"\""
+            let maxSeconds = args["max_seconds"]?.doubleValue ?? 300
+            let tape = try Tape(image: bytes)
+            let length = String(format: "%.0f", tape.duration)
+            return .text(try context.perform { session in
+                session.machine.tape = try Tape(image: bytes)
+                let loaded = "tape: \(url.lastPathComponent) (\(length)s long)"
+                guard load else { return loaded }
+                session.machine.paste("*TAPE\n\(command)\n")
+                session.advance(seconds: 1)
+                let idle = runUntilIdle(session, maxSeconds: maxSeconds)
+                return summary(session, extra: loaded + (idle ? "" : "\n(still running after \(maxSeconds)s)"))
+            })
+        },
+
+        Tool(definition: ToolDefinition(
+            name: "rewind_tape",
+            description: "Rewind the tape to the start.",
+            inputSchema: schema()
+        )) { context, _ in
+            .text(try context.perform { session in
+                guard let tape = session.machine.tape else { return "no tape" }
+                tape.rewind()
+                return "rewound"
+            })
+        },
+
+        Tool(definition: ToolDefinition(
             name: "eject_disc",
             description: "Remove the disc from a drive.",
             inputSchema: schema(["drive": prop("integer", "0 or 1 (default 0)")])

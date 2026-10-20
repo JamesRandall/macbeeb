@@ -126,7 +126,7 @@ get_status says which; power_cycle with model switches. \
 Time is emulated time: waits are exact and run much faster than real time.
 
 Typical use: run_command for BASIC lines and * commands (fast, returns the OS's output and the screen); \
-load_disc with a .ssd/.dsd path to boot software; type_text or press_keys for programs that read the keyboard directly; \
+load_disc with a .ssd/.dsd path to boot software (load_tape for .uef/.csw tapes); type_text or press_keys for programs that read the keyboard directly; \
 read_screen_text to see what's on screen (works in all modes); screenshot for graphics; run / run_until_idle to let time pass; \
 peek, poke and disassemble for memory and code; start_recording/stop_recording to make a movie.
 

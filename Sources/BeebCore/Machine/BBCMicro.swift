@@ -31,6 +31,7 @@ public final class BBCMicro {
         public static let userVIA: UInt8 = 1 << 1
         /// The Master's ACCCON IRR bit.
         public static let acccon: UInt8 = 1 << 2
+        public static let acia: UInt8 = 1 << 3
     }
 
     public enum NMIDevice {
@@ -59,12 +60,13 @@ public final class BBCMicro {
     /// A second copy of the audio, for recording.
     public var recordingAudio: SampleRing?
 
-    /// 6850 ACIA control register. Until serial and tape are emulated, the
-    /// ACIA is idle: nothing received, nothing connected.
-    var aciaControl: UInt8 = 0
-    /// Serial ULA control register (&FE10). Bit 6 selects RS423 (1) or the
-    /// cassette (0).
-    var serialULAControl: UInt8 = 0
+    /// The serial ULA (&FE10) and the 6850 ACIA (&FE08) it clocks: the
+    /// cassette interface, and RS423 with nothing connected.
+    public internal(set) var serial = SerialULA()
+    /// The tape in the cassette recorder.
+    public var tape: Tape?
+    /// Called when the cassette motor relay switches (true: on).
+    public var onCassetteMotor: ((Bool) -> Void)?
 
     /// Attach a TV to receive the video stream.
     public var tv: TVOutput?
@@ -351,6 +353,7 @@ public final class BBCMicro {
             switch address & 0xFFE0 {
             case 0xFE00:
                 if address & 0x18 == 0x18 { return adc.peek(Int(address)) }
+                if address & 0x18 == 0x08 { return serial.peekACIA(Int(address)) }
                 if address & 0x19 == 1 { return crtc.readData() }
             case 0xFE20:
                 switch address & 0x1C {
@@ -371,6 +374,7 @@ public final class BBCMicro {
         case 0xFE80: return intel8271!.peek(Int(address))
         case 0xFEC0: return adc.peek(Int(address))
         case 0xFE00 where address & 0x19 == 1: return crtc.readData()
+        case 0xFE00 where address & 0x18 == 0x08: return serial.peekACIA(Int(address))
         default: return 0xFF
         }
     }
@@ -385,9 +389,11 @@ public final class BBCMicro {
                 return address & 1 == 0 ? crtc.readAddress() : crtc.readData()
             case 0x08:
                 // ACIA (&FE08-&FE0F): status/data on A0.
-                return address & 1 == 0 ? aciaStatus : 0
+                return serial.readACIA(Int(address))
             default:
-                // Serial ULA: write only. (b2 has reads returning 0 on the B.)
+                // Serial ULA: there's no read/write line, so a read writes
+                // the stale bus. Reads give 0 on the B (as b2).
+                writeSerialULA(cpu.dbus)
                 return 0
             }
         case 0xFE40:
@@ -417,11 +423,9 @@ public final class BBCMicro {
                     crtc.writeData(value)
                 }
             case 0x08:
-                if address & 1 == 0 {
-                    aciaControl = value
-                }
+                serial.writeACIA(Int(address), value)
             default:
-                serialULAControl = value
+                writeSerialULA(value)
             }
         case 0xFE20:
             if address & 0x10 == 0 {
@@ -466,10 +470,10 @@ public final class BBCMicro {
             case 0x00:
                 return address & 1 == 0 ? crtc.readAddress() : crtc.readData()
             case 0x08:
-                return address & 1 == 0 ? aciaStatus : 0
+                return serial.readACIA(Int(address))
             case 0x10:
                 // Serial ULA: every access is a write (of the stale bus).
-                serialULAControl = lastVideoByte
+                writeSerialULA(lastVideoByte)
                 return lastVideoByte
             default:
                 return adc.read(Int(address))
@@ -503,11 +507,9 @@ public final class BBCMicro {
                     crtc.writeData(value)
                 }
             case 0x08:
-                if address & 1 == 0 {
-                    aciaControl = value
-                }
+                serial.writeACIA(Int(address), value)
             case 0x10:
-                serialULAControl = value
+                writeSerialULA(value)
             default:
                 adc.write(Int(address), value)
             }
@@ -544,16 +546,10 @@ public final class BBCMicro {
         }
     }
 
-    private var aciaStatus: UInt8 {
-        // With RS423 selected and nothing connected, CTS is high, which
-        // inhibits TDRE; the cassette side always has CTS low. (As jsbeeb.)
-        let rs423 = serialULAControl & 0x40 != 0
-        let notCTS: UInt8 = rs423 ? 0x08 : 0
-        // Master reset (counter divide select 3) clears the status.
-        if aciaControl & 3 == 3 {
-            return notCTS
+    private func writeSerialULA(_ value: UInt8) {
+        if serial.writeControl(value) {
+            onCassetteMotor?(serial.motorOn)
         }
-        return notCTS | (rs423 ? 0 : 0x02)
     }
 
     /// Sends audio, at `sampleRate`, to `ring`.
@@ -812,6 +808,10 @@ public final class BBCMicro {
         userVIAIRQ |= userVIA.updatePhi2TrailingEdge()
         cpu.setIRQ(IRQDevice.systemVIA, systemVIAIRQ != 0)
         cpu.setIRQ(IRQDevice.userVIA, userVIAIRQ != 0)
+
+        // Cassette and serial, at 1MHz.
+        serial.update(tape: tape)
+        cpu.setIRQ(IRQDevice.acia, serial.irq)
 
         // Keyboard. With IC32 bit 3 high the keyboard scans itself and
         // raises CA2 when a key (other than row 0) is down in the current

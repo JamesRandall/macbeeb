@@ -79,6 +79,7 @@ The app bundle includes it too, at `MacBeeb.app/Contents/MacOS/macbeeb-mcp`.
 `~/Library/Application Support/MacBeeb/`.
 
 Tools: `run_command`, `type_text`, `press_keys`, `load_disc`, `eject_disc`,
+`load_tape`, `rewind_tape`,
 `load_program`, `run`, `run_until_idle`, `run_until_address`,
 `read_screen_text`, `screenshot`, `peek`, `poke`, `disassemble`,
 `get_status`, `press_break`, `power_cycle` (which can switch model),
@@ -108,7 +109,12 @@ a WD1770 (ported from jsbeeb/beebjit) with DFS 2.24 and ADFS.
 Save states (`.beebstate`) and snapshots capture everything, discs and disc
 controllers included, so a restored machine carries on cycle for cycle.
 
-Still to come: tape and serial (the ACIA is a stub).
+Cassettes (.uef, including gzipped, and .csw) play through a 6850 ACIA and
+serial ULA that decode the tape's tones as the real hardware does, so
+`*TAPE` and `CHAIN ""` load at real speed on both models (File > Load Tape,
+or `--tape` for `beeb`). b2 doesn't emulate tape; this design follows the
+datasheet, with carrier detect timing from jsbeeb's and BeebEm's
+measurements. Nothing is attached to RS423.
 
 ## The 6502
 
