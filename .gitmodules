@@ -1,0 +1,3 @@
+[submodule "ThirdParty/beebasm"]
+	path = ThirdParty/beebasm
+	url = https://github.com/stardot/beebasm.git

@@ -1,0 +1,25 @@
+.outer
+.inner
+     1900   A9 2A      LDA #&2A
+     1902   60         RTS
+.loops
+     1903   EA         NOP
+     1904   E8         INX
+     1905   EA         NOP
+     1906   E8         INX
+     1907   EA         NOP
+     1908   E8         INX
+.after
+     1909   A9 01      LDA #&01
+     190B   85 70      STA &70
+.mac
+Macro TWICE:
+     190D   C8         INY
+     190E   C8         INY
+End macro TWICE
+     190F   60         RTS
+.included
+     1910   A0 01      LDY #&01
+     1912   60         RTS
+.end
+Saving file 'FEAT'

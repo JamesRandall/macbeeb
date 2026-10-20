@@ -441,6 +441,42 @@ extension AgentTools {
         },
 
         Tool(definition: ToolDefinition(
+            name: "assemble",
+            description: "Assemble a BeebAsm source file (.asm/.6502; BeebAsm comes with MacBeeb) to a disc, put it in drive 0, load its symbols and source lines into the debugger (so breakpoints can be \"game.asm:42\"), and *RUN the first file it SAVEs (or file). Returns BeebAsm's messages and errors, then the screen. The source must SAVE what it builds, e.g. SAVE \"GAME\", start, end.",
+            inputSchema: schema(["source": prop("string", "The BeebAsm source file"),
+                                 "run": prop("boolean", "*RUN it (default true)"),
+                                 "file": prop("string", "Which SAVEd file to run (default the first)"),
+                                 "max_seconds": prop("number", "Longest to run before returning (default 10)"),
+                                 "beebasm": prop("string", "Path to beebasm (default: MacBeeb's, then the PATH)")],
+                                required: ["source"])
+        )) { context, args in
+            guard let source = args["source"]?.stringValue else { throw ToolFailure("source is required") }
+            let build: BeebAsmBuild
+            do {
+                build = try BeebAsm.assemble(source: (source as NSString).expandingTildeInPath, beebasm: args["beebasm"]?.stringValue)
+            } catch {
+                throw ToolFailure("\(error)")
+            }
+            let run = args["run"]?.boolValue ?? true
+            let file = args["file"]?.stringValue ?? build.savedFiles[0]
+            let maxSeconds = args["max_seconds"]?.doubleValue ?? 10
+            let report = "assembled: saved \(build.savedFiles.joined(separator: ", ")); \(build.symbols.symbolCount) symbols, \(build.symbols.lineCount) source lines"
+                + (build.messages.isEmpty ? "" : "\n" + build.messages)
+            return .text(try context.perform { session in
+                let m = session.machine
+                m.insertDisc(try Disc.fromSSD(build.disc))
+                // A program SAVEd at &xxxx (not &FFFFxxxx) loads into the
+                // second processor if there is one.
+                m.debugger.addSymbols(build.symbols, cpu: m.secondProcessor != nil ? .parasite : .host)
+                guard run else { return report }
+                m.paste("*RUN \(file)\n")
+                session.advance(seconds: 0.5)
+                _ = runUntilIdle(session, maxSeconds: maxSeconds)
+                return summary(session, extra: report)
+            })
+        },
+
+        Tool(definition: ToolDefinition(
             name: "load_symbols",
             description: "Load symbols for the debugger: ld65 debug info (ld65 --dbgfile, which also maps code to source lines, so breakpoints can be \"hello.s:12\"), or a label file (ld65 -Ln, VICE, \"name = $1234\" lists). Then addresses and expressions can use the names, and disassembly shows them. The OS entry points (OSWRCH...) and hardware registers are always known.",
             inputSchema: schema(["path": prop("string", "The .dbg or label file"),

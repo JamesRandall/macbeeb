@@ -16,6 +16,7 @@ headers.
 | `Sources/BeebHost` | Runs a machine on its own thread, paced by audio |
 | `Sources/BeebAgentKit`, `Sources/macbeeb-mcp` | Agent tools and the MCP server |
 | `Sources/BeebDAP`, `Tools/vscode-macbeeb` | The Debug Adapter Protocol server and the VS Code extension |
+| `ThirdParty/beebasm` | BeebAsm (submodule), built into the app |
 | `Sources/MacBeeb` | The Mac app |
 | `Sources/beeb` | Headless command-line BBC Micro |
 | `Sources/M6502GenKit`, `Sources/m6502-gen` | Generator for the 6502's per-cycle state machine |
@@ -89,8 +90,21 @@ Tools: `run_command`, `type_text`, `press_keys`, `load_disc`, `eject_disc`,
 `list_breakpoints`, `delete_breakpoint`, `continue`, `step` (including
 back), `reverse_continue`, `rewind`, `registers`,
 `set_register`, `memory_regions`, `trace`, `debug_log`, `load_symbols`,
-`lookup_symbol`, `profile` (with `peek`,
+`lookup_symbol`, `assemble`, `profile` (with `peek`,
 `poke` and `disassemble` taking a CPU and address space).
+
+## Assembling with BeebAsm
+
+MacBeeb comes with [BeebAsm](https://github.com/stardot/beebasm) (GPLv3,
+built from the `ThirdParty/beebasm` submodule into the app), and assembles
+with it for you: in VS Code (F5 in a `.asm` or `.6502` file, or a launch
+configuration with `"source"`) and for agents (`assemble`). The source is
+assembled to a disc, which goes in drive 0, and the first file it SAVEs is
+*RUN, with its symbols and source lines loaded so breakpoints can be
+`game.asm:42`. BeebAsm doesn't record which line made each byte, so MacBeeb
+lines its `-v` listing up with the source, following INCLUDEs, macros and
+FOR loops. `Examples/hello-beebasm` is a program to try. After cloning:
+`git submodule update --init`.
 
 ## Source-level debugging (VS Code)
 

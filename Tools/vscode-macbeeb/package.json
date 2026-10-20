@@ -1,52 +1,163 @@
 {
   "name": "macbeeb-debug",
   "displayName": "MacBeeb: BBC Micro debugger",
-  "description": "Debug 6502 programs on MacBeeb's emulated BBC Micro: source breakpoints (ld65 debug info), stepping (and stepping back), registers, memory, watchpoints.",
+  "description": "Debug 6502 programs on MacBeeb's emulated BBC Micro: assemble BeebAsm sources and run them, source breakpoints (BeebAsm or ld65 debug info), stepping (and stepping back), registers, memory, watchpoints.",
   "version": "0.1.0",
   "publisher": "accidentalfish",
   "license": "GPL-3.0-only",
-  "engines": { "vscode": "^1.80.0" },
-  "categories": ["Debuggers", "Programming Languages"],
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Debuggers",
+    "Programming Languages"
+  ],
   "main": "./extension.js",
-  "activationEvents": ["onDebugResolve:macbeeb", "onDebugDynamicConfigurations:macbeeb"],
+  "activationEvents": [
+    "onDebugResolve:macbeeb",
+    "onDebugDynamicConfigurations:macbeeb",
+    "onLanguage:beebasm"
+  ],
   "contributes": {
     "languages": [
       {
         "id": "ca65",
-        "aliases": ["6502 Assembly (ca65)", "ca65"],
-        "extensions": [".s", ".s65", ".asm", ".inc", ".a65"],
+        "aliases": [
+          "6502 Assembly (ca65)",
+          "ca65"
+        ],
+        "extensions": [
+          ".s",
+          ".s65",
+          ".inc",
+          ".a65"
+        ],
         "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "beebasm",
+        "aliases": [
+          "6502 Assembly (BeebAsm)",
+          "BeebAsm"
+        ],
+        "extensions": [
+          ".6502",
+          ".asm"
+        ],
+        "configuration": "./language-configuration-beebasm.json"
       }
     ],
     "grammars": [
-      { "language": "ca65", "scopeName": "source.ca65", "path": "./syntaxes/ca65.tmLanguage.json" }
+      {
+        "language": "ca65",
+        "scopeName": "source.ca65",
+        "path": "./syntaxes/ca65.tmLanguage.json"
+      },
+      {
+        "language": "beebasm",
+        "scopeName": "source.beebasm",
+        "path": "./syntaxes/beebasm.tmLanguage.json"
+      }
     ],
-    "breakpoints": [{ "language": "ca65" }],
+    "breakpoints": [
+      {
+        "language": "ca65"
+      },
+      {
+        "language": "beebasm"
+      }
+    ],
     "debuggers": [
       {
         "type": "macbeeb",
         "label": "MacBeeb (BBC Micro)",
-        "languages": ["ca65"],
+        "languages": [
+          "ca65",
+          "beebasm"
+        ],
         "configurationAttributes": {
           "launch": {
             "properties": {
-              "program": { "type": "string", "description": "The assembled binary, loaded into memory and CALLed. Its .dbg file (ld65 --dbgfile) is used for symbols if there's one beside it." },
-              "loadAddress": { "type": "number", "description": "Where to load program (default 0x2000)." },
-              "execAddress": { "type": "number", "description": "Where to start it (default loadAddress)." },
-              "symbols": { "type": "string", "description": "ld65 debug info (.dbg) or a label file." },
-              "disc": { "type": "string", "description": "A .ssd/.dsd disc to boot instead of a program." },
-              "model": { "type": "string", "enum": ["modelB", "bPlus", "master128"], "description": "The machine." },
-              "secondProcessor": { "type": "boolean", "description": "Fit a 6502 Second Processor (code then runs there)." },
-              "cpu": { "type": "string", "enum": ["host", "parasite"], "description": "Which CPU the program's code runs on." },
-              "stopOnEntry": { "type": "boolean", "description": "Stop at the program's first instruction." },
-              "port": { "type": "number", "description": "MacBeeb's debug adapter port (Settings > Debugging; default 6502)." }
+              "program": {
+                "type": "string",
+                "description": "The assembled binary, loaded into memory and CALLed. Its .dbg file (ld65 --dbgfile) is used for symbols if there's one beside it."
+              },
+              "loadAddress": {
+                "type": "number",
+                "description": "Where to load program (default 0x2000)."
+              },
+              "execAddress": {
+                "type": "number",
+                "description": "Where to start it (default loadAddress)."
+              },
+              "symbols": {
+                "type": "string",
+                "description": "ld65 debug info (.dbg) or a label file."
+              },
+              "disc": {
+                "type": "string",
+                "description": "A .ssd/.dsd disc to boot instead of a program."
+              },
+              "model": {
+                "type": "string",
+                "enum": [
+                  "modelB",
+                  "bPlus",
+                  "master128"
+                ],
+                "description": "The machine."
+              },
+              "secondProcessor": {
+                "type": "boolean",
+                "description": "Fit a 6502 Second Processor (code then runs there)."
+              },
+              "cpu": {
+                "type": "string",
+                "enum": [
+                  "host",
+                  "parasite"
+                ],
+                "description": "Which CPU the program's code runs on."
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Stop at the program's first instruction."
+              },
+              "port": {
+                "type": "number",
+                "description": "MacBeeb's debug adapter port (Settings > Debugging; default 6502)."
+              },
+              "source": {
+                "type": "string",
+                "description": "A BeebAsm source file: assembled (with MacBeeb's BeebAsm) to a disc, which is put in drive 0, its symbols and source lines loaded, and the first file it SAVEs *RUN."
+              },
+              "file": {
+                "type": "string",
+                "description": "With source: which SAVEd file to *RUN (default the first)."
+              },
+              "beebasm": {
+                "type": "string",
+                "description": "With source: the beebasm to use (default MacBeeb's own, then the PATH)."
+              }
             }
           },
           "attach": {
             "properties": {
-              "symbols": { "type": "string", "description": "ld65 debug info (.dbg) or a label file." },
-              "cpu": { "type": "string", "enum": ["host", "parasite"] },
-              "port": { "type": "number", "description": "MacBeeb's debug adapter port (default 6502)." }
+              "symbols": {
+                "type": "string",
+                "description": "ld65 debug info (.dbg) or a label file."
+              },
+              "cpu": {
+                "type": "string",
+                "enum": [
+                  "host",
+                  "parasite"
+                ]
+              },
+              "port": {
+                "type": "number",
+                "description": "MacBeeb's debug adapter port (default 6502)."
+              }
             }
           }
         },
@@ -61,12 +172,31 @@
         ],
         "configurationSnippets": [
           {
+            "label": "MacBeeb: Assemble and run a BeebAsm source",
+            "body": {
+              "type": "macbeeb",
+              "request": "launch",
+              "name": "Assemble and run",
+              "source": "^\"\\${workspaceFolder}/${1:main.asm}\""
+            }
+          },
+          {
             "label": "MacBeeb: Launch a program",
-            "body": { "type": "macbeeb", "request": "launch", "name": "Run on the BBC Micro", "program": "^\"\\${workspaceFolder}/${1:program.bin}\"" }
+            "body": {
+              "type": "macbeeb",
+              "request": "launch",
+              "name": "Run on the BBC Micro",
+              "program": "^\"\\${workspaceFolder}/${1:program.bin}\""
+            }
           },
           {
             "label": "MacBeeb: Attach to the running machine",
-            "body": { "type": "macbeeb", "request": "attach", "name": "Attach to MacBeeb", "symbols": "^\"\\${workspaceFolder}/${1:program.dbg}\"" }
+            "body": {
+              "type": "macbeeb",
+              "request": "attach",
+              "name": "Attach to MacBeeb",
+              "symbols": "^\"\\${workspaceFolder}/${1:program.dbg}\""
+            }
           }
         ]
       }

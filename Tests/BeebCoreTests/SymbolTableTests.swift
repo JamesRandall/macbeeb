@@ -66,6 +66,27 @@ struct SymbolTableTests {
         #expect(table.nearest(below: 0x2015)! == ("print", 4))
     }
 
+    @Test func newSymbolsReplaceOld() {
+        var table = SymbolTable()
+        var first = SymbolTable()
+        first.add("print", 0x2011)
+        first.addLine(SourceLocation(file: "/a.asm", line: 23), address: 0x2011)
+        first.addLine(SourceLocation(file: "/a.asm", line: 30), address: 0x2020)
+        table.merge(first)
+        // A rebuild: print moved, and line 30 has gone.
+        var rebuilt = SymbolTable()
+        rebuilt.add("print", 0x2014)
+        rebuilt.addLine(SourceLocation(file: "/a.asm", line: 24), address: 0x2014)
+        table.merge(rebuilt)
+        #expect(table.address(of: "print") == 0x2014 && table.name(at: 0x2011) == nil)
+        #expect(table.location(at: 0x2020) == nil && table.addresses(file: "/a.asm", line: 23)?.line == 24)
+        // Another program at the same address takes it over.
+        var other = SymbolTable()
+        other.addLine(SourceLocation(file: "/b.s", line: 19), address: 0x2014)
+        table.merge(other)
+        #expect(table.location(at: 0x2014)?.file == "/b.s")
+    }
+
     @Test func debuggingWithSourceLines() throws {
         let session = HeadlessSession { BBCMicro(configuration: BeebROMs.configuration(for: .modelB)) }
         session.machine.runUntilIdle()

@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "macbeeb",
+      "request": "launch",
+      "name": "Assemble and run",
+      "source": "${workspaceFolder}/hello.asm",
+      "stopOnEntry": true
+    },
+    {
+      "type": "macbeeb",
+      "request": "launch",
+      "name": "Assemble and run on a Master",
+      "source": "${workspaceFolder}/hello.asm",
+      "model": "master128"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+.start
+     2000   A2 00      LDX #&00
+.loop
+     2002   BD 17 20   LDA &2017,X
+     2005   F0 06      BEQ &200D
+     2007   20 11 20   JSR &2011
+     200A   E8         INX
+     200B   D0 F5      BNE &2002
+.done
+     200D   20 E7 FF   JSR &FFE7
+     2010   60         RTS
+.print
+     2011   EE 23 20   INC &2023
+     2014   4C EE FF   JMP &FFEE
+.message
+     2017   48 45 4C ...
+     2022   00
+.count
+     2023   00
+.end
+Saving file 'HELLO'

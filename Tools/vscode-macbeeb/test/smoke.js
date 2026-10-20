@@ -1,5 +1,6 @@
 // End-to-end check of MacBeeb's debug adapter over TCP, as VS Code talks
-// to it: node test/smoke.js PORT PROGRAM.bin SOURCE.s LINE
+// to it: node test/smoke.js PORT PROGRAM.bin SOURCE.s LINE, or with a
+// BeebAsm source as PROGRAM (it's assembled and run).
 const net = require("net");
 
 const [port, program, source, line] = process.argv.slice(2);
@@ -58,7 +59,8 @@ function check(condition, what) {
   const init = await send("initialize", { adapterID: "macbeeb", linesStartAt1: true });
   check(init.success && init.body.supportsStepBack, "initialize");
   await event("initialized");
-  check((await send("launch", { program })).success, "launch");
+  const launch = await send("launch", program.endsWith(".asm") ? { source: program } : { program });
+  check(launch.success, `launch ${launch.message || ""}`);
   const set = await send("setBreakpoints", { source: { path: source }, breakpoints: [{ line: Number(line) }] });
   check(set.body.breakpoints[0].verified, `breakpoint at line ${set.body.breakpoints[0].line}`);
   await send("configurationDone");

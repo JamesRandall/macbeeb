@@ -180,6 +180,10 @@ public actor DAPSession {
     /// execAddress), symbols, stopOnEntry, cpu. attach: symbols, cpu.
     private func launchRequest(_ args: JSONValue, launching: Bool) async throws {
         launch = args
+        // A launch is a new program: forget the last one's symbols.
+        if launching {
+            try await machine { $0.machine.debugger.clearSymbols() }
+        }
         let model = args["model"]?.stringValue.flatMap(Self.model)
         let secondProcessor = args["secondProcessor"]?.boolValue
         if launching, model != nil || secondProcessor != nil {
@@ -199,8 +203,31 @@ public actor DAPSession {
         if let name = args["cpu"]?.stringValue, let cpu = DebugCPU(rawValue: name) {
             codeCPU = cpu
         } else {
-            // BASIC's CALL runs code in the second processor, if there is one.
-            codeCPU = hasSecondProcessor && args["program"] != nil ? .parasite : .host
+            // BASIC's CALL (or *RUN) runs code in the second processor, if
+            // there is one.
+            codeCPU = hasSecondProcessor && (args["program"] != nil || args["source"] != nil) ? .parasite : .host
+        }
+
+        // A BeebAsm source: assemble it now, run it on configurationDone.
+        if launching, let source = args["source"]?.stringValue {
+            let build: BeebAsmBuild
+            do {
+                build = try BeebAsm.assemble(source: source, beebasm: args["beebasm"]?.stringValue)
+            } catch {
+                throw DAPError("\(error)")
+            }
+            if !build.messages.isEmpty { output(build.messages + "\n") }
+            output("Assembled \((source as NSString).lastPathComponent): \(build.savedFiles.joined(separator: ", ")); \(build.symbols.symbolCount) symbols, \(build.symbols.lineCount) source lines\n")
+            let cpu = codeCPU
+            let disc = build.disc
+            let symbols = build.symbols
+            try await machine { s in
+                s.machine.insertDisc(try Disc.fromSSD(disc))
+                s.machine.debugger.addSymbols(symbols, cpu: cpu)
+            }
+            let name = args["file"]?.stringValue ?? build.savedFiles[0]
+            beebAsmRun = name
+            beebAsmEntry = (try? DFSDisc(side: disc))?.file(named: name).map { UInt16(truncatingIfNeeded: $0.executionAddress) }
         }
 
         var symbolsPath = args["symbols"]?.stringValue
@@ -255,6 +282,16 @@ public actor DAPSession {
                 }
                 m.paste("CALL &\(String(exec, radix: 16, uppercase: true))\n")
             }
+        } else if let name = beebAsmRun {
+            let entry = stopOnEntry ? beebAsmEntry : nil
+            entryBreakpoint = entry
+            let cpu = codeCPU
+            try await machine { s in
+                if let entry {
+                    try s.machine.debugger.add(Breakpoint(cpu: cpu, start: entry))
+                }
+                s.machine.paste("*RUN \(name)\n")
+            }
         } else if args["disc"] != nil {
             try await machine { $0.machine.shiftBreak() }
         } else if stopOnEntry {
@@ -263,6 +300,9 @@ public actor DAPSession {
     }
 
     private var entryBreakpoint: UInt16?
+    /// The BeebAsm build's file to *RUN, and where it starts.
+    private var beebAsmRun: String?
+    private var beebAsmEntry: UInt16?
 
     static func model(_ name: String) -> BBCMicro.Model? {
         switch name.lowercased().replacingOccurrences(of: " ", with: "") {

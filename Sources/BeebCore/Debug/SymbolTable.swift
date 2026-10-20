@@ -58,8 +58,25 @@ public struct SymbolTable: Sendable {
         files.insert(location.file)
     }
 
-    /// Adds everything from `other`.
+    /// Adds everything from `other`, which replaces what's known about its
+    /// names and source files (e.g. a rebuild of the same program).
     public mutating func merge(_ other: SymbolTable) {
+        // Names that moved stop naming their old address.
+        for (name, value) in other.byName {
+            if let old = byName[name], old != value, (0...0xFFFF).contains(old) {
+                byAddress[UInt16(old)]?.removeAll { $0 == name }
+            }
+        }
+        if !other.files.isEmpty {
+            lineAt = lineAt.filter { !other.files.contains($0.value.file) }
+            addressesAt = addressesAt.filter { !other.files.contains($0.key.file) }
+        }
+        // Lines from other programs at the same addresses give way too.
+        for address in other.lineAt.keys {
+            if let old = lineAt.removeValue(forKey: address) {
+                addressesAt[old]?.removeAll { $0 == address }
+            }
+        }
         for (name, address) in other.byName {
             add(name, address, names: (0...0xFFFF).contains(address) && other.byAddress[UInt16(address)]?.contains(name) == true)
         }
@@ -147,7 +164,13 @@ public struct SymbolTable: Sendable {
     }
 
     public static func parse(_ text: String, directory: String = "") -> SymbolTable {
-        text.hasPrefix("version\t") || text.contains("\nseg\tid=") ? parseLD65(text, directory: directory) : parseLabels(text)
+        if text.hasPrefix("version\t") || text.contains("\nseg\tid=") {
+            return parseLD65(text, directory: directory)
+        }
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("[{'") {
+            return parseBeebAsmSymbols(text)
+        }
+        return parseLabels(text)
     }
 
     /// ld65's --dbgfile format: records like

@@ -135,6 +135,8 @@ step (instruction, over, out, cycle, scanline, frame, interrupt); registers and 
 peek/poke take a space (main, shadow, bank0-F, os, parasite_ram...; see memory_regions) and addresses can be expressions \
 such as "{&FFFE}" or "PC+3". When the debugger stops the machine it stays stopped (other tools say so) until continue or step. \
 Each tool takes cpu: parasite for the second processor. \
+Writing BBC code: assemble builds a BeebAsm source (SAVE what it makes), puts the disc in drive 0 and *RUNs it, with \
+symbols and source lines for breakpoints like "game.asm:42". \
 History: rewind goes back up to about 60 seconds; step kind back and reverse_continue debug backwards ("who wrote this?").
 
 The machine starts at the BASIC prompt. In BASIC, lines with numbers are stored (then RUN); lines without run immediately. \

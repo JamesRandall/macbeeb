@@ -24,6 +24,12 @@ cp "$BIN/MacBeeb" "$APP/Contents/MacOS/"
 cp "$BIN/macbeeb-mcp" "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
 cp -R "$BIN/macbeeb_BeebROMs.bundle" "$APP/Contents/Resources/"
+# BeebAsm, for assembling from VS Code and the agent tools (GPLv3, like
+# MacBeeb; its source is the ThirdParty/beebasm submodule).
+rm -f .build/beebasm/beebasm
+make beebasm UNIVERSAL=$UNIVERSAL
+cp .build/beebasm/beebasm "$APP/Contents/MacOS/"
+cp ThirdParty/beebasm/COPYING.txt "$APP/Contents/Resources/BeebAsm-COPYING.txt"
 # ditto keeps the framework's symlinks.
 ditto "$BIN/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
 
@@ -58,6 +64,7 @@ sign "$SPARKLE/Autoupdate"
 sign "$SPARKLE/Updater.app"
 sign "$APP/Contents/Frameworks/Sparkle.framework"
 sign "$APP/Contents/MacOS/macbeeb-mcp"
+sign "$APP/Contents/MacOS/beebasm"
 sign "$APP"
 codesign --verify --deep --strict "$APP"
 echo "Built $APP"

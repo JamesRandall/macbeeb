@@ -18,7 +18,21 @@ Development Host).
 
 ## Use
 
-Build with ca65/ld65 and ask for debug info (see Examples/hello-ca65):
+With BeebAsm, there's nothing to build: MacBeeb assembles it. Press F5 in a
+`.asm` or `.6502` file, or use:
+
+    {
+      "type": "macbeeb",
+      "request": "launch",
+      "name": "Assemble and run",
+      "source": "${workspaceFolder}/game.asm"
+    }
+
+The source is assembled (it must SAVE what it builds) to a disc in drive 0,
+and the first file it SAVEs is *RUN (`file` picks another); breakpoints go
+in the source.
+
+With ca65/ld65, build and ask for debug info (see Examples/hello-ca65):
 
     ca65 -g hello.s -o hello.o
     ld65 -C bbc.cfg -o hello.bin --dbgfile hello.dbg hello.o
