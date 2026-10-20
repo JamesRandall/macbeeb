@@ -24,6 +24,12 @@ cp "$BIN/MacBeeb" "$APP/Contents/MacOS/"
 cp "$BIN/macbeeb-mcp" "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
 cp -R "$BIN/macbeeb_BeebROMs.bundle" "$APP/Contents/Resources/"
+# The icon: Icon Composer's AppIcon.icon (drawn by Tools/icon/draw.py),
+# compiled to Assets.car for macOS 26 and AppIcon.icns.
+xcrun actool Resources/AppIcon.icon --compile "$APP/Contents/Resources" --platform macosx \
+    --minimum-deployment-target 26.0 --app-icon AppIcon \
+    --output-partial-info-plist .build/app/AppIcon-partial.plist > /dev/null
+rm .build/app/AppIcon-partial.plist
 # BeebAsm, for assembling from VS Code and the agent tools (GPLv3, like
 # MacBeeb; its source is the ThirdParty/beebasm submodule).
 rm -f .build/beebasm/beebasm
