@@ -2,7 +2,7 @@
 
 A cycle-exact BBC Micro emulator for the Mac, written in Swift.
 
-Licensed under the GNU GPL v3. Parts are derived from
+Licensed under the GNU GPL v3 (see [LICENSE](LICENSE)). Parts are derived from
 [b2](https://github.com/tom-seddon/b2) (Tom Seddon, GPLv3); see the file
 headers.
 
