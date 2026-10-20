@@ -55,12 +55,16 @@ public final class BBCMicro {
         case z80
         /// The Master 512 (an 80186 with 1MB, for DOS Plus and GEM).
         case master512
+        /// The Acorn ARM Second Processor, or ARM Evaluation System (8MHz
+        /// ARM1, 4MB).
+        case arm
 
         public var displayName: String {
             switch self {
             case .mos6502: "6502 Second Processor"
             case .z80: "Z80 Second Processor"
             case .master512: "Master 512 (80186)"
+            case .arm: "ARM Evaluation System"
             }
         }
     }
@@ -136,6 +140,8 @@ public final class BBCMicro {
     /// The Z80 Second Processor, if fitted instead.
     public private(set) var z80Processor: Z80SecondProcessor?
     public private(set) var master512: Master512?
+    /// The ARM Second Processor, if fitted instead.
+    public private(set) var armProcessor: ARMSecondProcessor?
     public internal(set) var tube = Tube()
     /// Parasite half-cycles owed: 3 more each host cycle, 2 per parasite
     /// cycle, so host cycles alternate 1 and 2 parasite cycles (3MHz).
@@ -281,7 +287,8 @@ public final class BBCMicro {
         /// Master, 4-7.)
         public var sidewaysRAMBanks: Set<Int>
         /// A second processor on the Tube, with this ROM (TUBE110 for the
-        /// 6502, the Z80 client ROM for the Z80).
+        /// 6502, the Z80 client ROM for the Z80, the supervisor ROM for the
+        /// ARM).
         public var secondProcessorROM: [UInt8]?
         public var coprocessor: Coprocessor
         /// The Model B's disc interface (the others' are built in).
@@ -411,6 +418,9 @@ public final class BBCMicro {
         }
         if configuration.coprocessor == .master512, let rom = tubeROM {
             master512 = Master512(rom: rom, machine: self)
+        }
+        if configuration.coprocessor == .arm, let rom = tubeROM {
+            armProcessor = ARMSecondProcessor(rom: rom, machine: self)
         }
     }
 
@@ -675,7 +685,8 @@ public final class BBCMicro {
     /// Whether the host sees the (external) Tube: always on the B and B+;
     /// on the Master, while ACCCON's ITU bit selects the external Tube.
     var tubeAccessible: Bool {
-        (secondProcessor != nil || z80Processor != nil || master512 != nil) && (!model.isMaster || acccon & 0x10 == 0)
+        (secondProcessor != nil || z80Processor != nil || master512 != nil || armProcessor != nil)
+            && (!model.isMaster || acccon & 0x10 == 0)
     }
 
     // MARK: Master I/O
@@ -912,6 +923,10 @@ public final class BBCMicro {
                     master512.reset()
                     tube.reset()
                 }
+                if let armProcessor {
+                    armProcessor.reset()
+                    tube.reset()
+                }
             }
             return
         }
@@ -1032,6 +1047,9 @@ public final class BBCMicro {
             cpu.setIRQ(IRQDevice.tube, tubeAccessible && tube.hostIRQ)
         } else if let master512, !resetting {
             master512.step()
+            cpu.setIRQ(IRQDevice.tube, tubeAccessible && tube.hostIRQ)
+        } else if let armProcessor, !resetting {
+            armProcessor.step()
             cpu.setIRQ(IRQDevice.tube, tubeAccessible && tube.hostIRQ)
         }
 

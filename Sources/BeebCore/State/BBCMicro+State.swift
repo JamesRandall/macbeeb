@@ -52,6 +52,7 @@ extension BBCMicro {
         var secondProcessor: SecondProcessorState?
         var z80: Z80SecondProcessor.State?
         var master512: Master512.State?
+        var arm: ARMSecondProcessor.State?
 
         /// Whether the snapshot has a tape in the recorder.
         public var hasTape: Bool { tape != nil }
@@ -76,6 +77,7 @@ extension BBCMicro {
                  tape: tape?.state, tube: tube, parasiteCredit: parasiteCredit,
                  secondProcessor: secondProcessor.map(SecondProcessorState.init), z80: z80Processor?.state,
                  master512: master512?.state,
+                 arm: armProcessor?.state,
                  crtcLastOutput: crtcLastOutput,
                  ic15Byte: ic15Byte, unit: unit)
     }
@@ -90,7 +92,8 @@ extension BBCMicro {
         guard s.version == Snapshot.currentVersion else { throw RestoreError.unsupportedVersion(s.version) }
         guard s.model == model else { throw RestoreError.wrongModel(s.model) }
         guard (s.secondProcessor != nil) == (secondProcessor != nil), (s.z80 != nil) == (z80Processor != nil),
-              (s.master512 != nil) == (master512 != nil) else {
+              (s.master512 != nil) == (master512 != nil),
+              (s.arm != nil) == (armProcessor != nil) else {
             throw RestoreError.wrongSecondProcessor
         }
         cycles = s.cycles
@@ -139,6 +142,9 @@ extension BBCMicro {
         }
         if let z80Processor, let state = s.z80 {
             z80Processor.restore(state)
+        }
+        if let armProcessor, let state = s.arm {
+            armProcessor.restore(state)
         }
         if let state = s.tape {
             if let tape {

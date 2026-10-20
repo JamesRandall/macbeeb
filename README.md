@@ -214,6 +214,12 @@ Processor, `--z80`): a 6MHz Z80 with 64K, client ROM 1.21, wired as BeebEm
 has it; it boots a CP/M system disc to `A>`. The Z80 core passes ZEXDOC and
 ZEXALL in full, undocumented flags included.
 
+Or the Acorn ARM Second Processor, the ARM Evaluation System (`--arm`): an
+8MHz ARM1 with 4MB, supervisor ROM 1.00, wired as BeebEm has it, with an ARM
+core following the semantics of BeebEm's (David Sharp's Tarmac). It boots to
+the `A*` prompt; with ARM BASIC's disc (BeebEm's `armdisc3.adl`) in an ADFS
+machine, `*ADFS`, `*MOUNT 4` and `*AB` start ARM BBC BASIC V.
+
 Any of them except the Compact can have a 6502 Second Processor (Machine > Model, `--tube`):
 a 3MHz 65C02 with 64K on the Tube, booting Tube OS 1.10, following b2.
 

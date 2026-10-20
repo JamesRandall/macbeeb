@@ -2,7 +2,7 @@
 //
 //   beeb [--load DISC.ssd:FILE] [--seconds N] [--type TEXT] [--screenshot FILE.png] [--text]
 //        [--record FILE.mp4|.mov [--codec h264|hevc|proRes]] [--disc FILE.ssd|.dsd [--boot]]
-//        [--model-a | --master | --bplus | --compact] [--tube | --z80] [--tape FILE.uef|.csw]
+//        [--model-a | --master | --bplus | --compact] [--tube | --z80 | --arm] [--tape FILE.uef|.csw]
 //
 // Boots a Model B (OS 1.2, BASIC 2) or with --master a Master 128, types TEXT (with \n for Return), runs
 // for N seconds of emulated time after typing finishes (default 3), then
@@ -80,6 +80,9 @@ while let argument = arguments.popFirst() {
     case "--512":
         secondProcessor = true
         coprocessor = .master512
+    case "--arm":
+        secondProcessor = true
+        coprocessor = .arm
     case "--text":
         printText = true
     case "--pcs":

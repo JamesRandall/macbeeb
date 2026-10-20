@@ -118,7 +118,7 @@ public final class AgentTools: Sendable {
                     return "drive \(drive): \"\(title)\""
                 }
                 return """
-                model: \(modelDescription(m.model))\(m.secondProcessor != nil ? " with a 6502 Second Processor" : m.z80Processor != nil ? " with a Z80 Second Processor (CP/M)" : m.master512 != nil ? " with a Master 512 (80186, DOS Plus)" : "")
+                model: \(modelDescription(m.model))\(m.secondProcessor != nil ? " with a 6502 Second Processor" : m.z80Processor != nil ? " with a Z80 Second Processor (CP/M)" : m.master512 != nil ? " with a Master 512 (80186, DOS Plus)" : m.armProcessor != nil ? " with an ARM Evaluation System" : "")
                 emulated time: \(String(format: "%.3f", Double(m.cycles) / 2_000_000))s
                 PC=&\(hex(pc, 4)) A=&\(hex(cpu.a)) X=&\(hex(cpu.x)) Y=&\(hex(cpu.y)) S=&\(hex(cpu.s)) P=&\(hex(cpu.p))
                 screen mode: \(m.peek(0x355))
@@ -134,8 +134,8 @@ public final class AgentTools: Sendable {
             inputSchema: schema(["model": ["type": "string", "enum": ["model_a", "model_b", "b_plus", "master_128", "master_compact"],
                                            "description": "Machine to switch to (default: keep the current one)"] as JSONValue,
                                  "second_processor": prop("boolean", "Fit a second processor (default: keep as is)"),
-                                 "coprocessor": ["type": "string", "enum": ["mos6502", "z80", "master512"],
-                                                 "description": "Which second processor: mos6502 (default), z80 (CP/M: boot a CP/M system disc) or master512 (an 80186 for DOS Plus: on a master_128, boot the DOS Plus disc)"] as JSONValue,
+                                 "coprocessor": ["type": "string", "enum": ["mos6502", "z80", "master512", "arm"],
+                                                 "description": "Which second processor: mos6502 (default), z80 (CP/M: boot a CP/M system disc), master512 (an 80186 for DOS Plus: on a master_128, boot the DOS Plus disc) or arm (the ARM Evaluation System: 8MHz ARM1, 4MB, an A* supervisor prompt)"] as JSONValue,
                                  "disc_interface": ["type": "string", "enum": ["intel8271", "acorn1770", "watfordDDB2", "watfordDDB3", "opus"],
                                                     "description": "Model B only: the disc interface and its filing system (default: keep as is)"] as JSONValue])
         )) { context, args in
@@ -154,7 +154,7 @@ public final class AgentTools: Sendable {
             let interface = discInterface
             var requestedCoprocessor: BBCMicro.Coprocessor?
             if let name = args["coprocessor"]?.stringValue {
-                guard let named = BBCMicro.Coprocessor(rawValue: name) else { throw ToolFailure("coprocessor must be mos6502, z80 or master512") }
+                guard let named = BBCMicro.Coprocessor(rawValue: name) else { throw ToolFailure("coprocessor must be mos6502, z80, master512 or arm") }
                 requestedCoprocessor = named
             }
             let coprocessor = requestedCoprocessor
@@ -162,7 +162,7 @@ public final class AgentTools: Sendable {
                 var configuration: BBCMicro.Configuration?
                 if model != nil || secondProcessor != nil || interface != nil || coprocessor != nil {
                     let current = session.machine
-                    let fitted = current.secondProcessor != nil || current.z80Processor != nil || current.master512 != nil
+                    let fitted = current.secondProcessor != nil || current.z80Processor != nil || current.master512 != nil || current.armProcessor != nil
                     configuration = BeebROMs.configuration(for: model ?? current.model,
                                                            secondProcessor: secondProcessor ?? (coprocessor != nil || fitted),
                                                            coprocessor: coprocessor ?? current.configuration.coprocessor,

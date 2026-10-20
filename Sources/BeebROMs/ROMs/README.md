@@ -16,4 +16,5 @@ included, as b2 and jsbeeb do, so the emulator works out of the box.
 | tube110.rom | 6502 Second Processor Tube OS 1.10 | b2 |
 | z80-121.rom | Z80 Second Processor client ROM 1.21 (J.G. Harston's fixes to Acorn's 1.20) | BeebEm |
 | master512-bios.rom | Master 512 80186 BIOS (16K) | BeebEm (BIOS.rom) |
+| armeval-100.rom | ARM Evaluation System supervisor ROM 1.00 | BeebEm (ARMeval_100.rom) |
 | mos320-*.rom | Master 128 MOS 3.20 set: MOS, Terminal (F), View (E), ADFS (D), BASIC 4 (C), Edit (B), ViewSheet (A), DFS 2.24 (9) | b2 |
