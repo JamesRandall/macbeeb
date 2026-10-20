@@ -1,0 +1,6 @@
+al 002023 .count
+al 002011 .print
+al 00200D .done
+al 002017 .message
+al 002002 .loop
+al 002000 .start

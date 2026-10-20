@@ -43,12 +43,14 @@ let package = Package(
 
         // Tools for AI agents to drive a machine, and the MCP server.
         .target(name: "BeebAgentKit", dependencies: ["BeebCore", "BeebHost", "BeebCapture", "BeebROMs"]),
+        // The Debug Adapter Protocol server, for VS Code and other editors.
+        .target(name: "BeebDAP", dependencies: ["BeebCore", "BeebHost", "BeebROMs", "BeebAgentKit"]),
         .executableTarget(name: "macbeeb-mcp", dependencies: ["BeebAgentKit", "BeebCore", "BeebHost", "BeebROMs"]),
 
         // The Mac app.
         .executableTarget(
             name: "MacBeeb",
-            dependencies: ["BeebCore", "BeebHost", "BeebCapture", "BeebROMs", "BeebAgentKit",
+            dependencies: ["BeebCore", "BeebHost", "BeebCapture", "BeebROMs", "BeebAgentKit", "BeebDAP",
                            .product(name: "Sparkle", package: "Sparkle")],
             // Sparkle.framework is embedded in Contents/Frameworks.
             linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
@@ -63,7 +65,7 @@ let package = Package(
 
         .testTarget(
             name: "BeebCoreTests",
-            dependencies: ["BeebCore", "BeebROMs", "BeebCapture", "BeebHost", "BeebAgentKit", "M6502GenKit"],
+            dependencies: ["BeebCore", "BeebROMs", "BeebCapture", "BeebHost", "BeebAgentKit", "BeebDAP", "M6502GenKit"],
             resources: [.copy("Resources")]
         ),
 

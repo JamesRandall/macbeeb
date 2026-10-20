@@ -8,6 +8,8 @@ struct SettingsView: View {
         TabView {
             KeyboardSettingsView()
                 .tabItem { Label("Keyboard", systemImage: "keyboard") }
+            DebuggingSettingsView()
+                .tabItem { Label("Debugging", systemImage: "ladybug") }
         }
         .frame(width: 520, height: 460)
     }
@@ -134,5 +136,24 @@ final class KeyRecorder {
         default: .function
         }
         return event.modifierFlags.contains(flag)
+    }
+}
+
+struct DebuggingSettingsView: View {
+    @AppStorage(MachineController.debugAdapterEnabledKey) private var enabled = true
+    @AppStorage(MachineController.debugAdapterPortKey) private var port = Int(6502)
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Let editors debug the BBC (Debug Adapter Protocol)", isOn: $enabled)
+                TextField("Port", value: $port, format: .number.grouping(.never))
+                    .disabled(!enabled)
+                Text("VS Code and other editors that speak DAP connect to localhost on this port, to set breakpoints in your source (with ld65 debug info), step, and inspect the machine. The MacBeeb extension for VS Code is in Tools/vscode-macbeeb. Changes take effect next launch.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
     }
 }

@@ -71,7 +71,28 @@ public final class AgentSocketServer: @unchecked Sendable {
         self.path = path
     }
 
+    /// Whether something accepts connections on the socket at `path`.
+    static func isLive(_ path: String) -> Bool {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        var address = AgentSocket.address(path)
+        let result = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+        }
+        return result == 0
+    }
+
+    public enum StartError: Error {
+        /// Another app is serving the socket.
+        case inUse
+    }
+
     public func start() throws {
+        // Another MacBeeb already serving it keeps it.
+        if Self.isLive(path) {
+            throw StartError.inUse
+        }
         unlink(path)
         listener = socket(AF_UNIX, SOCK_STREAM, 0)
         guard listener >= 0 else { throw POSIXError(.init(rawValue: errno) ?? .EIO) }

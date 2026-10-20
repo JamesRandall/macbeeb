@@ -184,16 +184,45 @@ public final class Debugger {
     var parasiteFlags = [UInt8](repeating: 0, count: 0x10000)
 
     public private(set) var stopReason: StopReason?
+    /// Counts stops, so two in a row for the same reason can be told apart.
+    public private(set) var stopCount = 0
     private var command: RunCommand?
     private var commandCPU = DebugCPU.host
     private var stepTarget: UInt16 = 0
     private var stepStack: UInt8 = 0
 
+    /// Opcode fetches seen per CPU (while the hooks are on), and the
+    /// instruction a data breakpoint last stopped in: read-modify-write
+    /// instructions write twice, but one stop per instruction is enough.
+    private var fetches: [DebugCPU: Int] = [:]
+    private var lastDataStop: (cpu: DebugCPU, address: UInt16, fetch: Int)?
+
     /// Log points' output, oldest first.
     public private(set) var log: [DebugLogEntry] = []
     public static let logLimit = 1000
-    /// Resolves symbols in expressions.
-    public var symbolResolver: (String) -> Int? = { _ in nil }
+    /// Symbols and source lines, per CPU (the OS's and hardware's built
+    /// in).
+    public private(set) lazy var hostSymbols = SymbolTable.builtIn(model: machine.model, cpu: .host)
+    public private(set) lazy var parasiteSymbols = SymbolTable.builtIn(model: machine.model, cpu: .parasite)
+
+    public func symbols(_ cpu: DebugCPU) -> SymbolTable {
+        cpu == .host ? hostSymbols : parasiteSymbols
+    }
+
+    /// Adds symbols (e.g. from `SymbolTable.load(path:)`) for code on `cpu`.
+    public func addSymbols(_ table: SymbolTable, cpu: DebugCPU = .host) {
+        if cpu == .host {
+            hostSymbols.merge(table)
+        } else {
+            parasiteSymbols.merge(table)
+        }
+    }
+
+    /// Back to just the built-in symbols.
+    public func clearSymbols() {
+        hostSymbols = SymbolTable.builtIn(model: machine.model, cpu: .host)
+        parasiteSymbols = SymbolTable.builtIn(model: machine.model, cpu: .parasite)
+    }
 
     public private(set) var hostTrace = TraceBuffer(capacity: 1)
     public private(set) var parasiteTrace = TraceBuffer(capacity: 1)
@@ -354,6 +383,7 @@ public final class Debugger {
     func stop(_ reason: StopReason) {
         guard stopReason == nil else { return }
         stopReason = reason
+        stopCount += 1
         machine.stopRequested = true
         // Whatever was running is done.
         if command != nil {
@@ -382,11 +412,11 @@ public final class Debugger {
     /// The context expressions on `cpu` are evaluated in.
     public func expressionContext(_ cpu: DebugCPU) -> DebugExpression.Context {
         let machine = self.machine
-        let resolver = symbolResolver
+        let table = symbols(cpu)
         return DebugExpression.Context(
             register: { name in machine.register(name, cpu: cpu) },
             readByte: { machine.debugRead(.cpu(cpu), Int($0)) ?? 0xFF },
-            symbol: resolver)
+            symbol: { table.address(of: $0) })
     }
 
     /// Replaces each {expression} in `text` with its value.
@@ -446,6 +476,7 @@ public final class Debugger {
         }
 
         if kind == .execute {
+            fetches[cpu, default: 0] += 1
             if tracing { record(cpu, address, interrupt: false) }
             if let command, commandCPU == cpu, let target = machine.debugCPU(cpu) {
                 switch command {
@@ -464,6 +495,10 @@ public final class Debugger {
         }
 
         guard flags & kind.rawValue != 0 else { return }
+        if kind != .execute, let last = lastDataStop, last.cpu == cpu, last.address == address,
+           last.fetch == fetches[cpu, default: 0] {
+            return
+        }
         for index in matchingBreakpoints(cpu, address, kind) {
             breakpoints[index].hitCount += 1
             let b = breakpoints[index]
@@ -472,6 +507,9 @@ public final class Debugger {
                 log.append(DebugLogEntry(cycle: machine.cycles, cpu: cpu, text: interpolate(message, cpu: cpu)))
                 if log.count > Self.logLimit { log.removeFirst(log.count - Self.logLimit) }
                 continue
+            }
+            if kind != .execute {
+                lastDataStop = (cpu, address, fetches[cpu, default: 0])
             }
             stop(.breakpoint(id: b.id, cpu: cpu, address: address, kind: kind))
             return

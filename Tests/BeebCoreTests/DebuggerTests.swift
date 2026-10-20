@@ -108,6 +108,18 @@ struct DebuggerTests {
         #expect(m.instructionAddress(.host) == 0x2015)
     }
 
+    @Test func readModifyWriteStopsOnce() throws {
+        let m = machine()
+        // INC &70 : INC &70 : RTS. The NMOS 6502 writes each twice.
+        m.load([0xE6, 0x70, 0xE6, 0x70, 0x60], at: 0x2100)
+        let b = try m.debugger.add(Breakpoint(kind: .write, start: 0x70))
+        m.paste("CALL &2100\n")
+        #expect(run(m, .continue) == .breakpoint(id: b.id, cpu: .host, address: 0x70, kind: .write))
+        #expect(m.instructionAddress(.host) == 0x2100)
+        #expect(run(m, .continue) == .breakpoint(id: b.id, cpu: .host, address: 0x70, kind: .write))
+        #expect(m.instructionAddress(.host) == 0x2102)
+    }
+
     @Test func readBreakpoint() throws {
         let m = machine()
         let b = try m.debugger.add(Breakpoint(kind: .read, start: 0x70, end: 0x70))

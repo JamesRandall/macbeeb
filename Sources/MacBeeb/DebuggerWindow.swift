@@ -129,6 +129,8 @@ struct DisassemblyView: View {
                     .onSubmit(go)
                 Button("PC") { model.view.disassemblyStart = nil }
                     .help("Follow the program counter")
+                Button { loadSymbols() } label: { Image(systemName: "tag") }
+                    .help("Load symbols: ld65 debug info (.dbg) or a label file")
                 Button { shift(-1) } label: { Image(systemName: "chevron.up") }
                     .help("Earlier")
                 Button { shift(1) } label: { Image(systemName: "chevron.down") }
@@ -150,6 +152,14 @@ struct DisassemblyView: View {
                 Text(message).font(.callout).foregroundStyle(.red).padding(6)
             }
         }
+    }
+
+    private func loadSymbols() {
+        let panel = NSOpenPanel()
+        panel.allowsOtherFileTypes = true
+        panel.message = "Choose ld65 debug info (ld65 --dbgfile) or a label file"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        model.loadSymbols(url)
     }
 
     private func go() {
@@ -178,6 +188,18 @@ struct DisassemblyRow: View {
     let toggle: () -> Void
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(line.labels, id: \.self) { label in
+                Text(label + ":")
+                    .font(codeFont)
+                    .foregroundStyle(.tint)
+                    .padding(.leading, 44)
+            }
+            row
+        }
+    }
+
+    private var row: some View {
         HStack(spacing: 8) {
             Button(action: toggle) {
                 Circle()
@@ -196,6 +218,9 @@ struct DisassemblyRow: View {
                 .frame(width: 80, alignment: .leading)
             Text(line.text)
             Spacer()
+            if let source = line.source {
+                Text(source.description).foregroundStyle(.secondary).font(smallCodeFont)
+            }
         }
         .font(codeFont)
         .padding(.horizontal, 8)

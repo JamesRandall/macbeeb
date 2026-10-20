@@ -30,6 +30,9 @@ public struct DebugSnapshot: Sendable {
         public var text: String
         public var isPC: Bool
         public var breakpoints: [Int]
+        /// Labels at this address.
+        public var labels: [String]
+        public var source: SourceLocation?
         public var id: UInt16 { address }
     }
 
@@ -90,11 +93,14 @@ public struct DebugSnapshot: Sendable {
         var address = start
         var lines: [Line] = []
         let executeBreakpoints = debugger.breakpoints.filter { $0.cpu == cpu && $0.kind.contains(.execute) }
+        let symbols = debugger.symbols(cpu)
         for _ in 0..<view.disassemblyLines {
             let (text, length) = disassembler.disassemble(at: address, read: read)
             let bytes = (0..<length).map { read(address &+ UInt16($0)) }
-            lines.append(Line(address: address, bytes: bytes, text: text, isPC: address == pc,
-                              breakpoints: executeBreakpoints.filter { $0.start == address }.map(\.id)))
+            lines.append(Line(address: address, bytes: bytes, text: symbols.annotate(text), isPC: address == pc,
+                              breakpoints: executeBreakpoints.filter { $0.start == address }.map(\.id),
+                              labels: address < 0xFC00 || address >= 0xFF00 ? symbols.names(at: address) : [],
+                              source: symbols.location(at: address)))
             let next = address &+ UInt16(length)
             if next < address { break }
             address = next

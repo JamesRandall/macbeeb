@@ -1,0 +1,43 @@
+# MacBeeb debugger for VS Code
+
+Debug 6502 programs running on MacBeeb's BBC Micro from VS Code: breakpoints
+in your assembler source (from ld65 debug info), conditional breakpoints and
+log points, stepping over, into, out of and back, registers you can edit,
+memory, disassembly, and watchpoints (data breakpoints) on any address. It
+talks to MacBeeb over the Debug Adapter Protocol on localhost port 6502
+(Settings > Debugging in MacBeeb).
+
+## Install
+
+    cd Tools/vscode-macbeeb
+    npx @vscode/vsce package
+    code --install-extension macbeeb-debug-0.1.0.vsix
+
+Or, to try it, open this folder in VS Code and press F5 (Extension
+Development Host).
+
+## Use
+
+Build with ca65/ld65 and ask for debug info (see Examples/hello-ca65):
+
+    ca65 -g hello.s -o hello.o
+    ld65 -C bbc.cfg -o hello.bin --dbgfile hello.dbg hello.o
+
+Then in `.vscode/launch.json`:
+
+    {
+      "type": "macbeeb",
+      "request": "launch",
+      "name": "Run on the BBC Micro",
+      "program": "${workspaceFolder}/hello.bin",
+      "loadAddress": 8192
+    }
+
+The program is loaded (at `loadAddress`, default 0x2000) and CALLed from
+BASIC; `hello.dbg` beside it is picked up automatically. `model`
+(`modelB`, `bPlus`, `master128`) and `secondProcessor` choose the machine;
+`disc` boots a disc instead. `attach` debugs whatever's running.
+
+The CPUs appear as threads (the host, and the second processor if fitted).
+In the debug console, expressions use registers, flags, symbols and memory:
+`A`, `[&70]`, `{&FFFE}`, `count`, `PC+3`.

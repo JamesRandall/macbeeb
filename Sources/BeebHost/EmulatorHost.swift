@@ -55,7 +55,7 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
     private let commands = Mutex<[Command]>([])
     let latestFrame = Mutex<Frame?>(nil)
     private let latestLights = Mutex(BBCMicro.Lights())
-    private let latestDebugStop = Mutex<StopReason?>(nil)
+    private let latestDebugStop = Mutex<(reason: StopReason?, count: Int)>((nil, 0))
     private let inspecting = Atomic<Bool>(false)
 
     /// Turns on frame metadata, so the screen can be inspected.
@@ -219,8 +219,10 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
                 }
             }
 
-            let stop = session.machine.debuggerIfCreated?.stopReason
-            latestDebugStop.withLock { $0 = stop }
+            let debugger = session.machine.debuggerIfCreated
+            let stop = debugger?.stopReason
+            let stopCount = debugger?.stopCount ?? 0
+            latestDebugStop.withLock { $0 = (stop, stopCount) }
             if paused || stop != nil {
                 Thread.sleep(forTimeInterval: 0.005)
                 resetWallClock()
@@ -260,6 +262,12 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
 
     /// Why the debugger has stopped the machine, if it has.
     public var debugStop: StopReason? {
+        latestDebugStop.withLock { $0.reason }
+    }
+
+    /// The debugger's stop count with the reason: changes with every stop,
+    /// even two for the same reason.
+    public var debugStopState: (reason: StopReason?, count: Int) {
         latestDebugStop.withLock { $0 }
     }
 

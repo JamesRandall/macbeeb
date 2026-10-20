@@ -29,6 +29,15 @@ extension AgentTools {
             return n
         }
         guard let text = value.stringValue else { throw ToolFailure("\(key) must be a number or expression") }
+        // file.s:12, a source line from loaded debug info.
+        if let colon = text.lastIndex(of: ":"), let line = Int(text[text.index(after: colon)...]),
+           text[..<colon].contains(".") {
+            let file = String(text[..<colon])
+            guard let found = machine.debugger.symbols(cpu).addresses(file: file, line: line), let first = found.addresses.min() else {
+                throw ToolFailure("no code at \(text) (load_symbols first?)")
+            }
+            return Int(first)
+        }
         do {
             return try DebugExpression(text).evaluate(machine.debugger.expressionContext(cpu))
         } catch {
@@ -55,13 +64,25 @@ extension AgentTools {
         var address = start
         var lines: [String] = []
         for _ in 0..<count {
-            let (text, length) = disassembler.disassemble(at: address, read: read)
+            let (raw, length) = disassembler.disassemble(at: address, read: read)
+            let symbols = m.debugger.symbols(cpu)
+            let text = symbols.annotate(raw)
             let bytes = (0..<length).map { hex(read(address &+ UInt16($0))) }.joined(separator: " ")
             let marker = address == pc ? "> " : "  "
+            if let label = symbols.names(at: address).first, address < 0xFC00 || address >= 0xFF00 {
+                lines.append("\(label):")
+            }
             var line = "\(marker)\(hex(address, 4))  \(bytes.padding(toLength: 9, withPad: " ", startingAt: 0))  \(text)"
+            var notes: [String] = []
+            if let source = symbols.location(at: address) {
+                notes.append("\(source)")
+            }
             let breakpoints = m.debugger.breakpoints.filter { $0.cpu == cpu && $0.kind.contains(.execute) && $0.start == address }
             if !breakpoints.isEmpty {
-                line = line.padding(toLength: 34, withPad: " ", startingAt: 0) + "; breakpoint " + breakpoints.map { "\($0.id)" }.joined(separator: ",")
+                notes.append("breakpoint " + breakpoints.map { "\($0.id)" }.joined(separator: ","))
+            }
+            if !notes.isEmpty {
+                line += String(repeating: " ", count: max(1, 34 - line.count)) + "; " + notes.joined(separator: ", ")
             }
             lines.append(line)
             address &+= UInt16(length)
@@ -215,7 +236,7 @@ extension AgentTools {
         Tool(definition: ToolDefinition(
             name: "set_breakpoint",
             description: "Stop when the CPU executes an address (default), or reads or writes it (a watchpoint). Then use continue. Ranges, conditions (e.g. \"A == &41 && [&70] > 3\"), hit counts, and log points (log_message, with {expression}s, instead of stopping) are supported. Returns the breakpoint's ID.",
-            inputSchema: schema(["address": prop("string", "Address or expression"),
+            inputSchema: schema(["address": prop("string", "Address, expression, symbol, or source line (hello.s:12, with debug info loaded)"),
                                  "end": prop("string", "Last address of a range (default: just address)"),
                                  "type": ["type": "string", "enum": ["execute", "read", "write", "access"],
                                           "description": "What to stop on (default execute; access is read or write)"] as JSONValue,
@@ -416,6 +437,55 @@ extension AgentTools {
                     return "\(e.cycle)  \(hex(e.pc, 4))  \(text.padding(toLength: 16, withPad: " ", startingAt: 0)) \(regs)"
                 }
                 return lines.isEmpty ? "nothing traced yet" : lines.joined(separator: "\n")
+            })
+        },
+
+        Tool(definition: ToolDefinition(
+            name: "load_symbols",
+            description: "Load symbols for the debugger: ld65 debug info (ld65 --dbgfile, which also maps code to source lines, so breakpoints can be \"hello.s:12\"), or a label file (ld65 -Ln, VICE, \"name = $1234\" lists). Then addresses and expressions can use the names, and disassembly shows them. The OS entry points (OSWRCH...) and hardware registers are always known.",
+            inputSchema: schema(["path": prop("string", "The .dbg or label file"),
+                                 "clear": prop("boolean", "Forget previously loaded symbols first"),
+                                 "cpu": cpuProperty],
+                                required: ["path"])
+        )) { context, args in
+            let cpu = try cpu(args)
+            guard let path = args["path"]?.stringValue else { throw ToolFailure("path is required") }
+            let table: SymbolTable
+            do {
+                table = try SymbolTable.load(path: (path as NSString).expandingTildeInPath)
+            } catch {
+                throw ToolFailure("\(error)")
+            }
+            let clear = args["clear"]?.boolValue ?? false
+            return .text(try context.perform { session in
+                let debugger = session.machine.debugger
+                if clear { debugger.clearSymbols() }
+                debugger.addSymbols(table, cpu: cpu)
+                return "loaded \(table.symbolCount) symbols and \(table.lineCount) source lines"
+            })
+        },
+
+        Tool(definition: ToolDefinition(
+            name: "lookup_symbol",
+            description: "A symbol's address, or the symbols and source line at an address.",
+            inputSchema: schema(["name": prop("string", "Symbol name"),
+                                 "address": prop("string", "Or an address"),
+                                 "cpu": cpuProperty])
+        )) { context, args in
+            let cpu = try cpu(args)
+            return .text(try context.perform { session in
+                let m = session.machine
+                let symbols = m.debugger.symbols(cpu)
+                if let name = args["name"]?.stringValue {
+                    guard let value = symbols.address(of: name) else { throw ToolFailure("no symbol \(name)") }
+                    return "\(name) = &\(String(value, radix: 16, uppercase: true))"
+                }
+                guard let address = try address(args, "address", in: m, cpu: cpu) else { throw ToolFailure("give name or address") }
+                let a = UInt16(truncatingIfNeeded: address)
+                var parts = symbols.names(at: a)
+                if parts.isEmpty, let near = symbols.nearest(below: a) { parts.append("\(near.name)+\(near.offset)") }
+                if let source = symbols.location(at: a) { parts.append("at \(source)") }
+                return parts.isEmpty ? "nothing known at &\(hex(a, 4))" : "&\(hex(a, 4)): " + parts.joined(separator: ", ")
             })
         },
 

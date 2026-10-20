@@ -15,6 +15,7 @@ headers.
 | `Sources/BeebCapture` | Screenshots and video recording |
 | `Sources/BeebHost` | Runs a machine on its own thread, paced by audio |
 | `Sources/BeebAgentKit`, `Sources/macbeeb-mcp` | Agent tools and the MCP server |
+| `Sources/BeebDAP`, `Tools/vscode-macbeeb` | The Debug Adapter Protocol server and the VS Code extension |
 | `Sources/MacBeeb` | The Mac app |
 | `Sources/beeb` | Headless command-line BBC Micro |
 | `Sources/M6502GenKit`, `Sources/m6502-gen` | Generator for the 6502's per-cycle state machine |
@@ -87,8 +88,26 @@ Tools: `run_command`, `type_text`, `press_keys`, `load_disc`, `eject_disc`,
 `start_recording`, `stop_recording`; and for debugging, `set_breakpoint`,
 `list_breakpoints`, `delete_breakpoint`, `continue`, `step` (including
 back), `reverse_continue`, `rewind`, `registers`,
-`set_register`, `memory_regions`, `trace`, `debug_log` (with `peek`,
+`set_register`, `memory_regions`, `trace`, `debug_log`, `load_symbols`,
+`lookup_symbol` (with `peek`,
 `poke` and `disassemble` taking a CPU and address space).
+
+## Source-level debugging (VS Code)
+
+MacBeeb serves the Debug Adapter Protocol on localhost port 6502 (Settings >
+Debugging). The extension in `Tools/vscode-macbeeb` connects VS Code to it:
+breakpoints in assembler source (from ld65 `--dbgfile` debug info, which
+maps every byte to its line), conditions, hit counts and log points;
+stepping over, into, out and back, reverse continue; call stacks from the
+6502 stack; registers and flags to edit; memory and disassembly; data
+breakpoints on any address; and the hardware state. The CPUs are threads.
+`Examples/hello-ca65` is a program to try it on.
+
+Symbols (ld65 debug info, or label files from ld65 `-Ln`, VICE or
+`name = $1234` lists) work in the app's debugger and the agent tools too:
+`load_symbols`, then names in addresses and expressions, `hello.s:19` as a
+breakpoint address, and labelled disassembly. The OS entry points and
+hardware registers are always known.
 
 ## Rewind
 

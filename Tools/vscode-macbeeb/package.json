@@ -1,0 +1,75 @@
+{
+  "name": "macbeeb-debug",
+  "displayName": "MacBeeb: BBC Micro debugger",
+  "description": "Debug 6502 programs on MacBeeb's emulated BBC Micro: source breakpoints (ld65 debug info), stepping (and stepping back), registers, memory, watchpoints.",
+  "version": "0.1.0",
+  "publisher": "accidentalfish",
+  "license": "GPL-3.0-only",
+  "engines": { "vscode": "^1.80.0" },
+  "categories": ["Debuggers", "Programming Languages"],
+  "main": "./extension.js",
+  "activationEvents": ["onDebugResolve:macbeeb", "onDebugDynamicConfigurations:macbeeb"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "ca65",
+        "aliases": ["6502 Assembly (ca65)", "ca65"],
+        "extensions": [".s", ".s65", ".asm", ".inc", ".a65"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      { "language": "ca65", "scopeName": "source.ca65", "path": "./syntaxes/ca65.tmLanguage.json" }
+    ],
+    "breakpoints": [{ "language": "ca65" }],
+    "debuggers": [
+      {
+        "type": "macbeeb",
+        "label": "MacBeeb (BBC Micro)",
+        "languages": ["ca65"],
+        "configurationAttributes": {
+          "launch": {
+            "properties": {
+              "program": { "type": "string", "description": "The assembled binary, loaded into memory and CALLed. Its .dbg file (ld65 --dbgfile) is used for symbols if there's one beside it." },
+              "loadAddress": { "type": "number", "description": "Where to load program (default 0x2000)." },
+              "execAddress": { "type": "number", "description": "Where to start it (default loadAddress)." },
+              "symbols": { "type": "string", "description": "ld65 debug info (.dbg) or a label file." },
+              "disc": { "type": "string", "description": "A .ssd/.dsd disc to boot instead of a program." },
+              "model": { "type": "string", "enum": ["modelB", "bPlus", "master128"], "description": "The machine." },
+              "secondProcessor": { "type": "boolean", "description": "Fit a 6502 Second Processor (code then runs there)." },
+              "cpu": { "type": "string", "enum": ["host", "parasite"], "description": "Which CPU the program's code runs on." },
+              "stopOnEntry": { "type": "boolean", "description": "Stop at the program's first instruction." },
+              "port": { "type": "number", "description": "MacBeeb's debug adapter port (Settings > Debugging; default 6502)." }
+            }
+          },
+          "attach": {
+            "properties": {
+              "symbols": { "type": "string", "description": "ld65 debug info (.dbg) or a label file." },
+              "cpu": { "type": "string", "enum": ["host", "parasite"] },
+              "port": { "type": "number", "description": "MacBeeb's debug adapter port (default 6502)." }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "macbeeb",
+            "request": "launch",
+            "name": "Run on the BBC Micro",
+            "program": "${workspaceFolder}/hello.bin",
+            "stopOnEntry": false
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "MacBeeb: Launch a program",
+            "body": { "type": "macbeeb", "request": "launch", "name": "Run on the BBC Micro", "program": "^\"\\${workspaceFolder}/${1:program.bin}\"" }
+          },
+          {
+            "label": "MacBeeb: Attach to the running machine",
+            "body": { "type": "macbeeb", "request": "attach", "name": "Attach to MacBeeb", "symbols": "^\"\\${workspaceFolder}/${1:program.dbg}\"" }
+          }
+        ]
+      }
+    ]
+  }
+}

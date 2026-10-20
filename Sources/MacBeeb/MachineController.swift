@@ -2,6 +2,7 @@ import AppKit
 import BeebAgentKit
 import BeebCapture
 import BeebCore
+import BeebDAP
 import BeebHost
 import BeebROMs
 import Observation
@@ -99,13 +100,35 @@ final class MachineController {
     private static var agentServer: AgentSocketServer?
 
     private func startAgentServer() {
-        guard Self.agentServer == nil else { return }
+        // Self-tests leave a running copy's servers alone.
+        guard Self.agentServer == nil, UserDefaults.standard.string(forKey: "MacBeebSelfTest") == nil else { return }
         let server = AgentSocketServer(tools: AgentTools(context: host))
         do {
             try server.start()
             Self.agentServer = server
         } catch {
             NSLog("MacBeeb: no agent socket: \(error)")
+        }
+        startDebugAdapter()
+    }
+
+    /// The first window's machine is the one DAP clients (VS Code) debug.
+    private static var debugAdapter: DAPServer?
+    static let debugAdapterEnabledKey = "MacBeebDebugAdapterEnabled"
+    static let debugAdapterPortKey = "MacBeebDebugAdapterPort"
+
+    private func startDebugAdapter() {
+        let defaults = UserDefaults.standard
+        guard Self.debugAdapter == nil, defaults.object(forKey: Self.debugAdapterEnabledKey) as? Bool ?? true else { return }
+        let port = UInt16(exactly: defaults.integer(forKey: Self.debugAdapterPortKey)).flatMap { $0 == 0 ? nil : $0 } ?? DAPServer.defaultPort
+        let server = DAPServer(host: host, port: port) { [weak self] model, secondProcessor in
+            Task { @MainActor in self?.setHardware(model: model, secondProcessor: secondProcessor) }
+        }
+        do {
+            try server.start()
+            Self.debugAdapter = server
+        } catch {
+            NSLog("MacBeeb: no debug adapter on port \(port): \(error)")
         }
     }
 
@@ -290,6 +313,16 @@ final class MachineController {
         guard newModel != model else { return }
         model = newModel
         UserDefaults.standard.set(newModel.rawValue, forKey: Self.modelDefaultsKey)
+        changeMachine()
+    }
+
+    /// Switches model and second processor at once (one power cycle).
+    func setHardware(model newModel: BBCMicro.Model, secondProcessor fitted: Bool) {
+        guard newModel != model || fitted != secondProcessor else { return }
+        model = newModel
+        secondProcessor = fitted
+        UserDefaults.standard.set(newModel.rawValue, forKey: Self.modelDefaultsKey)
+        UserDefaults.standard.set(fitted, forKey: Self.secondProcessorDefaultsKey)
         changeMachine()
     }
 

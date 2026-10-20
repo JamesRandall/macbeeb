@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "macbeeb",
+      "request": "launch",
+      "name": "Run on the BBC Micro",
+      "program": "${workspaceFolder}/hello.bin",
+      "loadAddress": 8192,
+      "stopOnEntry": true
+    },
+    {
+      "type": "macbeeb",
+      "request": "launch",
+      "name": "Run on a Master with a second processor",
+      "program": "${workspaceFolder}/hello.bin",
+      "model": "master128",
+      "secondProcessor": true
+    }
+  ]
+}

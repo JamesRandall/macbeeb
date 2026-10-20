@@ -164,6 +164,15 @@ final class DebuggerModel {
         }
     }
 
+    /// Loads ld65 debug info or a label file for the current CPU.
+    func loadSymbols(_ url: URL) {
+        let cpu = view.cpu
+        command { m in
+            let table = try SymbolTable.load(path: url.path)
+            m.debugger.addSymbols(table, cpu: cpu)
+        }
+    }
+
     func setTracing(_ on: Bool) {
         command { $0.debugger.setTracing(capacity: on ? 100_000 : 0) }
     }
