@@ -10,6 +10,7 @@ public enum BeebROMs {
         case bPlusMOS = "bplus-mos"
         case tube110 = "tube110"
         case z80121 = "z80-121"
+        case armEval100 = "armeval-100"
         case watfordDDFS153 = "watford-ddfs153"
         case watfordDDFS154T = "watford-ddfs154t"
         case opusDDOS345 = "opus-ddos345"
@@ -63,7 +64,9 @@ extension BeebROMs {
     ///   as b2; sideways RAM in 4-7. It boots ADFS (no DFS).
     ///
     /// With `secondProcessor`, a 6502 Second Processor (Tube OS 1.10) is
-    /// fitted (not on the Compact, which has no Tube).
+    /// fitted (not on the Compact, which has no Tube), or the `coprocessor`
+    /// given: the Z80 (client ROM 1.21) or the ARM Evaluation System
+    /// (supervisor ROM 1.00).
     ///
     /// On the Model B, `discInterface` picks the disc controller and its
     /// filing system (in bank 14).
@@ -83,7 +86,12 @@ extension BeebROMs {
             }
         }
         if secondProcessor && model.hasTube {
-            configuration.secondProcessorROM = data(coprocessor == .z80 ? .z80121 : .tube110)
+            let image: Image = switch coprocessor {
+            case .mos6502: .tube110
+            case .z80: .z80121
+            case .arm: .armEval100
+            }
+            configuration.secondProcessorROM = data(image)
         }
         return configuration
     }
