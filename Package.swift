@@ -11,6 +11,7 @@ let package = Package(
         .library(name: "BeebROMs", targets: ["BeebROMs"]),
         .executable(name: "beeb", targets: ["beeb"]),
         .executable(name: "MacBeeb", targets: ["MacBeeb"]),
+        .executable(name: "macbeeb-mcp", targets: ["macbeeb-mcp"]),
         .executable(name: "beeb-bench", targets: ["beeb-bench"]),
         .executable(name: "m6502-gen", targets: ["m6502-gen"]),
     ],
@@ -36,10 +37,14 @@ let package = Package(
 
         .executableTarget(name: "beeb", dependencies: ["BeebCore", "BeebCapture", "BeebROMs"]),
 
+        // Tools for AI agents to drive a machine, and the MCP server.
+        .target(name: "BeebAgentKit", dependencies: ["BeebCore", "BeebHost", "BeebCapture"]),
+        .executableTarget(name: "macbeeb-mcp", dependencies: ["BeebAgentKit", "BeebCore", "BeebHost", "BeebROMs"]),
+
         // The Mac app.
         .executableTarget(
             name: "MacBeeb",
-            dependencies: ["BeebCore", "BeebHost", "BeebCapture", "BeebROMs"]
+            dependencies: ["BeebCore", "BeebHost", "BeebCapture", "BeebROMs", "BeebAgentKit"]
         ),
 
         // 6502 state machine generator. Run `swift run m6502-gen` after
@@ -51,7 +56,7 @@ let package = Package(
 
         .testTarget(
             name: "BeebCoreTests",
-            dependencies: ["BeebCore", "BeebROMs", "BeebCapture", "M6502GenKit"],
+            dependencies: ["BeebCore", "BeebROMs", "BeebCapture", "BeebHost", "BeebAgentKit", "M6502GenKit"],
             resources: [.copy("Resources")]
         ),
 

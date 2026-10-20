@@ -101,9 +101,11 @@ extension BBCMicro {
         let address = cpu.abus
         if address == watchAddress {
             reachedWatchAddress = true
+            stopRequested = true
         }
         if watchForIdle && address == Self.osIdleAddress && paste == nil && keyEvents.isEmpty {
             reachedIdle = true
+            stopRequested = true
         }
         // Capture at WRCHV's target: OSASCI and OSNEWL jump there directly.
         if captureOutput && address == UInt16(ram[0x20F]) << 8 | UInt16(ram[0x20E]) {
@@ -126,25 +128,51 @@ extension BBCMicro {
         }
     }
 
+    /// Watches for the OS waiting for a key (with nothing left to type or
+    /// paste): when it happens `reachedIdle` is set and `run` stops.
+    public func watchForIdle(_ enabled: Bool) {
+        watchForIdle = enabled
+        reachedIdle = false
+        updateOpcodeHooks()
+    }
+
+    /// Watches for the CPU reaching `address` (nil stops watching): when it
+    /// does, `reachedWatchAddress` is set and `run` stops, with the
+    /// instruction there about to execute.
+    public func watch(address: UInt16?) {
+        watchAddress = address
+        reachedWatchAddress = false
+        updateOpcodeHooks()
+    }
+
     /// Runs until the OS is waiting for a key, with nothing left to type or
     /// paste, then a little longer. Returns false if that didn't happen
     /// within `maxSeconds`.
     @discardableResult
     public func runUntilIdle(maxSeconds: Double = 60) -> Bool {
-        watchForIdle = true
-        reachedIdle = false
-        updateOpcodeHooks()
-        defer {
-            watchForIdle = false
-            updateOpcodeHooks()
-        }
+        watchForIdle(true)
+        defer { watchForIdle(false) }
         let deadline = cycles + UInt64(maxSeconds * 2_000_000)
         while !reachedIdle && cycles < deadline {
-            run(cycles: 10_000)
+            run(cycles: Int(min(deadline - cycles, 200_000)))
         }
         guard reachedIdle else { return false }
+        watchForIdle(false)
         run(seconds: 0.01)
         return true
+    }
+
+    /// Runs until the CPU is about to execute the instruction at `address`.
+    /// Returns false if that didn't happen within `maxSeconds`.
+    @discardableResult
+    public func runUntil(address: UInt16, maxSeconds: Double) -> Bool {
+        watch(address: address)
+        defer { watch(address: nil) }
+        let deadline = cycles + UInt64(maxSeconds * 2_000_000)
+        while !reachedWatchAddress && cycles < deadline {
+            run(cycles: Int(min(deadline - cycles, 200_000)))
+        }
+        return reachedWatchAddress
     }
 
     /// Releases every key (e.g. when the window loses focus, so keys
@@ -156,24 +184,6 @@ extension BBCMicro {
         if resetting {
             setKey(.breakKey, down: false)
         }
-    }
-
-    /// Runs until the CPU is about to execute the instruction at `address`.
-    /// Returns false if that didn't happen within `maxSeconds`.
-    @discardableResult
-    public func runUntil(address: UInt16, maxSeconds: Double) -> Bool {
-        watchAddress = address
-        reachedWatchAddress = false
-        updateOpcodeHooks()
-        defer {
-            watchAddress = nil
-            updateOpcodeHooks()
-        }
-        let deadline = cycles + UInt64(maxSeconds * 2_000_000)
-        while !reachedWatchAddress && cycles < deadline {
-            run(cycles: 1000)
-        }
-        return reachedWatchAddress
     }
 
     // MARK: Loading programs

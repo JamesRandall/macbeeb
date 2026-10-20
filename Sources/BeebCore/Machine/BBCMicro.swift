@@ -78,7 +78,7 @@ public final class BBCMicro {
     var watchForIdle = false
     /// Stop address for `runUntil(address:)`.
     var watchAddress: UInt16?
-    var reachedWatchAddress = false
+    public internal(set) var reachedWatchAddress = false
     /// Set when the CPU fetches from the OS's wait-for-key loop.
     public internal(set) var reachedIdle = false
     /// Characters written through WRCHV while `captureOutput` is set.
@@ -299,18 +299,29 @@ public final class BBCMicro {
 
     // MARK: Running
 
-    /// Runs `count` 2MHz cycles.
-    public func run(cycles count: Int) {
-        var remaining = count
-        while remaining > 0 {
+    /// Set by watches (idle, address) to end `run` early.
+    var stopRequested = false
+
+    /// Runs up to `count` 2MHz cycles, stopping early (on the exact cycle)
+    /// if a watch fires: see `watchForIdle(_:)` and `watch(address:)`.
+    /// Returns the cycles run.
+    @discardableResult
+    public func run(cycles count: Int) -> Int {
+        stopRequested = false
+        var done = 0
+        while done < count && !stopRequested {
             // Key events are applied at 0.5ms granularity.
-            let chunk = min(remaining, 1000)
+            let chunk = min(count - done, 1000)
             processKeyEvents()
-            for _ in 0..<chunk {
+            var i = 0
+            while i < chunk {
                 step()
+                i += 1
+                if stopRequested { break }
             }
-            remaining -= chunk
+            done += i
         }
+        return done
     }
 
     /// Runs for `seconds` of emulated time.

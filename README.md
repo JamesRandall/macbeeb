@@ -12,7 +12,10 @@ headers.
 | --- | --- |
 | `Sources/BeebCore` | The emulation core: pure Swift, no UI frameworks |
 | `Sources/BeebROMs` | Bundled ROM images (Acorn copyright, not GPL) |
-| `Sources/BeebCapture` | Screenshots |
+| `Sources/BeebCapture` | Screenshots and video recording |
+| `Sources/BeebHost` | Runs a machine on its own thread, paced by audio |
+| `Sources/BeebAgentKit`, `Sources/macbeeb-mcp` | Agent tools and the MCP server |
+| `Sources/MacBeeb` | The Mac app |
 | `Sources/beeb` | Headless command-line BBC Micro |
 | `Sources/M6502GenKit`, `Sources/m6502-gen` | Generator for the 6502's per-cycle state machine |
 | `Sources/beeb-bench` | Core speed benchmark |
@@ -22,6 +25,7 @@ headers.
 ## Building and testing
 
 ```
+scripts/make-app.sh   # builds and signs .build/app/MacBeeb.app
 make build
 make test      # optimised; the CPU suites run billions of cycles
 make bench
@@ -40,6 +44,29 @@ swift run -c release beeb --load disc.ssd:PROGRAM --type 'RUN\n' --seconds 5 --t
 
 `--pcs` and `--trace N` show where the CPU is spending its time.
 
+## AI agents (MCP)
+
+`macbeeb-mcp` is a Model Context Protocol server that lets agents such as
+Claude Code drive a BBC Micro: boot discs, type, run BASIC, read the screen
+as text, take screenshots, peek and poke memory, disassemble, record video.
+Time is emulated time, so waits are exact and run faster than real time.
+
+```
+swift build -c release --product macbeeb-mcp
+claude mcp add macbeeb -- "$(pwd)/.build/release/macbeeb-mcp"            # its own headless BBC
+claude mcp add macbeeb -- "$(pwd)/.build/release/macbeeb-mcp" --attach   # the app's BBC, as you watch
+```
+
+The app bundle includes it too, at `MacBeeb.app/Contents/MacOS/macbeeb-mcp`.
+`--attach` talks to the app over a user-only socket in
+`~/Library/Application Support/MacBeeb/`.
+
+Tools: `run_command`, `type_text`, `press_keys`, `load_disc`, `eject_disc`,
+`load_program`, `run`, `run_until_idle`, `run_until_address`,
+`read_screen_text`, `screenshot`, `peek`, `poke`, `disassemble`,
+`get_status`, `press_break`, `power_cycle`, `start_recording`,
+`stop_recording`.
+
 ## The Model B
 
 `BBCMicro` follows b2's per-cycle machine loop: CPU with 1MHz cycle
@@ -51,7 +78,9 @@ Checked against real hardware with scarybeasts' VIA tests, dp111's and Tom
 Seddon's timing suites, RMW and BCD tests, jsbeeb's IRQ timing results, and
 an IRQ-load test where real Model Bs give 1066-1072 (macbeeb: 1070).
 
-Still to come: sound, discs, tape, serial (the ACIA is a stub).
+Sound is the SN76489 through b2's filter model; discs are an Intel 8271
+(ported from jsbeeb/beebjit) with DFS 1.20. Still to come: tape, serial
+(the ACIA is a stub), joysticks, the Master.
 
 ## The 6502
 

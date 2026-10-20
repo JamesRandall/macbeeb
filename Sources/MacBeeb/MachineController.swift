@@ -1,4 +1,5 @@
 import AppKit
+import BeebAgentKit
 import BeebCapture
 import BeebCore
 import BeebHost
@@ -25,7 +26,22 @@ final class MachineController {
         audio = AudioOutput(host: host)
         host.start()
         audio.start()
+        startAgentServer()
         runSelfTestIfRequested()
+    }
+
+    /// The first window's machine is the one `macbeeb-mcp --attach` drives.
+    private static var agentServer: AgentSocketServer?
+
+    private func startAgentServer() {
+        guard Self.agentServer == nil else { return }
+        let server = AgentSocketServer(tools: AgentTools(context: host))
+        do {
+            try server.start()
+            Self.agentServer = server
+        } catch {
+            NSLog("MacBeeb: no agent socket: \(error)")
+        }
     }
 
     /// `MacBeeb -MacBeebSelfTest /path/to/out.png`: types a command, then

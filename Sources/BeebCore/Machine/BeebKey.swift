@@ -114,3 +114,26 @@ public struct BeebKey: RawRepresentable, Hashable, Sendable {
         0x7D: (.rightSquareBracket, true), 0x7E: (.caret, true), 0x1B: (.escape, false), 0x7F: (.delete, false),
     ]
 }
+
+extension BeebKey {
+    /// Keys by name: "RETURN", "SHIFT", "F1", "A", "1", ":" and so on.
+    public static func named(_ name: String) -> BeebKey? {
+        let upper = name.uppercased()
+        if let key = namedKeys[upper] {
+            return key
+        }
+        if name.count == 1, let (key, _) = forCharacter(Character(name)) {
+            return key
+        }
+        return nil
+    }
+
+    public static let namedKeys: [String: BeebKey] = [
+        "RETURN": .returnKey, "ENTER": .returnKey, "SPACE": .space, "SHIFT": .shift, "CTRL": .ctrl,
+        "CONTROL": .ctrl, "ESCAPE": .escape, "ESC": .escape, "TAB": .tab, "DELETE": .delete,
+        "COPY": .copy, "CAPSLOCK": .capsLock, "SHIFTLOCK": .shiftLock, "BREAK": .breakKey,
+        "UP": .up, "DOWN": .down, "LEFT": .left, "RIGHT": .right,
+        "F0": .f0, "F1": .f1, "F2": .f2, "F3": .f3, "F4": .f4,
+        "F5": .f5, "F6": .f6, "F7": .f7, "F8": .f8, "F9": .f9,
+    ]
+}
