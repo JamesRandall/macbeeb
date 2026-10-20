@@ -10,6 +10,7 @@ public enum BeebROMs {
         case bPlusMOS = "bplus-mos"
         case tube110 = "tube110"
         case z80121 = "z80-121"
+        case master512BIOS = "master512-bios"
         case watfordDDFS153 = "watford-ddfs153"
         case watfordDDFS154T = "watford-ddfs154t"
         case opusDDOS345 = "opus-ddos345"
@@ -83,7 +84,12 @@ extension BeebROMs {
             }
         }
         if secondProcessor && model.hasTube {
-            configuration.secondProcessorROM = data(coprocessor == .z80 ? .z80121 : .tube110)
+            let rom: Image = switch coprocessor {
+            case .mos6502: .tube110
+            case .z80: .z80121
+            case .master512: .master512BIOS
+            }
+            configuration.secondProcessorROM = data(rom)
         }
         return configuration
     }

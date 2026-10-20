@@ -77,6 +77,9 @@ while let argument = arguments.popFirst() {
     case "--z80":
         secondProcessor = true
         coprocessor = .z80
+    case "--512":
+        secondProcessor = true
+        coprocessor = .master512
     case "--text":
         printText = true
     case "--pcs":

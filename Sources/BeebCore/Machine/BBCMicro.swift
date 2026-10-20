@@ -53,11 +53,14 @@ public final class BBCMicro {
         case mos6502
         /// The Acorn Z80 Second Processor (6MHz, CP/M).
         case z80
+        /// The Master 512 (an 80186 with 1MB, for DOS Plus and GEM).
+        case master512
 
         public var displayName: String {
             switch self {
             case .mos6502: "6502 Second Processor"
             case .z80: "Z80 Second Processor"
+            case .master512: "Master 512 (80186)"
             }
         }
     }
@@ -132,6 +135,7 @@ public final class BBCMicro {
     public let secondProcessor: SecondProcessor?
     /// The Z80 Second Processor, if fitted instead.
     public private(set) var z80Processor: Z80SecondProcessor?
+    public private(set) var master512: Master512?
     public internal(set) var tube = Tube()
     /// Parasite half-cycles owed: 3 more each host cycle, 2 per parasite
     /// cycle, so host cycles alternate 1 and 2 parasite cycles (3MHz).
@@ -405,6 +409,9 @@ public final class BBCMicro {
         if configuration.coprocessor == .z80, let rom = tubeROM {
             z80Processor = Z80SecondProcessor(rom: rom, machine: self)
         }
+        if configuration.coprocessor == .master512, let rom = tubeROM {
+            master512 = Master512(rom: rom, machine: self)
+        }
     }
 
     deinit {
@@ -668,7 +675,7 @@ public final class BBCMicro {
     /// Whether the host sees the (external) Tube: always on the B and B+;
     /// on the Master, while ACCCON's ITU bit selects the external Tube.
     var tubeAccessible: Bool {
-        (secondProcessor != nil || z80Processor != nil) && (!model.isMaster || acccon & 0x10 == 0)
+        (secondProcessor != nil || z80Processor != nil || master512 != nil) && (!model.isMaster || acccon & 0x10 == 0)
     }
 
     // MARK: Master I/O
@@ -901,6 +908,10 @@ public final class BBCMicro {
                     z80Processor.reset()
                     tube.reset()
                 }
+                if let master512 {
+                    master512.reset()
+                    tube.reset()
+                }
             }
             return
         }
@@ -1018,6 +1029,9 @@ public final class BBCMicro {
             cpu.setIRQ(IRQDevice.tube, tubeAccessible && tube.hostIRQ)
         } else if let z80Processor, !resetting {
             z80Processor.step()
+            cpu.setIRQ(IRQDevice.tube, tubeAccessible && tube.hostIRQ)
+        } else if let master512, !resetting {
+            master512.step()
             cpu.setIRQ(IRQDevice.tube, tubeAccessible && tube.hostIRQ)
         }
 
