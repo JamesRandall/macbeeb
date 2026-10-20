@@ -221,6 +221,11 @@ BeebEm has it. It starts with the bundled DOS Plus 1.2 boot disc in drive 0
 and boots to `A>`, which takes about 40 seconds, as on the real machine. A
 disc of your own in drive 0 takes its place; across a power cycle that changes
 co-processor, the system disc changes with it.
+The Master 512's other discs are bundled too (File > Insert Bundled Disc, or
+`load_disc` with `bundled` for agents), in its 800K DOS format (`.img`, as
+BeebEm has it; 720K PC `.dos` discs work as well). With GEM Applications in
+drive 1, `B:` then `GEM` starts GEM's desktop, though without a mouse
+emulated yet there's little to do there.
 
 Or the Acorn ARM Second Processor, the ARM Evaluation System (`--arm`): an
 8MHz ARM1 with 4MB, supervisor ROM 1.00, wired as BeebEm has it, with an ARM

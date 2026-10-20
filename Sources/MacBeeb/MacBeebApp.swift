@@ -1,5 +1,6 @@
 import AppKit
 import BeebCore
+import BeebROMs
 import SwiftUI
 
 @main
@@ -26,6 +27,14 @@ struct MacBeebApp: App {
                     .disabled(machine == nil)
                 Button("Insert Disc in Drive 1…") { machine?.openDisc(drive: 1, boot: false) }
                     .disabled(machine == nil)
+                ForEach(0..<2) { drive in
+                    Menu("Insert Bundled Disc in Drive \(drive)") {
+                        ForEach(BeebROMs.BundledDisc.allCases, id: \.self) { disc in
+                            Button(disc.displayName) { machine?.insertBundledDisc(disc, drive: drive) }
+                        }
+                    }
+                    .disabled(!(machine?.model.hasDiscInterface ?? false))
+                }
                 Divider()
                 Button("Eject Drive 0") { machine?.ejectDisc(drive: 0) }
                     .disabled(machine?.discNames[0] == nil)
@@ -201,7 +210,7 @@ struct MachineWindow: View {
 
     private func open(_ url: URL) -> Bool {
         switch url.pathExtension.lowercased() {
-        case "ssd", "dsd", "adf", "ads", "adm", "adl":
+        case _ where Disc.ImageFormat(path: url.path) != nil:
             machine.insertDisc(url)
         case "uef", "csw":
             machine.insertTape(url)

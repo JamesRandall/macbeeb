@@ -540,6 +540,12 @@ final class MachineController {
         }
     }
 
+    /// Puts one of the bundled discs in `drive`. Writes stay in memory.
+    func insertBundledDisc(_ disc: BeebROMs.BundledDisc, drive: Int) {
+        host.send(.insertDisc(image: disc.data, format: disc.format, drive: drive, onWrite: nil))
+        discNames[drive] = disc.rawValue
+    }
+
     func ejectDisc(drive: Int) {
         host.send(.insertDisc(image: nil, format: .ssd, drive: drive, onWrite: nil))
         discNames[drive] = nil

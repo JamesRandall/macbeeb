@@ -12,9 +12,9 @@ struct SystemDiscTests {
     }
 
     @Test func eachNeedsOne() throws {
-        #expect(BeebROMs.SystemDisc(for: .z80) == .cpm && BeebROMs.SystemDisc(for: .master512) == .dosPlus)
-        #expect(BeebROMs.SystemDisc(for: .mos6502) == nil && BeebROMs.SystemDisc(for: .arm) == nil)
-        for disc in BeebROMs.SystemDisc.allCases {
+        #expect(BeebROMs.BundledDisc.system(for: .z80) == .cpm && BeebROMs.BundledDisc.system(for: .master512) == .dosPlus)
+        #expect(BeebROMs.BundledDisc.system(for: .mos6502) == nil && BeebROMs.BundledDisc.system(for: .arm) == nil)
+        for disc in BeebROMs.BundledDisc.allCases {
             _ = try Disc.fromImage(disc.data, format: disc.format)
         }
         #expect(configuration(.modelB, .arm).startupDisc == nil)

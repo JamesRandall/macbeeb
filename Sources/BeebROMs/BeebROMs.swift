@@ -41,20 +41,40 @@ public enum BeebROMs {
         return Bundle.module
     }()
 
-    /// The bundled system discs for the co-processors that need one.
-    public enum SystemDisc: String, CaseIterable, Sendable {
+    /// The bundled discs: the co-processors' system discs, and the rest of
+    /// the Master 512's.
+    public enum BundledDisc: String, CaseIterable, Sendable {
         /// Acorn CP/M 2.2 (BIOS 1.20) and its utilities, for the Z80.
         case cpm = "cpm-utilities.dsd"
         /// DOS Plus 1.2's boot disc, for the Master 512.
         case dosPlus = "dosplus-boot.adl"
+        /// The Master 512's GEM discs (GEM itself, its applications and
+        /// data) and its miscellaneous one, in its 800K DOS format.
+        case gemApplications = "gem-applications.img"
+        case gemData = "gem-data.img"
+        case master512Miscellaneous = "master512-miscellaneous.img"
 
-        public init?(for coprocessor: BBCMicro.Coprocessor) {
+        /// The disc the co-processor boots from, if it needs one.
+        public static func system(for coprocessor: BBCMicro.Coprocessor) -> BundledDisc? {
             switch coprocessor {
-            case .z80: self = .cpm
-            case .master512: self = .dosPlus
-            case .mos6502, .arm: return nil
+            case .z80: .cpm
+            case .master512: .dosPlus
+            case .mos6502, .arm: nil
             }
         }
+
+        public var displayName: String {
+            switch self {
+            case .cpm: "CP/M 2.2 System and Utilities (Z80)"
+            case .dosPlus: "DOS Plus 1.2 Boot (Master 512, disc 1)"
+            case .gemApplications: "GEM Applications (Master 512, disc 2)"
+            case .gemData: "GEM Data (Master 512, disc 3)"
+            case .master512Miscellaneous: "Miscellaneous (Master 512, disc 4)"
+            }
+        }
+
+        /// Its name for an agent: the file name without the extension.
+        public var shortName: String { (rawValue as NSString).deletingPathExtension }
 
         public var format: Disc.ImageFormat { Disc.ImageFormat(path: rawValue)! }
 
@@ -124,7 +144,7 @@ extension BeebROMs {
             case .arm: .armEval100
             }
             configuration.secondProcessorROM = data(rom)
-            if systemDisc, let disc = SystemDisc(for: coprocessor) {
+            if systemDisc, let disc = BundledDisc.system(for: coprocessor) {
                 configuration.startupDisc = .init(name: disc.rawValue, image: disc.data, format: disc.format)
             }
         }

@@ -712,6 +712,12 @@ public final class Disc {
         case adf
         /// ADFS L (both sides).
         case adl
+        /// The Master 512's 800K DOS format: 80 tracks a side, five 1024-byte
+        /// sectors (1-5), both sides interleaved by track, as BeebEm has it.
+        case img
+        /// 720K PC DOS: 80 tracks a side, nine 512-byte sectors (1-9), both
+        /// sides interleaved by track.
+        case dos
 
         /// The format a file name's extension says.
         public init?(path: String) {
@@ -720,12 +726,13 @@ public final class Disc {
             case "dsd": self = .dsd
             case "adf", "ads", "adm": self = .adf
             case "adl": self = .adl
+            case "img": self = .img
+            case "dos": self = .dos
             default: return nil
             }
         }
 
-        public static let extensions = ["ssd", "dsd", "adf", "ads", "adm", "adl"]
-
+        public static let extensions = ["ssd", "dsd", "adf", "ads", "adm", "adl", "img", "dos"]
 
     }
 
@@ -735,6 +742,8 @@ public final class Disc {
         case .dsd: try fromDSD(bytes)
         case .adf: try fromADF(bytes)
         case .adl: try fromADL(bytes)
+        case .img: try fromMFM(bytes, .dosPlus800K)
+        case .dos: try fromMFM(bytes, .dos720K)
         }
     }
 
@@ -744,6 +753,8 @@ public final class Disc {
         case .ssd, .dsd: try toSSDOrDSD()
         case .adf: toADFS(doubleSided: false)
         case .adl: toADFS(doubleSided: true)
+        case .img: toMFM(.dosPlus800K)
+        case .dos: toMFM(.dos720K)
         }
     }
 
@@ -767,58 +778,95 @@ public final class Disc {
     /// The disc's 256-byte MFM sectors as an ADFS image (40 or 80 tracks, so
     /// other tools accept it).
     public func toADFS(doubleSided: Bool) -> [UInt8] {
-        let sides = doubleSided ? 2 : 1
-        let trackSize = Self.adfsSectorsPerTrack * Self.ssdSectorSize
-        var result = [UInt8](repeating: 0, count: Self.ssdTracks * sides * trackSize)
-        var numTracks = 0
-        for track in 0..<min(tracksUsed, Self.ssdTracks) {
-            for side in 0..<sides {
-                for sector in tracks[Self.trackIndex(side == 1, track)].findSectors() {
-                    guard sector.isMFM, !sector.hasDataCRCError, let data = sector.data, data.count == Self.ssdSectorSize,
-                          sector.sectorNumber < Self.adfsSectorsPerTrack, sector.trackNumber < Self.ssdTracks else { continue }
-                    let offset = (sector.trackNumber * sides + side) * trackSize + sector.sectorNumber * Self.ssdSectorSize
-                    result.replaceSubrange(offset..<offset + Self.ssdSectorSize, with: data)
-                    numTracks = max(numTracks, sector.trackNumber + 1)
-                }
-            }
-        }
-        let tracks = numTracks <= 40 ? 40 : Self.ssdTracks
-        return Array(result[0..<tracks * sides * trackSize])
+        toMFM(doubleSided ? .adfsL : .adfsS)
     }
 
     static func fromADFS(_ data: [UInt8], doubleSided: Bool) throws -> Disc {
-        let sides = doubleSided ? 2 : 1
-        guard data.count % ssdSectorSize == 0 else { throw Error.badSize }
-        guard data.count <= ssdSectorSize * adfsSectorsPerTrack * ssdTracks * sides else { throw Error.tooLarge }
+        try fromMFM(data, doubleSided ? .adfsL : .adfsS)
+    }
+
+    // MARK: MFM sector images (ADFS, DOS)
+
+    /// How an image of MFM sectors lays them out: `sectorsPerTrack` sectors
+    /// of `sectorSize` bytes, numbered from `firstSector`, track by track
+    /// (both sides of each in turn, if `sides` is 2).
+    struct MFMGeometry {
+        var sectorSize: Int
+        var sectorsPerTrack: Int
+        var firstSector: Int
+        var sides: Int
+        /// The gap after each sector's data.
+        var gap3: Int
+        /// The side in each sector ID (ADFS leaves it 0).
+        var sideInID: Bool
+        /// Whether an image of 40 tracks' data is written as 40 tracks.
+        var allows40Tracks: Bool
+
+        var trackSize: Int { sectorSize * sectorsPerTrack }
+        var sizeCode: UInt8 { UInt8((sectorSize / 128).trailingZeroBitCount) }
+
+        static let adfsS = MFMGeometry(sectorSize: 256, sectorsPerTrack: 16, firstSector: 0, sides: 1, gap3: 24,
+                                       sideInID: false, allows40Tracks: true)
+        static var adfsL: MFMGeometry { var g = adfsS; g.sides = 2; return g }
+        static let dosPlus800K = MFMGeometry(sectorSize: 1024, sectorsPerTrack: 5, firstSector: 1, sides: 2, gap3: 40,
+                                             sideInID: true, allows40Tracks: false)
+        static let dos720K = MFMGeometry(sectorSize: 512, sectorsPerTrack: 9, firstSector: 1, sides: 2, gap3: 84,
+                                         sideInID: true, allows40Tracks: false)
+    }
+
+    static func fromMFM(_ data: [UInt8], _ g: MFMGeometry) throws -> Disc {
+        guard data.count % g.sectorSize == 0 else { throw Error.badSize }
+        guard data.count <= g.trackSize * ssdTracks * g.sides else { throw Error.tooLarge }
         let disc = Disc()
-        let blank = [UInt8](repeating: 0, count: ssdSectorSize)
+        let blank = [UInt8](repeating: 0, count: g.sectorSize)
         var offset = 0
         for track in 0..<ssdTracks where offset < data.count {
-            for side in 0..<sides {
+            for side in 0..<g.sides {
                 // The 177x datasheet's recommended gaps.
                 disc.build(upper: side == 1, track: track) { b in
                     b.appendMFM(0x4E, count: 60)
-                    for sector in 0..<adfsSectorsPerTrack {
+                    for sector in 0..<g.sectorsPerTrack {
                         b.appendMFM(0x00, count: 12)
                         b.resetCRC()
                         b.appendMFM3xA1Sync()
                         b.appendMFM(IBMDiscFormat.idMarkDataPattern)
-                        b.appendMFM([UInt8(track), 0, UInt8(sector), 1])
+                        b.appendMFM([UInt8(track), g.sideInID ? UInt8(side) : 0, UInt8(g.firstSector + sector), g.sizeCode])
                         b.appendCRC()
                         b.appendMFM(0x4E, count: 22)
                         b.appendMFM(0x00, count: 12)
                         b.resetCRC()
                         b.appendMFM3xA1Sync()
                         b.appendMFM(IBMDiscFormat.dataMarkDataPattern)
-                        b.appendMFM(offset < data.count ? Array(data[offset..<offset + ssdSectorSize]) : blank)
-                        offset += ssdSectorSize
+                        b.appendMFM(offset < data.count ? Array(data[offset..<offset + g.sectorSize]) : blank)
+                        offset += g.sectorSize
                         b.appendCRC()
-                        b.appendMFM(0x4E, count: 24)
+                        b.appendMFM(0x4E, count: g.gap3)
                     }
                     b.fillMFM(0x4E)
                 }
             }
         }
         return disc
+    }
+
+    /// The disc's MFM sectors of `g`'s size as an image (80 tracks, or 40
+    /// if that's all there is and `g` allows it).
+    func toMFM(_ g: MFMGeometry) -> [UInt8] {
+        var result = [UInt8](repeating: 0, count: Self.ssdTracks * g.sides * g.trackSize)
+        var numTracks = 0
+        for track in 0..<min(tracksUsed, Self.ssdTracks) {
+            for side in 0..<g.sides {
+                for sector in tracks[Self.trackIndex(side == 1, track)].findSectors() {
+                    let index = sector.sectorNumber - g.firstSector
+                    guard sector.isMFM, !sector.hasDataCRCError, let data = sector.data, data.count == g.sectorSize,
+                          index >= 0, index < g.sectorsPerTrack, sector.trackNumber < Self.ssdTracks else { continue }
+                    let offset = (sector.trackNumber * g.sides + side) * g.trackSize + index * g.sectorSize
+                    result.replaceSubrange(offset..<offset + g.sectorSize, with: data)
+                    numTracks = max(numTracks, sector.trackNumber + 1)
+                }
+            }
+        }
+        let tracks = g.allows40Tracks && numTracks <= 40 ? 40 : Self.ssdTracks
+        return Array(result[0..<tracks * g.sides * g.trackSize])
     }
 }

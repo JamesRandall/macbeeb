@@ -196,22 +196,39 @@ public final class AgentTools: Sendable {
 
         Tool(definition: ToolDefinition(
             name: "load_disc",
-            description: "Put a disc image file in a drive: DFS .ssd/.dsd, or ADFS .adf/.adl (for the 1770 machines: B+, Master, Compact). With boot=true (default, drive 0 only), Shift-Break to boot it and run until it waits for input. Returns the disc's catalogue.",
-            inputSchema: schema(["path": prop("string", "Path to the .ssd or .dsd file"),
+            description: "Put a disc image file, or a bundled disc, in a drive: DFS .ssd/.dsd, ADFS .adf/.adl, or the Master 512's 800K DOS .img and 720K .dos (the last four for the 1770 machines: B+, Master, Compact). With boot=true (default, drive 0 only), Shift-Break to boot it and run until it waits for input. Returns the disc's catalogue.",
+            inputSchema: schema(["path": prop("string", "Path to the disc image"),
+                                 "bundled": ["type": "string", "enum": .array(BeebROMs.BundledDisc.allCases.map { .string($0.shortName) }),
+                                             "description": "Instead of path, a bundled disc: cpm-utilities (the Z80's CP/M 2.2), dosplus-boot (the Master 512's DOS Plus 1.2), gem-applications, gem-data or master512-miscellaneous (the Master 512's other discs; GEM is on gem-applications, started with B:GEM from DOS Plus)"] as JSONValue,
                                  "drive": prop("integer", "0 or 1 (default 0)"),
                                  "boot": prop("boolean", "Shift-Break to boot it (default true for drive 0)"),
                                  "max_seconds": prop("number", "Longest to wait after booting (default 30)")],
-                                required: ["path"])
+                                required: [])
         )) { context, args in
-            guard let path = args["path"]?.stringValue else { throw ToolFailure("path is required") }
-            let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
-            let bytes = [UInt8](try Data(contentsOf: url))
-            let format = Disc.ImageFormat(path: url.path) ?? .ssd
+            let bytes: [UInt8]
+            let format: Disc.ImageFormat
+            if let name = args["bundled"]?.stringValue {
+                guard let disc = BeebROMs.BundledDisc.allCases.first(where: { $0.shortName == name }) else {
+                    throw ToolFailure("unknown bundled disc \(name)")
+                }
+                bytes = disc.data
+                format = disc.format
+            } else if let path = args["path"]?.stringValue {
+                let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+                bytes = [UInt8](try Data(contentsOf: url))
+                format = Disc.ImageFormat(path: url.path) ?? .ssd
+            } else {
+                throw ToolFailure("path or bundled is required")
+            }
             let drive = args["drive"]?.intValue ?? 0
             guard drive == 0 || drive == 1 else { throw ToolFailure("drive must be 0 or 1") }
             let boot = args["boot"]?.boolValue ?? (drive == 0)
             let maxSeconds = args["max_seconds"]?.doubleValue ?? 30
-            let catalogue = format == .ssd || format == .dsd ? catalogueText(bytes, doubleSided: format == .dsd) : "ADFS disc"
+            let catalogue = switch format {
+            case .ssd, .dsd: catalogueText(bytes, doubleSided: format == .dsd)
+            case .adf, .adl: "ADFS disc"
+            case .img, .dos: "DOS disc"
+            }
             return .text(try context.perform { session in
                 let disc = try Disc.fromImage(bytes, format: format)
                 session.machine.insertDisc(disc, drive: drive)
