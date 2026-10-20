@@ -26,6 +26,9 @@ final class MachineController {
     @ObservationIgnored weak var renderer: Renderer?
 
     private static let modelDefaultsKey = "MacBeebModel"
+    /// The machine's indicator lights, refreshed a few times a second.
+    private(set) var lights = BBCMicro.Lights()
+    @ObservationIgnored private var lightsTimer: Timer?
 
     init() {
         let model = UserDefaults.standard.string(forKey: Self.modelDefaultsKey)
@@ -39,6 +42,15 @@ final class MachineController {
         host.start()
         audio.start()
         joysticks = Joysticks(host: host)
+        lightsTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let lights = self.host.lights
+                if lights != self.lights {
+                    self.lights = lights
+                }
+            }
+        }
         startAgentServer()
         runSelfTestIfRequested()
     }
@@ -79,6 +91,13 @@ final class MachineController {
             if let image = renderer?.renderImage(width: EmulatorHost.Frame.width * 2, height: EmulatorHost.Frame.height * 2),
                let display = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) {
                 try? display.write(to: URL(fileURLWithPath: path.replacingOccurrences(of: ".png", with: "-display.png")))
+            }
+            // The whole window, toolbar included.
+            if let frameView = NSApp.windows.first(where: { $0.firstResponder is EmulatorNSView })?.contentView?.superview,
+               let rep = frameView.bitmapImageRepForCachingDisplay(in: frameView.bounds) {
+                frameView.cacheDisplay(in: frameView.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?
+                    .write(to: URL(fileURLWithPath: path.replacingOccurrences(of: ".png", with: "-window.png")))
             }
             let report = "frame=\(host.frame?.number ?? -1) cycles=\(host.cycles) audioQueued=\(host.audioRing.count)\n"
             FileManager.default.createFile(atPath: path + ".txt", contents: Data(report.utf8))

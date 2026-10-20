@@ -124,6 +124,10 @@ struct MachineWindow: View {
             .onOpenURL { url in
                 _ = open(url)
             }
+            .toolbar(id: "machine") {
+                MachineToolbar(machine: machine)
+            }
+            .toolbarRole(.editor)
     }
 
     private func open(_ url: URL) -> Bool {

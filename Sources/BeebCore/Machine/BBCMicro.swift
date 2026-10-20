@@ -615,6 +615,27 @@ public final class BBCMicro {
         sampleRing = nil
     }
 
+    /// The machine's indicator lights.
+    public struct Lights: Equatable, Sendable {
+        public var capsLock = false
+        public var shiftLock = false
+        public var cassetteMotor = false
+        /// Each drive's activity light (its motor).
+        public var drives = [false, false]
+
+        public init() {}
+    }
+
+    public var lights: Lights {
+        var lights = Lights()
+        // The keyboard LEDs light when their latch bits are low.
+        lights.capsLock = addressableLatch & 0x40 == 0
+        lights.shiftLock = addressableLatch & 0x80 == 0
+        lights.cassetteMotor = serial.motorOn
+        lights.drives = drives.map(\.spinning)
+        return lights
+    }
+
     /// Puts a disc in drive 0 or 1 (nil ejects).
     public func insertDisc(_ disc: Disc?, drive: Int = 0) {
         drives[drive].insert(disc)

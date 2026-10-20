@@ -51,6 +51,7 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
     private let makeMachine: @Sendable () -> BBCMicro
     private let commands = Mutex<[Command]>([])
     let latestFrame = Mutex<Frame?>(nil)
+    private let latestLights = Mutex(BBCMicro.Lights())
     private let running = Atomic<Bool>(true)
     private let audioActive = Atomic<Bool>(false)
     private let emulatedCycles = Atomic<Int>(0)
@@ -238,6 +239,13 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
 
     fileprivate func didAdvance(_ session: HostSession) {
         emulatedCycles.store(Int(session.machine.cycles), ordering: .relaxed)
+        let lights = session.machine.lights
+        latestLights.withLock { $0 = lights }
+    }
+
+    /// The machine's indicator lights, as of the last slice.
+    public var lights: BBCMicro.Lights {
+        latestLights.withLock { $0 }
     }
 }
 
