@@ -322,6 +322,8 @@ public struct SymbolTable: Sendable {
             hardware.append(("USRVIA_\(register)", 0xFE60 + i))
         }
         switch model {
+        case .modelA:
+            break
         case .modelB:
             hardware += [("FDC_STATUS", 0xFE80), ("FDC_RESULT", 0xFE81), ("FDC_DATA", 0xFE84),
                          ("ADC_STATUS", 0xFEC0), ("ADC_HIGH", 0xFEC1), ("ADC_LOW", 0xFEC2)]

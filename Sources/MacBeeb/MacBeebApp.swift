@@ -20,7 +20,7 @@ struct MacBeebApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("Open Disc…") { machine?.openDisc() }
                     .keyboardShortcut("o")
-                    .disabled(machine == nil)
+                    .disabled(!(machine?.model.hasDiscInterface ?? false))
                 Button("Insert Disc in Drive 0…") { machine?.openDisc(drive: 0, boot: false) }
                     .keyboardShortcut("o", modifiers: [.command, .option])
                     .disabled(machine == nil)

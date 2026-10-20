@@ -90,6 +90,8 @@ extension BeebROMs {
 
     private static func standardConfiguration(for model: BBCMicro.Model) -> BBCMicro.Configuration {
         switch model {
+        case .modelA:
+            return BBCMicro.Configuration(model: .modelA, os: data(.os12), sidewaysROMs: [15: data(.basic2)])
         case .modelB:
             return BBCMicro.Configuration(os: data(.os12), sidewaysROMs: [15: data(.basic2), 14: data(.dfs12)])
         case .bPlus:

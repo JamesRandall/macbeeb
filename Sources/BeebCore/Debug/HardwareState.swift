@@ -132,7 +132,7 @@ extension BBCMicro {
             ("Addressable latch", "\(hex(addressableLatch)) %\(bits(addressableLatch))"),
         ]
         switch model {
-        case .modelB:
+        case .modelA, .modelB:
             break
         case .bPlus:
             rows.append(("Paged RAM at &8000", romsel & 0x80 != 0 ? "yes" : "no"))

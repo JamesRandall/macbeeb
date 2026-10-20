@@ -15,6 +15,7 @@ import Foundation
 
 public final class BBCMicro {
     public enum Model: String, Codable, Sendable, CaseIterable {
+        case modelA
         case modelB
         case bPlus
         case master128
@@ -22,6 +23,7 @@ public final class BBCMicro {
 
         public var displayName: String {
             switch self {
+            case .modelA: "BBC Model A"
             case .modelB: "BBC Model B"
             case .bPlus: "BBC Model B+ 128K"
             case .master128: "BBC Master 128"
@@ -31,9 +33,15 @@ public final class BBCMicro {
 
         /// The Master series: 65C12, MOS paging, I/O map and 1770 at &FE24.
         public var isMaster: Bool { self == .master128 || self == .masterCompact }
-        /// The Compact has no Tube, analogue port (ADC), clock or keypad.
-        public var hasTube: Bool { self != .masterCompact }
-        public var hasADC: Bool { self != .masterCompact }
+        /// The Model A and Compact have no Tube or analogue port (ADC); the
+        /// Compact no clock or keypad.
+        public var hasTube: Bool { self != .masterCompact && self != .modelA }
+        public var hasADC: Bool { self != .masterCompact && self != .modelA }
+        /// The Model A has 16K of RAM, no user VIA and no disc interface.
+        public var hasUserVIA: Bool { self != .modelA }
+        public var hasDiscInterface: Bool { self != .modelA }
+        /// The B family: the OS 1.20 machines.
+        public var isModelBFamily: Bool { self == .modelA || self == .modelB }
         public var hasKeypad: Bool { self == .master128 }
         /// Nor a cassette port.
         public var hasCassette: Bool { self != .masterCompact }
@@ -205,6 +213,9 @@ public final class BBCMicro {
     /// The Master's data bus isn't buffered: unmapped reads see the last
     /// byte the video fetched.
     var lastVideoByte: UInt8 = 0
+    /// The video's RAM address bits: 16K on the Model A.
+    var videoAddressMask: UInt16 { model == .modelA ? 0x3FFF : 0x7FFF }
+
     /// Base addresses for Mode 7, by MA11. The B and B+ can show &3C00.
     let teletextBases: (UInt16, UInt16)
 
@@ -282,7 +293,7 @@ public final class BBCMicro {
             self.sidewaysROMs = sidewaysROMs
             self.secondProcessorROM = secondProcessorROM
             let standardRAMBanks: Set<Int> = switch model {
-            case .modelB: []
+            case .modelA, .modelB: []
             case .bPlus: [0, 1, 12, 13]
             case .master128, .masterCompact: [4, 5, 6, 7]
             }
@@ -356,6 +367,10 @@ public final class BBCMicro {
         self.stretchTable = stretchTable
 
         switch model {
+        case .modelA:
+            intel8271 = nil
+            wd1770 = nil
+            teletextBases = (0x3C00, 0x7C00)
         case .modelB:
             if configuration.discInterface == .intel8271 {
                 intel8271 = Intel8271(drives: drives)
@@ -427,6 +442,10 @@ public final class BBCMicro {
                 case 0..<3:
                     read = ram + page << 12
                     write = read
+                case 4..<8 where model == .modelA:
+                    // 16K: A14 isn't decoded, so the upper 16K is the lower.
+                    read = ram + (page - 4) << 12
+                    write = read
                 case 3..<8:
                     read = ram + (shadow ? Self.shadowOffset : 0) + page << 12
                     write = read
@@ -476,7 +495,7 @@ public final class BBCMicro {
     /// Reads the RAM the video hardware sees (shadow RAM on the Master
     /// with ACCCON D set).
     public func peekScreen(_ address: UInt16) -> UInt8 {
-        ram[Int(address & 0x7FFF) + videoRAMOffset]
+        ram[Int(address & videoAddressMask) + videoRAMOffset]
     }
 
     /// Reads main RAM, regardless of paging.
@@ -518,7 +537,7 @@ public final class BBCMicro {
         }
         switch address & 0xFFE0 {
         case 0xFE40: return systemVIA.peek(Int(address))
-        case 0xFE60: return userVIA.peek(Int(address))
+        case 0xFE60 where model.hasUserVIA: return userVIA.peek(Int(address))
         case 0xFEE0 where tubeAccessible: return tube.hostPeek(Int(address))
         case 0xFE80:
             if let fdc = intel8271 { return fdc.peek(Int(address)) }
@@ -528,7 +547,7 @@ public final class BBCMicro {
                 if address & 0x1C == fdcAt { return fdc.peek(Int(address)) }
             }
             return 0xFF
-        case 0xFEC0: return adc.peek(Int(address))
+        case 0xFEC0 where model.hasADC: return adc.peek(Int(address))
         case 0xFE00 where address & 0x19 == 1: return crtc.readData()
         case 0xFE00 where address & 0x18 == 0x08: return serial.peekACIA(Int(address))
         default: return 0xFF
@@ -554,7 +573,7 @@ public final class BBCMicro {
             }
         case 0xFE40:
             return systemVIA.read(Int(address))
-        case 0xFE60:
+        case 0xFE60 where model.hasUserVIA:
             return userVIA.read(Int(address))
         case 0xFEE0 where tubeAccessible:
             return tube.hostRead(Int(address))
@@ -568,7 +587,7 @@ public final class BBCMicro {
                 if address & 0x1F == latchAt && boardLayout.isReadable { return fdc.latch }
                 if address & 0x1C == fdcAt { return fdc.read(Int(address)) }
             }
-        case 0xFEC0:
+        case 0xFEC0 where model.hasADC:
             return adc.read(Int(address))
         default:
             break
@@ -621,7 +640,7 @@ public final class BBCMicro {
             }
         case 0xFE40:
             systemVIA.write(Int(address), value)
-        case 0xFE60:
+        case 0xFE60 where model.hasUserVIA:
             userVIA.write(Int(address), value)
         case 0xFEE0 where tubeAccessible:
             tube.hostWrite(Int(address), value)
@@ -636,7 +655,7 @@ public final class BBCMicro {
                     fdc.write(Int(address), value)
                 }
             }
-        case 0xFEC0:
+        case 0xFEC0 where model.hasADC:
             adc.write(Int(address), value)
         default:
             if address < 0xFE00 {
@@ -1066,7 +1085,7 @@ public final class BBCMicro {
                 }
             }
         }
-        let value = ram[Int(address) + videoRAMOffset]
+        let value = ram[Int(address & videoAddressMask) + videoRAMOffset]
         videoMetadata = Self.videoMetadata(address: address, raster: output.raster, display: output.display,
                                            teletext: videoULA.teletext)
         lastVideoByte = value

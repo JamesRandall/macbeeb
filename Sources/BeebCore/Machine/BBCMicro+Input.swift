@@ -72,7 +72,7 @@ extension BBCMicro {
     /// In OSRDCH's loop waiting for a key (OS 1.20, B+ MOS 2.00, MOS 3.20).
     var osIdleAddress: UInt16 {
         switch model {
-        case .modelB: 0xE581
+        case .modelA, .modelB: 0xE581
         case .bPlus: 0xDF70
         case .master128: 0xE7D7
         case .masterCompact: 0xE907

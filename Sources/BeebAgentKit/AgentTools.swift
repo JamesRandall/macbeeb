@@ -69,11 +69,12 @@ public final class AgentTools: Sendable {
         ])
     }
 
-    static let agentModels: [String: BBCMicro.Model] = ["model_b": .modelB, "b_plus": .bPlus, "master_128": .master128,
+    static let agentModels: [String: BBCMicro.Model] = ["model_a": .modelA, "model_b": .modelB, "b_plus": .bPlus, "master_128": .master128,
                                                         "master_compact": .masterCompact]
 
     static func modelDescription(_ model: BBCMicro.Model) -> String {
         switch model {
+        case .modelA: "BBC Micro Model A (16K, OS 1.20, BASIC 2; no disc interface, user VIA or ADC)"
         case .modelB: "BBC Micro Model B (OS 1.20, BASIC 2, DFS 1.20)"
         case .bPlus: "BBC Micro Model B+ 128K (MOS 2.00, BASIC 2, DFS 2.26; 1770, shadow RAM)"
         case .master128: "BBC Master 128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS 2.03)"
@@ -130,7 +131,7 @@ public final class AgentTools: Sendable {
         Tool(definition: ToolDefinition(
             name: "power_cycle",
             description: "Switch the BBC off and on again. Discs stay in the drives. Runs until the BASIC prompt. With model, switches to that machine: model_b (OS 1.20, BASIC 2, DFS 1.20), b_plus (B+ 128K: MOS 2.00, BASIC 2, DFS 2.26, shadow RAM) master_128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS, View, ViewSheet, Edit; 1770 disc controller, shadow RAM, sideways RAM in banks 4-7), or master_compact (MOS 5.10, ADFS only, so it needs .adf/.adl discs; no Tube). With second_processor, fits or removes a 6502 Second Processor (3MHz 65C02, 64K, on the Tube): BASIC is copied across and runs in the second processor (PAGE &800, HIMEM &8000), and the host just does the I/O.",
-            inputSchema: schema(["model": ["type": "string", "enum": ["model_b", "b_plus", "master_128", "master_compact"],
+            inputSchema: schema(["model": ["type": "string", "enum": ["model_a", "model_b", "b_plus", "master_128", "master_compact"],
                                            "description": "Machine to switch to (default: keep the current one)"] as JSONValue,
                                  "second_processor": prop("boolean", "Fit a second processor (default: keep as is)"),
                                  "coprocessor": ["type": "string", "enum": ["mos6502", "z80"],
@@ -140,7 +141,7 @@ public final class AgentTools: Sendable {
         )) { context, args in
             var requestedModel: BBCMicro.Model?
             if let name = args["model"]?.stringValue {
-                guard let named = agentModels[name] else { throw ToolFailure("model must be model_b, b_plus, master_128 or master_compact") }
+                guard let named = agentModels[name] else { throw ToolFailure("model must be model_a, model_b, b_plus, master_128 or master_compact") }
                 requestedModel = named
             }
             let model = requestedModel

@@ -47,6 +47,7 @@ struct MachineToolbar: CustomizableToolbarContent {
             } primaryAction: {
                 machine.openDisc()
             }
+            .disabled(!machine.model.hasDiscInterface)
             .help("Open and boot a disc; hold for more")
         }
 
