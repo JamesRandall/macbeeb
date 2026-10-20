@@ -125,7 +125,45 @@ extension BBCMicro {
         return true
     }
 
+    /// Releases every key (e.g. when the window loses focus, so keys
+    /// aren't left held down).
+    public func releaseAllKeys() {
+        for column in 0..<16 {
+            keyColumns[column] = 0
+        }
+        if resetting {
+            setKey(.breakKey, down: false)
+        }
+    }
+
     // MARK: Loading programs
+
+    public enum LoadError: Error {
+        case badDisc(Error)
+        case noSuchFile(String)
+    }
+
+    /// Loads a file from a DFS disc image straight into memory: BASIC at
+    /// PAGE, anything else at its load address. Returns the file.
+    @discardableResult
+    public func loadProgram(disc: [UInt8], file name: String) -> Result<DFSDisc.File, LoadError> {
+        let image: DFSDisc
+        do {
+            image = try DFSDisc(side: disc)
+        } catch {
+            return .failure(.badDisc(error))
+        }
+        guard let file = image.file(named: name) else {
+            return .failure(.noSuchFile(name))
+        }
+        let contents = image.contents(of: file)
+        if contents.first == 0x0D {
+            loadBASIC(contents)
+        } else {
+            load(contents, at: UInt16(truncatingIfNeeded: file.loadAddress))
+        }
+        return .success(file)
+    }
 
     /// Copies `bytes` into RAM at `address`.
     public func load(_ bytes: [UInt8], at address: UInt16) {

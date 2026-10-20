@@ -8,8 +8,12 @@ public enum Screenshot {
     /// The TV's last complete frame as an image, at native resolution
     /// (736x576, each scanline doubled).
     public static func image(_ tv: TVOutput) -> CGImage? {
-        let width = TVOutput.width, height = TVOutput.height
-        let data = tv.lastFrame.withUnsafeBufferPointer { Data(buffer: $0) }
+        image(pixels: tv.lastFrame, width: TVOutput.width, height: TVOutput.height)
+    }
+
+    /// An image from 0x00RRGGBB pixels.
+    public static func image(pixels: [UInt32], width: Int, height: Int) -> CGImage? {
+        let data = pixels.withUnsafeBufferPointer { Data(buffer: $0) }
         guard let provider = CGDataProvider(data: data as CFData) else { return nil }
         return CGImage(width: width, height: height,
                        bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: width * 4,
@@ -20,7 +24,11 @@ public enum Screenshot {
 
     /// PNG data for the TV's last complete frame.
     public static func png(_ tv: TVOutput) -> Data? {
-        guard let image = image(tv) else { return nil }
+        png(pixels: tv.lastFrame, width: TVOutput.width, height: TVOutput.height)
+    }
+
+    public static func png(pixels: [UInt32], width: Int, height: Int) -> Data? {
+        guard let image = image(pixels: pixels, width: width, height: height) else { return nil }
         let data = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil) else { return nil }
         CGImageDestinationAddImage(destination, image, nil)

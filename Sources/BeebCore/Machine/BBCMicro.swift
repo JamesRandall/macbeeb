@@ -20,6 +20,9 @@ public final class BBCMicro {
     public var videoULA = VideoULA()
     public var saa5050 = SAA5050()
     public var adc = UPD7002()
+    public var soundChip = SN76489()
+    var mixer: SoundMixer?
+    var sampleRing: SampleRing?
 
     /// 6850 ACIA control register. Until serial and tape are emulated, the
     /// ACIA is idle: nothing received, nothing connected.
@@ -236,6 +239,17 @@ public final class BBCMicro {
         return notCTS | (rs423 ? 0 : 0x02)
     }
 
+    /// Sends audio, at `sampleRate`, to `ring`.
+    public func attachAudio(sampleRate: Int, ring: SampleRing) {
+        mixer = SoundMixer(outputRate: sampleRate)
+        sampleRing = ring
+    }
+
+    public func detachAudio() {
+        mixer = nil
+        sampleRing = nil
+    }
+
     // MARK: Keyboard
 
     public func isKeyDown(_ key: BeebKey) -> Bool {
@@ -336,6 +350,14 @@ public final class BBCMicro {
             updateVideo(trailingEdge: trailingEdge)
         }
         emitVideo()
+
+        // Sound: 250kHz. The chip takes port A while IC32 bit 0 is low.
+        if cycles & 7 == 0 {
+            let output = soundChip.update(write: addressableLatch & 1 == 0, value: systemVIA.a.p)
+            if mixer != nil, let sample = mixer!.mix(output) {
+                sampleRing?.write(sample)
+            }
+        }
 
         // VIAs.
         if trailingEdge {

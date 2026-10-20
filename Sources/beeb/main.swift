@@ -59,20 +59,12 @@ machine.tv = tv
 // Let it boot, load files, then type.
 machine.runUntilIdle()
 for (discPath, name) in loads {
-    do {
-        let disc = try DFSDisc(side: [UInt8](Data(contentsOf: URL(fileURLWithPath: discPath))))
-        guard let file = disc.file(named: name) else {
-            FileHandle.standardError.write(Data("beeb: no \(name) on \(discPath)\n".utf8))
-            exit(1)
-        }
-        let contents = disc.contents(of: file)
-        if contents.first == 0x0D {
-            machine.loadBASIC(contents)
-        } else {
-            machine.load(contents, at: UInt16(truncatingIfNeeded: file.loadAddress))
-        }
-    } catch {
-        FileHandle.standardError.write(Data("beeb: couldn't read \(discPath): \(error)\n".utf8))
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: discPath)) else {
+        FileHandle.standardError.write(Data("beeb: couldn't read \(discPath)\n".utf8))
+        exit(1)
+    }
+    if case .failure(let error) = machine.loadProgram(disc: [UInt8](data), file: name) {
+        FileHandle.standardError.write(Data("beeb: couldn't load \(name) from \(discPath): \(error)\n".utf8))
         exit(1)
     }
 }

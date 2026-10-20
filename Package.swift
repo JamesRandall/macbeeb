@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "BeebCapture", targets: ["BeebCapture"]),
         .library(name: "BeebROMs", targets: ["BeebROMs"]),
         .executable(name: "beeb", targets: ["beeb"]),
+        .executable(name: "MacBeeb", targets: ["MacBeeb"]),
         .executable(name: "beeb-bench", targets: ["beeb-bench"]),
         .executable(name: "m6502-gen", targets: ["m6502-gen"]),
     ],
@@ -30,7 +31,16 @@ let package = Package(
         // Screenshots (and later, video recording).
         .target(name: "BeebCapture", dependencies: ["BeebCore"]),
 
+        // Runs a machine on its own thread, paced by audio or the wall clock.
+        .target(name: "BeebHost", dependencies: ["BeebCore"]),
+
         .executableTarget(name: "beeb", dependencies: ["BeebCore", "BeebCapture", "BeebROMs"]),
+
+        // The Mac app.
+        .executableTarget(
+            name: "MacBeeb",
+            dependencies: ["BeebCore", "BeebHost", "BeebCapture", "BeebROMs"]
+        ),
 
         // 6502 state machine generator. Run `swift run m6502-gen` after
         // changing M6502GenKit; a test checks the output is up to date.
