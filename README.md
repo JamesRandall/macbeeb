@@ -84,7 +84,22 @@ Tools: `run_command`, `type_text`, `press_keys`, `load_disc`, `eject_disc`,
 `read_screen_text`, `screenshot`, `peek`, `poke`, `disassemble`,
 `get_status`, `press_break`, `power_cycle` (which can switch model),
 `save_snapshot`, `restore_snapshot`, `save_state`, `load_state`,
-`start_recording`, `stop_recording`.
+`start_recording`, `stop_recording`; and for debugging, `set_breakpoint`,
+`list_breakpoints`, `delete_breakpoint`, `continue`, `step`, `registers`,
+`set_register`, `memory_regions`, `trace`, `debug_log` (with `peek`,
+`poke` and `disassemble` taking a CPU and address space).
+
+## Debugging
+
+`Debugger` (in BeebCore) does breakpoints on execute, read or write, over
+ranges, with conditions (`A == &41 && [&70] > 3`), hit counts, ROM bank
+qualifiers and log points; stepping by instruction, over, out, cycle,
+scanline, frame and interrupt; register editing; and instruction traces.
+It works on the host CPU and the second processor, stops on the exact
+cycle, and costs one test per cycle when nothing is set. Memory can be
+read and written in each address space (the CPU's view, or main, shadow,
+ANDY, HAZEL, each sideways bank, the OS ROM, parasite RAM) without side
+effects.
 
 ## The machines
 

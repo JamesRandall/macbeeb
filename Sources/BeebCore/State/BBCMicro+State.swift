@@ -46,7 +46,7 @@ extension BBCMicro {
         var serial: SerialULA
         var tape: Tape.State?
         var tube: Tube
-        var parasiteDoubleCycle: Bool
+        var parasiteCredit: Int
         var secondProcessor: SecondProcessorState?
 
         /// Whether the snapshot has a tape in the recorder.
@@ -68,7 +68,7 @@ extension BBCMicro {
                  systemVIAIRQ: systemVIAIRQ, userVIAIRQ: userVIAIRQ,
                  keyColumns: keyColumns, keyScanColumn: keyScanColumn, notJoystickButtons: notJoystickButtons, resetting: resetting,
                  keyEvents: keyEvents, paste: paste, serial: serial,
-                 tape: tape?.state, tube: tube, parasiteDoubleCycle: parasiteDoubleCycle,
+                 tape: tape?.state, tube: tube, parasiteCredit: parasiteCredit,
                  secondProcessor: secondProcessor.map(SecondProcessorState.init),
                  crtcLastOutput: crtcLastOutput,
                  ic15Byte: ic15Byte, unit: unit)
@@ -119,7 +119,7 @@ extension BBCMicro {
         paste = s.paste
         serial = s.serial
         tube = s.tube
-        parasiteDoubleCycle = s.parasiteDoubleCycle
+        parasiteCredit = s.parasiteCredit
         if let secondProcessor, let state = s.secondProcessor {
             state.restore(into: secondProcessor)
         }

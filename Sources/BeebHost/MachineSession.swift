@@ -35,7 +35,8 @@ extension MachineSession {
     public func advance(until done: () -> Bool, maxSeconds: Double) -> Bool {
         let deadline = machine.cycles + UInt64(maxSeconds * 2_000_000)
         while !done() {
-            if machine.cycles >= deadline { return false }
+            // A debugger stop holds the machine still.
+            if machine.cycles >= deadline || machine.isStoppedByDebugger { return false }
             advance(cycles: 10_000)
         }
         return true

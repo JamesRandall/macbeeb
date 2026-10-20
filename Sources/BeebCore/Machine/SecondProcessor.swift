@@ -20,6 +20,8 @@ public final class SecondProcessor {
     /// 4K; the 2K ROM sits at the top (&F800-&FFFF), as in b2.
     let rom: [UInt8]
     public internal(set) var bootMode = true
+    /// Set while the debugger wants to see every access.
+    unowned(unsafe) var debugger: Debugger?
 
     init(rom romImage: [UInt8]) {
         precondition(romImage.count <= 4096, "second processor ROM too big")
@@ -77,5 +79,6 @@ public final class SecondProcessor {
         } else {
             cpu.dbus = ram[Int(address)]
         }
+        debugger?.parasiteAccessed(address, cpu.access)
     }
 }

@@ -89,10 +89,16 @@ public final class AgentTools: Sendable {
         var lines = text
         while lines.last?.isEmpty == true { lines.removeLast() }
         let time = String(format: "%.2f", Double(session.machine.cycles) / 2_000_000)
-        return (extra.isEmpty ? "" : extra + "\n") + "[t=\(time)s] screen:\n" + lines.joined(separator: "\n")
+        var notes = extra
+        if let reason = session.machine.debuggerIfCreated?.stopReason {
+            notes += (notes.isEmpty ? "" : "\n") + "(stopped in the debugger: \(reason); continue or step to go on)"
+        }
+        return (notes.isEmpty ? "" : notes + "\n") + "[t=\(time)s] screen:\n" + lines.joined(separator: "\n")
     }
 
-    static let tools: [Tool] = [
+    static let tools: [Tool] = coreTools + debugTools
+
+    static let coreTools: [Tool] = [
         Tool(definition: ToolDefinition(
             name: "get_status",
             description: "Machine state: emulated time, CPU registers, screen mode, discs in the drives, whether it's waiting for input.",
@@ -374,65 +380,6 @@ public final class AgentTools: Sendable {
             .text(try context.perform { session in
                 var lines = session.machine.screenText()
                 while lines.last?.isEmpty == true { lines.removeLast() }
-                return lines.joined(separator: "\n")
-            })
-        },
-
-        Tool(definition: ToolDefinition(
-            name: "peek",
-            description: "Read memory (as the CPU sees it, without side effects). Returns a hex dump.",
-            inputSchema: schema(["address": prop("string", "Start address: &1900, $1900, 0x1900 or decimal"),
-                                 "length": prop("integer", "Bytes (default 64, max 4096)")],
-                                required: ["address"])
-        )) { context, args in
-            guard let address = args["address"]?.intValue, (0...0xFFFF).contains(address) else {
-                throw ToolFailure("address must be 0-&FFFF")
-            }
-            let length = min(max(args["length"]?.intValue ?? 64, 1), 4096)
-            return .text(try context.perform { session in
-                let bytes = (0..<length).map { session.machine.peek(UInt16(truncatingIfNeeded: address + $0)) }
-                return hexDump(bytes, address: address)
-            })
-        },
-
-        Tool(definition: ToolDefinition(
-            name: "poke",
-            description: "Write bytes to RAM (&0000-&7FFF).",
-            inputSchema: schema(["address": prop("string", "Start address"),
-                                 "bytes": ["type": "array", "items": ["type": "integer"], "description": "Values 0-255"]],
-                                required: ["address", "bytes"])
-        )) { context, args in
-            guard let address = args["address"]?.intValue, (0..<0x8000).contains(address) else {
-                throw ToolFailure("address must be in RAM, 0-&7FFF")
-            }
-            guard let bytes = args["bytes"]?.arrayValue?.compactMap(\.intValue), bytes.allSatisfy({ (0...255).contains($0) }) else {
-                throw ToolFailure("bytes must be an array of 0-255")
-            }
-            return .text(try context.perform { session in
-                session.machine.load(bytes.map { UInt8($0) }, at: UInt16(address))
-                return "wrote \(bytes.count) bytes at &\(hex(UInt16(address), 4))"
-            })
-        },
-
-        Tool(definition: ToolDefinition(
-            name: "disassemble",
-            description: "Disassemble 6502 code from an address (default: the current PC).",
-            inputSchema: schema(["address": prop("string", "Start address"),
-                                 "count": prop("integer", "Instructions (default 16)")])
-        )) { context, args in
-            let count = min(max(args["count"]?.intValue ?? 16, 1), 256)
-            let start = args["address"]?.intValue
-            return .text(try context.perform { session in
-                let m = session.machine
-                let disassembler = M6502Disassembler(variant: .nmos)
-                var address = UInt16(truncatingIfNeeded: start ?? Int(m.cpu.opcodePC))
-                var lines: [String] = []
-                for _ in 0..<count {
-                    let (text, length) = disassembler.disassemble(at: address, read: m.peek)
-                    let bytes = (0..<length).map { hex(m.peek(address &+ UInt16($0))) }.joined(separator: " ")
-                    lines.append("\(hex(address, 4))  \(bytes.padding(toLength: 9, withPad: " ", startingAt: 0))  \(text)")
-                    address &+= UInt16(length)
-                }
                 return lines.joined(separator: "\n")
             })
         },

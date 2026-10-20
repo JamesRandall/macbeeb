@@ -159,7 +159,7 @@ extension BBCMicro {
         watchForIdle(true)
         defer { watchForIdle(false) }
         let deadline = cycles + UInt64(maxSeconds * 2_000_000)
-        while !reachedIdle && cycles < deadline {
+        while !reachedIdle && cycles < deadline && !isStoppedByDebugger {
             run(cycles: Int(min(deadline - cycles, 200_000)))
         }
         guard reachedIdle else { return false }
@@ -175,7 +175,7 @@ extension BBCMicro {
         watch(address: address)
         defer { watch(address: nil) }
         let deadline = cycles + UInt64(maxSeconds * 2_000_000)
-        while !reachedWatchAddress && cycles < deadline {
+        while !reachedWatchAddress && cycles < deadline && !isStoppedByDebugger {
             run(cycles: Int(min(deadline - cycles, 200_000)))
         }
         return reachedWatchAddress

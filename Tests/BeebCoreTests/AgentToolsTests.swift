@@ -28,7 +28,10 @@ struct AgentToolsTests {
         let tools = makeTools()
         #expect(!tools.call("poke", arguments: ["address": "&3000", "bytes": [0x12, 0xAB]]).isError)
         #expect(text(tools.call("peek", arguments: ["address": "&3000", "length": 2])).contains("12 AB"))
-        #expect(tools.call("poke", arguments: ["address": "&C000", "bytes": [1]]).isError)
+        // ROM can be patched; I/O can't be poked.
+        #expect(!tools.call("poke", arguments: ["address": "&C000", "bytes": [1]]).isError)
+        #expect(text(tools.call("peek", arguments: ["address": "&C000", "length": 1])).contains("C000  01"))
+        #expect(tools.call("poke", arguments: ["address": "&FE40", "bytes": [1]]).isError)
     }
 
     @Test func runUntilAddressStopsThere() {

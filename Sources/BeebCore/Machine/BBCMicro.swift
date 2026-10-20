@@ -59,8 +59,16 @@ public final class BBCMicro {
     /// The 6502 Second Processor, if fitted, and the Tube to it.
     public let secondProcessor: SecondProcessor?
     public internal(set) var tube = Tube()
-    /// Alternates host cycles of 1 and 2 parasite cycles: 3MHz.
-    var parasiteDoubleCycle = false
+    /// Parasite half-cycles owed: 3 more each host cycle, 2 per parasite
+    /// cycle, so host cycles alternate 1 and 2 parasite cycles (3MHz).
+    var parasiteCredit = 0
+
+    // Debugging.
+    public internal(set) var debuggerIfCreated: Debugger?
+    /// Set while the debugger wants to see every access.
+    var debugHooks = false
+    /// Set while the debugger wants to see the CRTC's syncs.
+    var debugVideoHooks = false
 
     /// The Master's real-time clock and CMOS RAM.
     public var rtc = MC146818()
@@ -386,7 +394,7 @@ public final class BBCMicro {
         return (0..<8).map { osROM[offset + $0] }
     }
 
-    private func peekIO(_ address: UInt16) -> UInt8 {
+    func peekIO(_ address: UInt16) -> UInt8 {
         if model == .master128 {
             switch address & 0xFFE0 {
             case 0xFE00:
@@ -737,6 +745,10 @@ public final class BBCMicro {
     /// Returns the cycles run.
     @discardableResult
     public func run(cycles count: Int) -> Int {
+        // A debugger stop holds until it's resumed.
+        if isStoppedByDebugger {
+            return 0
+        }
         stopRequested = false
         var done = 0
         while done < count && !stopRequested {
@@ -806,15 +818,19 @@ public final class BBCMicro {
                     opcodeFetched()
                 }
             }
+            if debugHooks {
+                debugger.hostAccessed(address, cpu.access)
+            }
         }
 
-        // Second processor, at 3MHz.
+        // Second processor, at 3MHz. A debugger stop can leave a cycle
+        // owed until the next host cycle.
         if let secondProcessor {
-            secondProcessor.step(tube: &tube)
-            if parasiteDoubleCycle {
+            parasiteCredit += 3
+            while parasiteCredit >= 2 && !(debugHooks && stopRequested) {
                 secondProcessor.step(tube: &tube)
+                parasiteCredit -= 2
             }
-            parasiteDoubleCycle.toggle()
             cpu.setIRQ(IRQDevice.tube, tubeAccessible && tube.hostIRQ)
         }
 
@@ -847,6 +863,9 @@ public final class BBCMicro {
     @inline(__always)
     private func updateVideo(trailingEdge: Bool) {
         let output = crtc.update(lightpen: systemVIA.b.c2 != 0)
+        if debugVideoHooks {
+            debugger.video(output, last: crtcLastOutput)
+        }
 
         var address = output.address
         if address & 0x2000 != 0 {
