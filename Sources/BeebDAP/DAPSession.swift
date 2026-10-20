@@ -401,7 +401,7 @@ public actor DAPSession {
     private func step(_ command: RunCommand, _ args: JSONValue) async throws -> JSONValue? {
         let cpu = Self.cpu(args)
         try await machine { s in
-            guard s.machine.debugCPU(cpu) != nil else { throw DAPError("there's no second processor") }
+            guard s.machine.hasDebugCPU(cpu) else { throw DAPError("there's no second processor") }
             s.machine.debugger.begin(command, cpu: cpu)
         }
         return nil
@@ -575,10 +575,11 @@ public actor DAPSession {
     // MARK: State
 
     private func threads() async throws -> JSONValue {
-        let parasite = try await machine { $0.machine.secondProcessor != nil }
+        let parasite = try await machine { $0.machine.debugCPUKind(.parasite) }
         var threads: [JSONValue] = [["id": .number(Double(Self.hostThread)), "name": "Host CPU"]]
-        if parasite {
-            threads.append(["id": .number(Double(Self.parasiteThread)), "name": "Second processor"])
+        if let parasite {
+            threads.append(["id": .number(Double(Self.parasiteThread)),
+                            "name": .string(parasite == .z80 ? "Z80 second processor" : "Second processor")])
         }
         return ["threads": .array(threads)]
     }
@@ -589,20 +590,8 @@ public actor DAPSession {
         let cpu = Self.cpu(args)
         let frames = try await machine { s -> [JSONValue] in
             let m = s.machine
-            guard let c = m.debugCPU(cpu) else { return [] }
             let symbols = m.debugger.symbols(cpu)
-            let read = { (a: Int) in m.debugRead(.cpu(cpu), a & 0xFFFF) ?? 0 }
-            var addresses = [m.instructionAddress(cpu)]
-            var sp = Int(c.s) + 1
-            while sp < 0xFF && addresses.count < 16 {
-                let pushed = Int(read(0x100 + sp)) | Int(read(0x100 + sp + 1)) << 8
-                if pushed >= 2 && read(pushed - 2) == 0x20 {
-                    addresses.append(UInt16(truncatingIfNeeded: pushed - 2))
-                    sp += 2
-                } else {
-                    sp += 1
-                }
-            }
+            let addresses = m.callStack(cpu)
             return addresses.enumerated().map { index, address in
                 var frame: [String: JSONValue] = [
                     "id": .number(Double(index + (cpu == .parasite ? 1000 : 0))),
@@ -646,16 +635,14 @@ public actor DAPSession {
             switch reference {
             case 1, 2:
                 let cpu: DebugCPU = reference == 2 ? .parasite : .host
-                return ["PC", "A", "X", "Y", "S", "P"].compactMap { name in
-                    guard let value = m.register(name, cpu: cpu) else { return nil }
-                    let digits = name == "PC" ? 4 : 2
-                    return ["name": .string(name), "value": .string("&" + String(format: "%0\(digits)X", value) + " (\(value))"),
-                            "variablesReference": 0, "memoryReference": .string(Self.reference(UInt16(truncatingIfNeeded: value), cpu: cpu))]
+                return m.registers(cpu).map { r in
+                    ["name": .string(r.name), "value": .string("&" + String(format: "%0\(r.digits)X", r.value) + " (\(r.value))"),
+                     "variablesReference": 0, "memoryReference": .string(Self.reference(UInt16(truncatingIfNeeded: r.value), cpu: cpu))]
                 }
             case 3, 4:
                 let cpu: DebugCPU = reference == 4 ? .parasite : .host
-                return ["N", "V", "D", "I", "Z", "C"].compactMap { name in
-                    m.register(name, cpu: cpu).map { ["name": .string(name), "value": .string("\($0)"), "variablesReference": 0] }
+                return m.flags(cpu).compactMap { flag in
+                    flag.register.map { ["name": .string($0), "value": .string(flag.set ? "1" : "0"), "variablesReference": 0] }
                 }
             case 10:
                 return m.hardwareState.enumerated().map { index, section in
@@ -677,13 +664,13 @@ public actor DAPSession {
             throw DAPError("only registers and flags can be set")
         }
         let cpu: DebugCPU = reference % 2 == 0 ? .parasite : .host
-        let value = try await machine { s -> Int in
+        let (value, digits) = try await machine { s -> (Int, Int) in
             let m = s.machine
             let v = try DebugExpression(text.components(separatedBy: " ").first ?? text).evaluate(m.debugger.expressionContext(cpu))
             try m.setRegister(name, cpu: cpu, to: v)
-            return m.register(name, cpu: cpu) ?? v
+            return (m.register(name, cpu: cpu) ?? v, m.registers(cpu).first { $0.name == name }?.digits ?? 2)
         }
-        return ["value": .string(reference <= 2 ? "&" + String(format: name == "PC" ? "%04X" : "%02X", value) + " (\(value))" : "\(value)")]
+        return ["value": .string(reference <= 2 ? "&" + String(format: "%0\(digits)X", value) + " (\(value))" : "\(value)")]
     }
 
     private func evaluate(_ args: JSONValue) async throws -> JSONValue {

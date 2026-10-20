@@ -296,8 +296,14 @@ public struct SymbolTable: Sendable {
 
     /// The OS's entry points and vectors, and (for the host) the hardware
     /// registers.
-    public static func builtIn(model: BBCMicro.Model, cpu: DebugCPU) -> SymbolTable {
+    public static func builtIn(model: BBCMicro.Model, cpu: DebugCPU, z80: Bool = false) -> SymbolTable {
         var table = SymbolTable()
+        if cpu == .parasite && z80 {
+            // CP/M's entry points.
+            table.add("WBOOT", 0x0000)
+            table.add("BDOS", 0x0005)
+            return table
+        }
         let entries: [(String, Int)] = [
             ("OSCLI", 0xFFF7), ("OSBYTE", 0xFFF4), ("OSWORD", 0xFFF1), ("OSWRCH", 0xFFEE), ("OSNEWL", 0xFFE7),
             ("OSASCI", 0xFFE3), ("OSRDCH", 0xFFE0), ("OSFILE", 0xFFDD), ("OSARGS", 0xFFDA), ("OSBGET", 0xFFD7),

@@ -20,6 +20,8 @@ public protocol Z80Bus: AnyObject {
     func read(_ address: UInt16) -> UInt8
     /// An opcode fetch (M1 cycle), including prefix bytes. Defaults to `read`.
     func fetchOpcode(_ address: UInt16) -> UInt8
+    /// An instruction's operand or displacement byte. Defaults to `read`.
+    func fetchOperand(_ address: UInt16) -> UInt8
     func write(_ address: UInt16, _ value: UInt8)
     /// An I/O read. `port` is the full 16 bit address: (A or B)<<8 | n or C.
     func input(_ port: UInt16) -> UInt8
@@ -28,6 +30,7 @@ public protocol Z80Bus: AnyObject {
 
 extension Z80Bus {
     public func fetchOpcode(_ address: UInt16) -> UInt8 { read(address) }
+    public func fetchOperand(_ address: UInt16) -> UInt8 { read(address) }
 }
 
 public final class Z80 {
@@ -270,7 +273,7 @@ public final class Z80 {
     }
 
     @inline(__always) func fetch() -> UInt8 {
-        let v = read(pc)
+        let v = bus.fetchOperand(pc)
         pc &+= 1
         return v
     }

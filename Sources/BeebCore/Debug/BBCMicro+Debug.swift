@@ -57,6 +57,36 @@ public enum MemorySpace: Hashable, Sendable, Codable, CustomStringConvertible {
     }
 }
 
+public enum DebugCPUKind: String, Sendable, Codable {
+    case mos6502
+    case z80
+}
+
+public struct DebugRegister: Sendable, Equatable, Identifiable {
+    public var name: String
+    public var value: Int
+    /// Hex digits to show.
+    public var digits: Int
+    public var id: String { name }
+}
+
+public struct DebugFlag: Sendable, Equatable, Identifiable {
+    public var label: String
+    /// The register name it's set by, or nil if it can't be.
+    public var register: String?
+    public var set: Bool
+    public var id: String { label }
+}
+
+public protocol InstructionDisassembler: Sendable {
+    /// The instruction at `address` (read with `read`): its text and
+    /// length.
+    func disassemble(at address: UInt16, read: (UInt16) -> UInt8) -> (text: String, length: Int)
+}
+
+extension M6502Disassembler: InstructionDisassembler {}
+extension Z80Disassembler: InstructionDisassembler {}
+
 public struct MemoryRegion: Sendable, Equatable {
     public var space: MemorySpace
     public var name: String
@@ -77,14 +107,102 @@ extension BBCMicro {
         return created
     }
 
+    /// A 6502 being debugged (nil for a Z80 second processor: see
+    /// `debugCPUKind(_:)`).
     public func debugCPU(_ which: DebugCPU) -> M6502? {
         which == .host ? cpu : secondProcessor?.cpu
     }
 
+    /// What `which` is, or nil if it isn't fitted.
+    public func debugCPUKind(_ which: DebugCPU) -> DebugCPUKind? {
+        switch which {
+        case .host: .mos6502
+        case .parasite: secondProcessor != nil ? .mos6502 : z80Processor != nil ? .z80 : nil
+        }
+    }
+
+    public func hasDebugCPU(_ which: DebugCPU) -> Bool {
+        debugCPUKind(which) != nil
+    }
+
     /// The address of the instruction `which` is executing, or about to.
     public func instructionAddress(_ which: DebugCPU) -> UInt16 {
+        if which == .parasite, let z = z80Processor {
+            return z.cpu.pc
+        }
         guard let c = debugCPU(which) else { return 0 }
         return c.isAboutToExecute ? c.abus : c.opcodePC
+    }
+
+    /// Whether `which` is between instructions (a Z80 always is when
+    /// stopped).
+    public func isAtInstruction(_ which: DebugCPU) -> Bool {
+        debugCPU(which)?.isAboutToExecute ?? true
+    }
+
+    /// The stack pointer: S, or the Z80's SP.
+    public func stackPointer(_ which: DebugCPU) -> Int? {
+        if which == .parasite, let z = z80Processor {
+            return Int(z.cpu.sp)
+        }
+        return debugCPU(which).map { Int($0.s) }
+    }
+
+    /// What's on the stack, top first: from S+1 to &1FF on a 6502, from SP
+    /// up on a Z80.
+    public func stackContents(_ which: DebugCPU, count: Int = 48) -> [(address: UInt16, value: UInt8)] {
+        guard let sp = stackPointer(which) else { return [] }
+        let addresses = debugCPUKind(which) == .z80
+            ? Array(sp..<min(0x10000, sp + count))
+            : Array(0x100 + sp + 1..<min(0x200, 0x100 + sp + 1 + count))
+        return addresses.map { (UInt16($0), debugRead(.cpu(which), $0) ?? 0xFF) }
+    }
+
+    /// The current instruction, then likely callers: return addresses on
+    /// the stack that follow a JSR (or a Z80 CALL).
+    public func callStack(_ which: DebugCPU, limit: Int = 16) -> [UInt16] {
+        guard let sp = stackPointer(which) else { return [] }
+        let read = { (a: Int) in Int(self.debugRead(.cpu(which), a & 0xFFFF) ?? 0) }
+        var addresses = [instructionAddress(which)]
+        if debugCPUKind(which) == .z80 {
+            var a = sp
+            while a < 0xFFFF && addresses.count < limit && a < sp + 64 {
+                let pushed = read(a) | read(a + 1) << 8
+                if pushed >= 3, read(pushed - 3) == 0xCD || read(pushed - 3) & 0xC7 == 0xC4 {
+                    addresses.append(UInt16(pushed - 3))
+                    a += 2
+                } else {
+                    a += 1
+                }
+            }
+            return addresses
+        }
+        var s = sp + 1
+        while s < 0xFF && addresses.count < limit {
+            let pushed = read(0x100 + s) | read(0x100 + s + 1) << 8
+            if pushed >= 2 && read(pushed - 2) == 0x20 {
+                addresses.append(UInt16(truncatingIfNeeded: pushed - 2))
+                s += 2
+            } else {
+                s += 1
+            }
+        }
+        return addresses
+    }
+
+    /// If the instruction at `pc` calls (JSR; a Z80 CALL or RST, or a
+    /// repeating block instruction), its length: stepping over it runs to
+    /// the instruction after.
+    func callLength(_ which: DebugCPU, at pc: UInt16) -> Int? {
+        let read = { (a: UInt16) in self.debugRead(.cpu(which), Int(a)) ?? 0 }
+        let op = read(pc)
+        if debugCPUKind(which) == .z80 {
+            if op == 0xCD || op & 0xC7 == 0xC4 { return 3 }
+            if op & 0xC7 == 0xC7 { return 1 }
+            if op == 0xED, [0xB0, 0xB1, 0xB2, 0xB3, 0xB8, 0xB9, 0xBA, 0xBB].contains(read(pc &+ 1)) { return 2 }
+            return nil
+        }
+        return op == 0x20 ? 3 : nil
     }
 
     /// The memory regions this machine has.
@@ -108,7 +226,7 @@ extension BBCMicro {
                                         base: 0x8000, size: 0x4000, isROM: !ram))
         }
         regions.append(MemoryRegion(space: .osROM, name: "OS ROM", base: 0xC000, size: 0x4000, isROM: true))
-        if secondProcessor != nil {
+        if secondProcessor != nil || z80Processor != nil {
             regions.append(MemoryRegion(space: .cpu(.parasite), name: "Second processor's view", base: 0, size: 0x10000, isROM: false))
         }
         if secondProcessor != nil || z80Processor != nil {
@@ -154,8 +272,12 @@ extension BBCMicro {
             }
             return readPages[pageTable + address >> 12]?[address & 0xFFF]
         case .cpu(.parasite):
-            guard let p = secondProcessor, (0..<0x10000).contains(address) else { return nil }
+            guard (0..<0x10000).contains(address) else { return nil }
             let a = UInt16(address)
+            if let z = z80Processor {
+                return z.peek(a)
+            }
+            guard let p = secondProcessor else { return nil }
             return a & 0xFFF0 == 0xFEF0 ? tube.parasitePeek(Int(a)) : p.peek(a)
         default:
             return storage(space, address)?.pointee
@@ -171,6 +293,12 @@ extension BBCMicro {
             guard (0..<0x10000).contains(address), address < 0xFC00 || address >= 0xFF00,
                   let page = readPages[pageTable + address >> 12] else { return false }
             page[address & 0xFFF] = value
+            rewinder?.keyframe()
+            return true
+        case .cpu(.parasite) where z80Processor != nil:
+            // Writes go to RAM, under the ROM too.
+            guard (0..<0x10000).contains(address) else { return false }
+            z80Processor!.ram[address] = value
             rewinder?.keyframe()
             return true
         case .cpu(.parasite):
@@ -189,8 +317,50 @@ extension BBCMicro {
 
     // MARK: Registers
 
-    /// A register or flag: A X Y S P PC, C Z I D V N, or CYCLES.
+    /// The registers to show, in order.
+    public func registers(_ which: DebugCPU) -> [DebugRegister] {
+        let names: [(String, Int)] = switch debugCPUKind(which) {
+        case .mos6502: [("PC", 4), ("A", 2), ("X", 2), ("Y", 2), ("S", 2), ("P", 2)]
+        case .z80: [("PC", 4), ("AF", 4), ("BC", 4), ("DE", 4), ("HL", 4), ("IX", 4), ("IY", 4), ("SP", 4),
+                    ("AF'", 4), ("BC'", 4), ("DE'", 4), ("HL'", 4), ("I", 2), ("R", 2), ("IM", 1)]
+        case nil: []
+        }
+        return names.compactMap { name, digits in
+            register(name, cpu: which).map { DebugRegister(name: name, value: $0, digits: digits) }
+        }
+    }
+
+    /// The flags to show, in order (P's bits, or F's and the interrupt
+    /// flip-flops).
+    public func flags(_ which: DebugCPU) -> [DebugFlag] {
+        switch debugCPUKind(which) {
+        case .mos6502:
+            let p = register("P", cpu: which) ?? 0
+            return zip(["N", "V", "-", "B", "D", "I", "Z", "C"], (0..<8).reversed()).map { name, bit in
+                DebugFlag(label: name, register: ["-", "B"].contains(name) ? nil : name, set: p & 1 << bit != 0)
+            }
+        case .z80:
+            let f = register("F", cpu: which) ?? 0
+            let registers: [String?] = ["SF", "ZF", nil, "HF", nil, "PF", "NF", "CF"]
+            var flags = zip(zip(["S", "Z", "Y", "H", "X", "P/V", "N", "C"], registers), (0..<8).reversed()).map { pair, bit in
+                DebugFlag(label: pair.0, register: pair.1, set: f & 1 << bit != 0)
+            }
+            for name in ["IFF1", "IFF2"] {
+                flags.append(DebugFlag(label: name, register: name, set: register(name, cpu: which) == 1))
+            }
+            return flags
+        case nil:
+            return []
+        }
+    }
+
+    /// A register or flag: A X Y S P PC, C Z I D V N, or CYCLES. On a Z80:
+    /// A F B C D E H L, AF BC DE HL IX IY SP PC, IXH IXL IYH IYL, AF' BC'
+    /// DE' HL', I R IM, the flags SF ZF HF PF (or VF) NF CF, and IFF1 IFF2.
     public func register(_ name: String, cpu which: DebugCPU) -> Int? {
+        if which == .parasite, let z = z80Processor {
+            return z80Register(name.uppercased(), z.cpu)
+        }
         guard let c = debugCPU(which) else { return nil }
         switch name.uppercased() {
         case "A": return Int(c.a)
@@ -227,6 +397,11 @@ extension BBCMicro {
     /// Sets a register or flag. PC can only be changed between
     /// instructions (the new instruction's opcode is fetched now).
     public func setRegister(_ name: String, cpu which: DebugCPU, to value: Int) throws(RegisterError) {
+        if which == .parasite, let z = z80Processor {
+            guard setZ80Register(name.uppercased(), z.cpu, value) else { throw .unknown(name) }
+            rewinder?.keyframe()
+            return
+        }
         guard let c = debugCPU(which) else { throw .noSuchCPU }
         let byte = UInt8(truncatingIfNeeded: value)
         switch name.uppercased() {
@@ -258,9 +433,91 @@ extension BBCMicro {
         rewinder?.keyframe()
     }
 
+    private static let z80Flags: [String: UInt8] = ["SF": Z80.flagS, "ZF": Z80.flagZ, "HF": Z80.flagH, "PF": Z80.flagPV,
+                                                     "VF": Z80.flagPV, "NF": Z80.flagN, "CF": Z80.flagC]
+
+    private func z80Register(_ name: String, _ c: Z80) -> Int? {
+        switch name {
+        case "A": Int(c.a)
+        case "F": Int(c.f)
+        case "B": Int(c.b)
+        case "C": Int(c.c)
+        case "D": Int(c.d)
+        case "E": Int(c.e)
+        case "H": Int(c.h)
+        case "L": Int(c.l)
+        case "AF": Int(c.af)
+        case "BC": Int(c.bc)
+        case "DE": Int(c.de)
+        case "HL": Int(c.hl)
+        case "IX": Int(c.ix)
+        case "IY": Int(c.iy)
+        case "IXH": Int(c.ix >> 8)
+        case "IXL": Int(c.ix & 0xFF)
+        case "IYH": Int(c.iy >> 8)
+        case "IYL": Int(c.iy & 0xFF)
+        case "SP": Int(c.sp)
+        case "PC": Int(c.pc)
+        case "AF'": Int(c.afPrime)
+        case "BC'": Int(c.bcPrime)
+        case "DE'": Int(c.dePrime)
+        case "HL'": Int(c.hlPrime)
+        case "I": Int(c.i)
+        case "R": Int(c.r)
+        case "IM": Int(c.im)
+        case "IFF1": c.iff1 ? 1 : 0
+        case "IFF2": c.iff2 ? 1 : 0
+        case "CYCLES": Int(cycles)
+        default: Self.z80Flags[name].map { c.f & $0 != 0 ? 1 : 0 }
+        }
+    }
+
+    private func setZ80Register(_ name: String, _ c: Z80, _ value: Int) -> Bool {
+        let byte = UInt8(truncatingIfNeeded: value)
+        let word = UInt16(truncatingIfNeeded: value)
+        switch name {
+        case "A": c.a = byte
+        case "F": c.f = byte
+        case "B": c.b = byte
+        case "C": c.c = byte
+        case "D": c.d = byte
+        case "E": c.e = byte
+        case "H": c.h = byte
+        case "L": c.l = byte
+        case "AF": c.a = UInt8(word >> 8); c.f = UInt8(word & 0xFF)
+        case "BC": c.b = UInt8(word >> 8); c.c = UInt8(word & 0xFF)
+        case "DE": c.d = UInt8(word >> 8); c.e = UInt8(word & 0xFF)
+        case "HL": c.h = UInt8(word >> 8); c.l = UInt8(word & 0xFF)
+        case "IX": c.ix = word
+        case "IY": c.iy = word
+        case "IXH": c.ix = c.ix & 0xFF | UInt16(byte) << 8
+        case "IXL": c.ix = c.ix & 0xFF00 | UInt16(byte)
+        case "IYH": c.iy = c.iy & 0xFF | UInt16(byte) << 8
+        case "IYL": c.iy = c.iy & 0xFF00 | UInt16(byte)
+        case "SP": c.sp = word
+        case "PC": c.pc = word; c.halted = false
+        case "AF'": c.afPrime = word
+        case "BC'": c.bcPrime = word
+        case "DE'": c.dePrime = word
+        case "HL'": c.hlPrime = word
+        case "I": c.i = byte
+        case "R": c.r = byte
+        case "IM": c.im = min(byte, 2)
+        case "IFF1": c.iff1 = value != 0
+        case "IFF2": c.iff2 = value != 0
+        default:
+            guard let mask = Self.z80Flags[name] else { return false }
+            c.f = value != 0 ? c.f | mask : c.f & ~mask
+        }
+        return true
+    }
+
     /// The disassembler for a CPU.
-    public func disassembler(_ which: DebugCPU) -> M6502Disassembler {
-        M6502Disassembler(variant: debugCPU(which)?.variant ?? .nmos)
+    public func disassembler(_ which: DebugCPU) -> any InstructionDisassembler {
+        if debugCPUKind(which) == .z80 {
+            return Z80Disassembler()
+        }
+        return M6502Disassembler(variant: debugCPU(which)?.variant ?? .nmos)
     }
 
     /// Whether the debugger has stopped the machine.

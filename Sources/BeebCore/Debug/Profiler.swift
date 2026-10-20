@@ -58,6 +58,20 @@ final class Profiler {
         }
     }
 
+    /// `count` cycles (a Z80's T-states) in the instruction at `pc`.
+    func cycles(_ cpu: DebugCPU, pc: UInt16, count: Int) {
+        let i = cpu == .host ? 0 : 1
+        if i == 0 {
+            hostCycles[Int(pc)] &+= UInt32(count)
+        } else {
+            parasiteCycles[Int(pc)] &+= UInt32(count)
+        }
+        totals[i] += count
+        if interruptDepth[i] > 0 {
+            interrupt[i] += count
+        }
+    }
+
     /// An opcode fetch (or, `interrupt`, a fetch dropped for an interrupt).
     func fetch(_ cpu: DebugCPU, _ address: UInt16, opcode: UInt8, interrupt starting: Bool) {
         let i = cpu == .host ? 0 : 1

@@ -225,7 +225,7 @@ struct DebuggerTests {
         // The ring keeps the newest.
         var ring = TraceBuffer(capacity: 3)
         for pc in 0..<5 {
-            ring.append(TraceEntry(cycle: 0, pc: UInt16(pc), a: 0, x: 0, y: 0, s: 0, p: 0, bytes: (0, 0, 0), interrupt: false))
+            ring.append(TraceEntry(cycle: 0, pc: UInt16(pc), a: 0, x: 0, y: 0, s: 0, p: 0, bytes: (0, 0, 0, 0), interrupt: false))
         }
         #expect(ring.last(10).map(\.pc) == [2, 3, 4])
     }

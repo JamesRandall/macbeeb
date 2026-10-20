@@ -112,6 +112,11 @@ public enum RunCommand: Equatable, Sendable {
 }
 
 public struct TraceEntry: Sendable, Equatable {
+    /// A Z80's registers (where a 6502 has A X Y S P).
+    public struct Z80Registers: Sendable, Equatable {
+        public var af, bc, de, hl, ix, iy, sp: UInt16
+    }
+
     public var cycle: UInt64
     public var pc: UInt16
     public var a: UInt8
@@ -119,14 +124,40 @@ public struct TraceEntry: Sendable, Equatable {
     public var y: UInt8
     public var s: UInt8
     public var p: UInt8
-    /// The instruction's bytes when it ran.
-    public var bytes: (UInt8, UInt8, UInt8)
+    /// The instruction's bytes when it ran (up to 4 for a Z80).
+    public var bytes: (UInt8, UInt8, UInt8, UInt8)
     /// True for an interrupt starting (the fetch at `pc` was discarded).
     public var interrupt: Bool
+    /// Set for a Z80 (and A X Y S P aren't).
+    public var z80: Z80Registers?
+
+    /// The registers, e.g. "A=&12 X=&34 Y=&56 S=&F0 nv-bdIzc".
+    public var registerText: String {
+        func hex(_ v: Int, _ digits: Int) -> String {
+            let s = String(v, radix: 16, uppercase: true)
+            return "&" + String(repeating: "0", count: max(0, digits - s.count)) + s
+        }
+        if let z = z80 {
+            return "AF=\(hex(Int(z.af), 4)) BC=\(hex(Int(z.bc), 4)) DE=\(hex(Int(z.de), 4)) HL=\(hex(Int(z.hl), 4)) "
+                + "IX=\(hex(Int(z.ix), 4)) IY=\(hex(Int(z.iy), 4)) SP=\(hex(Int(z.sp), 4))"
+        }
+        let flags = zip("NV-BDIZC", (0..<8).reversed()).map { ch, bit in p & 1 << bit != 0 ? ch : Character(ch.lowercased()) }
+        return "A=\(hex(Int(a), 2)) X=\(hex(Int(x), 2)) Y=\(hex(Int(y), 2)) S=\(hex(Int(s), 2)) \(String(flags))"
+    }
+
+    /// The instruction's bytes, for disassembling it.
+    public func byte(at address: UInt16) -> UInt8 {
+        switch Int(address &- pc) % 4 {
+        case 0: bytes.0
+        case 1: bytes.1
+        case 2: bytes.2
+        default: bytes.3
+        }
+    }
 
     public static func == (l: TraceEntry, r: TraceEntry) -> Bool {
         l.cycle == r.cycle && l.pc == r.pc && l.a == r.a && l.x == r.x && l.y == r.y && l.s == r.s && l.p == r.p
-            && l.bytes == r.bytes && l.interrupt == r.interrupt
+            && l.bytes == r.bytes && l.interrupt == r.interrupt && l.z80 == r.z80
     }
 }
 
@@ -189,7 +220,16 @@ public final class Debugger {
     private var command: RunCommand?
     private var commandCPU = DebugCPU.host
     private var stepTarget: UInt16 = 0
-    private var stepStack: UInt8 = 0
+    private var stepStack = 0
+    /// The Z80 stopped before an instruction: don't stop there again on
+    /// resuming.
+    var z80Skip = false
+    /// A Z80 command is starting from an instruction it hasn't stopped at:
+    /// run that one without checking it (so a step goes somewhere).
+    private var z80Unchecked = false
+    /// While going back in history: stop the Z80 when it's run this many
+    /// instructions in the cycle.
+    var z80SeekTarget: Int?
 
     /// Opcode fetches seen per CPU (while the hooks are on), and the
     /// instruction a data breakpoint last stopped in: read-modify-write
@@ -203,7 +243,8 @@ public final class Debugger {
     /// Symbols and source lines, per CPU (the OS's and hardware's built
     /// in).
     public private(set) lazy var hostSymbols = SymbolTable.builtIn(model: machine.model, cpu: .host)
-    public private(set) lazy var parasiteSymbols = SymbolTable.builtIn(model: machine.model, cpu: .parasite)
+    public private(set) lazy var parasiteSymbols = SymbolTable.builtIn(model: machine.model, cpu: .parasite,
+                                                                       z80: machine.z80Processor != nil)
 
     public func symbols(_ cpu: DebugCPU) -> SymbolTable {
         cpu == .host ? hostSymbols : parasiteSymbols
@@ -221,7 +262,7 @@ public final class Debugger {
     /// Back to just the built-in symbols.
     public func clearSymbols() {
         hostSymbols = SymbolTable.builtIn(model: machine.model, cpu: .host)
-        parasiteSymbols = SymbolTable.builtIn(model: machine.model, cpu: .parasite)
+        parasiteSymbols = SymbolTable.builtIn(model: machine.model, cpu: .parasite, z80: machine.z80Processor != nil)
     }
 
     public private(set) var hostTrace = TraceBuffer(capacity: 1)
@@ -305,6 +346,7 @@ public final class Debugger {
         machine.debugHooks = any
         machine.debugVideoHooks = command == .nextFrame || command == .nextScanline || profilingActive
         machine.secondProcessor?.debugger = any ? self : nil
+        machine.z80Processor?.debugger = any ? self : nil
     }
 
     // MARK: Running
@@ -361,14 +403,16 @@ public final class Debugger {
     private func arm(_ command: RunCommand, cpu: DebugCPU) {
         self.command = command == .continue ? nil : command
         commandCPU = cpu
-        guard let target = machine.debugCPU(cpu) else { return }
+        guard let stack = machine.stackPointer(cpu) else { return }
         let pc = machine.instructionAddress(cpu)
-        stepStack = target.s
+        stepStack = stack
+        z80Unchecked = cpu == .parasite && machine.z80Processor != nil && command != .continue && !z80Skip
         switch command {
         case .stepOver:
-            // JSR: run to the instruction after it, at the same stack depth.
-            if machine.debugRead(.cpu(cpu), Int(pc)) == 0x20 {
-                stepTarget = pc &+ 3
+            // JSR (or CALL): run to the instruction after it, at the same
+            // stack depth.
+            if let length = machine.callLength(cpu, at: pc) {
+                stepTarget = pc &+ UInt16(length)
             } else {
                 self.command = .stepInstruction
             }
@@ -457,6 +501,7 @@ public final class Debugger {
 
     @inline(never)
     func hostAccessed(_ address: UInt16, _ access: M6502.BusAccess) {
+        if z80SeekTarget != nil { return }
         if machine.rewinder?.isReplaying == true {
             replayObserver?(.host, address, access)
             return
@@ -480,10 +525,8 @@ public final class Debugger {
         let kind: Breakpoint.Kind
         switch access {
         case .opcode:
-            kind = .execute
-            if profilingActive, let c = machine.debugCPU(cpu) {
-                profiler!.fetch(cpu, address, opcode: c.dbus, interrupt: false)
-            }
+            executing(cpu, address, opcode: machine.debugCPU(cpu)?.dbus ?? 0, flags: flags)
+            return
         case .interrupt:
             if profilingActive {
                 profiler!.fetch(cpu, address, opcode: 0, interrupt: true)
@@ -497,26 +540,39 @@ public final class Debugger {
         case .data, .address: kind = .read
         default: return
         }
+        dataAccessed(cpu, address, kind, flags: flags)
+    }
 
-        if kind == .execute {
-            fetches[cpu, default: 0] += 1
-            if tracing { record(cpu, address, interrupt: false) }
-            if let command, commandCPU == cpu, let target = machine.debugCPU(cpu) {
-                switch command {
-                case .stepInstruction:
-                    stop(.stepped(cpu))
-                case .stepOver:
-                    if address == stepTarget && target.s >= stepStack { stop(.stepped(cpu)) }
-                case .stepOut:
-                    if target.s > stepStack { stop(.stepped(cpu)) }
-                case .runToAddress:
-                    if address == stepTarget { stop(.stepped(cpu)) }
-                default:
-                    break
-                }
+    /// An instruction at `address` is about to run.
+    private func executing(_ cpu: DebugCPU, _ address: UInt16, opcode: UInt8, flags: UInt8, check: Bool = true) {
+        if profilingActive {
+            profiler!.fetch(cpu, address, opcode: opcode, interrupt: false)
+        }
+        fetches[cpu, default: 0] += 1
+        if tracing { record(cpu, address, interrupt: false) }
+        guard check else { return }
+        if let command, commandCPU == cpu, let stack = machine.stackPointer(cpu) {
+            switch command {
+            case .stepInstruction:
+                stop(.stepped(cpu))
+            case .stepOver:
+                if address == stepTarget && stack >= stepStack { stop(.stepped(cpu)) }
+            case .stepOut:
+                if stack > stepStack { stop(.stepped(cpu)) }
+            case .runToAddress:
+                if address == stepTarget { stop(.stepped(cpu)) }
+            default:
+                break
             }
         }
+        breakpointCheck(cpu, address, .execute, flags: flags)
+    }
 
+    private func dataAccessed(_ cpu: DebugCPU, _ address: UInt16, _ kind: Breakpoint.Kind, flags: UInt8) {
+        breakpointCheck(cpu, address, kind, flags: flags)
+    }
+
+    private func breakpointCheck(_ cpu: DebugCPU, _ address: UInt16, _ kind: Breakpoint.Kind, flags: UInt8) {
         guard flags & kind.rawValue != 0 else { return }
         if kind != .execute, let last = lastDataStop, last.cpu == cpu, last.address == address,
            last.fetch == fetches[cpu, default: 0] {
@@ -557,8 +613,71 @@ public final class Debugger {
         return matches
     }
 
+    /// Before each Z80 step, while the hooks are on. Returns true to stop
+    /// before it.
+    @inline(never)
+    func z80WillStep(_ z: Z80SecondProcessor) -> Bool {
+        if let target = z80SeekTarget {
+            if z.executed == target {
+                machine.stopRequested = true
+                return true
+            }
+            return false
+        }
+        let pc = z.cpu.pc
+        if machine.rewinder?.isReplaying == true {
+            if z.interruptNext {
+                replayObserver?(.parasite, pc, .interrupt)
+            } else if !z.cpu.halted {
+                replayObserver?(.parasite, pc, .opcode)
+            }
+            return false
+        }
+        if z80Skip {
+            // Stopped here already (and traced it).
+            z80Skip = false
+            return false
+        }
+        let check = !z80Unchecked
+        z80Unchecked = false
+        let before = stopCount
+        if z.interruptNext {
+            if tracing { record(.parasite, pc, interrupt: true) }
+            if check && command == .nextInterrupt && commandCPU == .parasite {
+                stop(.interrupt(.parasite))
+            }
+        } else if !z.cpu.halted {
+            executing(.parasite, pc, opcode: z.peek(pc), flags: parasiteFlags[Int(pc)], check: check)
+        }
+        if stopCount != before {
+            z80Skip = true
+            return true
+        }
+        return false
+    }
+
+    /// After each Z80 step: its T-states, for the profiler.
+    @inline(__always)
+    func z80Stepped(pc: UInt16, tStates: Int) {
+        if profilingActive, z80SeekTarget == nil, machine.rewinder?.isReplaying != true {
+            profiler!.cycles(.parasite, pc: pc, count: tStates)
+        }
+    }
+
+    /// A Z80 memory access (not an opcode or operand fetch). A stop
+    /// happens once the instruction's done.
+    @inline(never)
+    func z80Accessed(_ address: UInt16, write: Bool) {
+        if z80SeekTarget != nil { return }
+        if machine.rewinder?.isReplaying == true {
+            replayObserver?(.parasite, address, write ? .write : .data)
+            return
+        }
+        dataAccessed(.parasite, address, write ? .write : .read, flags: parasiteFlags[Int(address)])
+    }
+
     func video(_ output: CRTC6845.Output, last: CRTC6845.Output) {
-        if machine.rewinder?.isReplaying == true { return }
+        if machine.rewinder?.isReplaying == true || z80SeekTarget != nil { return }
         if profilingActive && output.vsync && !last.vsync {
             profiler!.frame()
         }
@@ -570,11 +689,18 @@ public final class Debugger {
     }
 
     private func record(_ cpu: DebugCPU, _ address: UInt16, interrupt: Bool) {
-        guard let c = machine.debugCPU(cpu) else { return }
         let read = { (a: UInt16) in self.machine.debugRead(.cpu(cpu), Int(a)) ?? 0xFF }
-        let entry = TraceEntry(cycle: machine.cycles, pc: address, a: c.a, x: c.x, y: c.y, s: c.s, p: c.p,
-                               bytes: (read(address), read(address &+ 1), read(address &+ 2)),
-                               interrupt: interrupt)
+        let bytes = (read(address), read(address &+ 1), read(address &+ 2), read(address &+ 3))
+        let entry: TraceEntry
+        if cpu == .parasite, let z = machine.z80Processor?.cpu {
+            entry = TraceEntry(cycle: machine.cycles, pc: address, a: z.a, x: 0, y: 0, s: 0, p: z.f,
+                               bytes: bytes, interrupt: interrupt,
+                               z80: .init(af: z.af, bc: z.bc, de: z.de, hl: z.hl, ix: z.ix, iy: z.iy, sp: z.sp))
+        } else {
+            guard let c = machine.debugCPU(cpu) else { return }
+            entry = TraceEntry(cycle: machine.cycles, pc: address, a: c.a, x: c.x, y: c.y, s: c.s, p: c.p,
+                               bytes: bytes, interrupt: interrupt)
+        }
         if cpu == .host {
             hostTrace.append(entry)
         } else {

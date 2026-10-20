@@ -6,7 +6,7 @@ import Foundation
 /// registers and tracing, for the host CPU and the second processor.
 extension AgentTools {
     static let cpuProperty = ["type": "string", "enum": ["host", "parasite"],
-                              "description": "Which CPU (default host; parasite is the 6502 Second Processor)"] as JSONValue
+                              "description": "Which CPU (default host; parasite is the second processor: a 6502 or a Z80)"] as JSONValue
     static let spaceProperty = prop("string", "Address space (default: the host CPU's current view). host, parasite (the CPU views), main, shadow, andy, hazel, os, bank0-bankF, parasite_ram; memory_regions lists them")
 
     static func cpu(_ args: JSONValue) throws -> DebugCPU {
@@ -51,10 +51,16 @@ extension AgentTools {
     }
 
     static func registerLine(_ m: BBCMicro, _ cpu: DebugCPU) -> String? {
-        guard let c = m.debugCPU(cpu) else { return nil }
-        let pc = m.instructionAddress(cpu)
-        let state = c.isAboutToExecute ? "" : " (mid-instruction)"
-        return "\(cpu.rawValue): PC=&\(hex(pc, 4)) A=&\(hex(c.a)) X=&\(hex(c.x)) Y=&\(hex(c.y)) S=&\(hex(c.s)) P=\(flags(c.p))\(state)"
+        guard let kind = m.debugCPUKind(cpu) else { return nil }
+        let state = m.isAtInstruction(cpu) ? "" : " (mid-instruction)"
+        let registers = m.registers(cpu).map { r in
+            r.name == "P" ? "P=\(flags(UInt8(r.value)))" : "\(r.name)=&\(hex(UInt16(r.value), r.digits))"
+        }
+        var line = "\(cpu.rawValue)\(kind == .z80 ? " (Z80)" : ""): \(registers.joined(separator: " "))"
+        if kind == .z80 {
+            line += " flags=" + m.flags(cpu).map { $0.set ? $0.label : $0.label.lowercased() }.joined(separator: " ")
+        }
+        return line + state
     }
 
     /// Disassembly from `start`, marking `pc`.
@@ -163,7 +169,7 @@ extension AgentTools {
 
         Tool(definition: ToolDefinition(
             name: "disassemble",
-            description: "Disassemble code (for the CPU's instruction set: NMOS 6502, 65C12 or 65C02) as the CPU sees memory now. Default: from the current instruction. Marks the PC and breakpoints.",
+            description: "Disassemble code (for the CPU's instruction set: NMOS 6502, 65C12, 65C02 or Z80) as the CPU sees memory now. Default: from the current instruction. Marks the PC and breakpoints.",
             inputSchema: schema(["address": prop("string", "Start address or expression (default PC)"),
                                  "count": prop("integer", "Instructions (default 16)"),
                                  "cpu": cpuProperty])
@@ -172,7 +178,7 @@ extension AgentTools {
             let count = min(max(args["count"]?.intValue ?? 16, 1), 256)
             return .text(try context.perform { session in
                 let m = session.machine
-                guard m.debugCPU(cpu) != nil else { throw ToolFailure("there's no second processor") }
+                guard m.hasDebugCPU(cpu) else { throw ToolFailure("there's no second processor") }
                 let pc = m.instructionAddress(cpu)
                 let start = try address(args, "address", in: m, cpu: cpu).map { UInt16(truncatingIfNeeded: $0) } ?? pc
                 return disassembly(m, cpu, from: start, count: count, mark: pc)
@@ -213,7 +219,7 @@ extension AgentTools {
 
         Tool(definition: ToolDefinition(
             name: "set_register",
-            description: "Set a register (A X Y S P PC) or flag (C Z I D V N). PC can only be set between instructions, e.g. at a breakpoint or after a step.",
+            description: "Set a register (A X Y S P PC) or flag (C Z I D V N). On a Z80 second processor: A F B C D E H L, AF BC DE HL IX IY SP PC, AF' etc., I R IM, flags SF ZF HF PF NF CF, IFF1 IFF2. PC can only be set between instructions, e.g. at a breakpoint or after a step.",
             inputSchema: schema(["name": prop("string", "Register or flag"),
                                  "value": prop("string", "Value or expression"),
                                  "cpu": cpuProperty],
@@ -334,7 +340,7 @@ extension AgentTools {
             let maxSeconds = args["max_seconds"]?.doubleValue ?? 10
             return .text(try context.perform { session in
                 let m = session.machine
-                guard m.debugCPU(cpu) != nil else { throw ToolFailure("there's no second processor") }
+                guard m.hasDebugCPU(cpu) else { throw ToolFailure("there's no second processor") }
                 if args["kind"]?.stringValue == "back" {
                     for _ in 0..<count {
                         do {
@@ -431,10 +437,8 @@ extension AgentTools {
                     if e.interrupt {
                         return "\(e.cycle)  \(hex(e.pc, 4))  -- interrupt --"
                     }
-                    let bytes = [e.bytes.0, e.bytes.1, e.bytes.2]
-                    let (text, _) = disassembler.disassemble(at: e.pc) { bytes[Int($0 &- e.pc) % 3] }
-                    let regs = "A=\(hex(e.a)) X=\(hex(e.x)) Y=\(hex(e.y)) S=\(hex(e.s)) \(flags(e.p))"
-                    return "\(e.cycle)  \(hex(e.pc, 4))  \(text.padding(toLength: 16, withPad: " ", startingAt: 0)) \(regs)"
+                    let (text, _) = disassembler.disassemble(at: e.pc) { e.byte(at: $0) }
+                    return "\(e.cycle)  \(hex(e.pc, 4))  \(text.padding(toLength: 16, withPad: " ", startingAt: 0)) \(e.registerText)"
                 }
                 return lines.isEmpty ? "nothing traced yet" : lines.joined(separator: "\n")
             })
@@ -537,7 +541,7 @@ extension AgentTools {
             let top = min(max(args["top"]?.intValue ?? 15, 1), 200)
             return .text(try context.perform { session in
                 let m = session.machine
-                guard m.debugCPU(cpu) != nil else { throw ToolFailure("there's no second processor") }
+                guard m.hasDebugCPU(cpu) else { throw ToolFailure("there's no second processor") }
                 m.debugger.startProfiling()
                 session.advance(seconds: seconds)
                 m.debugger.stopProfiling()
@@ -563,7 +567,8 @@ extension AgentTools {
         func percent(_ n: Int) -> String {
             String(format: "%5.1f%%", r.totalCycles > 0 ? Double(n) * 100 / Double(r.totalCycles) : 0)
         }
-        let hz = r.cpu == .host ? 2_000_000.0 : 3_000_000.0
+        // A Z80 counts T-states.
+        let hz = r.cpu == .host ? 2_000_000.0 : m.debugCPUKind(r.cpu) == .z80 ? 6_000_000.0 : 3_000_000.0
         var lines = [String(format: "profiled %.2fs on the %@: %d cycles, %d frames (%.0f cycles a frame)",
                             Double(r.totalCycles) / hz, r.cpu.rawValue, r.totalCycles, r.frames, r.cyclesPerFrame),
                      "in interrupt handlers: \(percent(r.interruptCycles))", "routines:"]

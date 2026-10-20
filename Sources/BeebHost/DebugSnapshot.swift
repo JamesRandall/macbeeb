@@ -19,9 +19,15 @@ public struct DebugView: Sendable, Equatable {
 public struct DebugSnapshot: Sendable {
     public struct CPUState: Sendable, Equatable {
         public var cpu: DebugCPU
-        public var a, x, y, s, p: UInt8
+        public var kind: DebugCPUKind
+        public var registers: [DebugRegister]
+        public var flags: [DebugFlag]
         public var pc: UInt16
         public var atInstruction: Bool
+
+        public func register(_ name: String) -> Int? {
+            registers.first { $0.name == name }?.value
+        }
     }
 
     public struct Line: Sendable, Equatable, Identifiable {
@@ -54,7 +60,8 @@ public struct DebugSnapshot: Sendable {
     public var cpus: [CPUState]
     public var disassembly: [Line]
     public var memory: [UInt8?]
-    /// The stack from S+1 up to &1FF (at most 48 bytes).
+    /// The stack from S+1 up to &1FF (or a Z80's from SP; at most 48
+    /// bytes).
     public var stack: [(address: UInt16, value: UInt8)]
     public var breakpoints: [Breakpoint]
     public var hardware: [HardwareSection]
@@ -73,7 +80,7 @@ public struct DebugSnapshot: Sendable {
 
     public init(machine m: BBCMicro, view requested: DebugView) {
         var view = requested
-        if m.debugCPU(view.cpu) == nil {
+        if !m.hasDebugCPU(view.cpu) {
             view.cpu = .host
         }
         self.view = view
@@ -83,9 +90,9 @@ public struct DebugSnapshot: Sendable {
         isRunningCommand = debugger.isRunningCommand
         cycles = m.cycles
         cpus = DebugCPU.allCases.compactMap { cpu in
-            guard let c = m.debugCPU(cpu) else { return nil }
-            return CPUState(cpu: cpu, a: c.a, x: c.x, y: c.y, s: c.s, p: c.p,
-                            pc: m.instructionAddress(cpu), atInstruction: c.isAboutToExecute)
+            guard let kind = m.debugCPUKind(cpu) else { return nil }
+            return CPUState(cpu: cpu, kind: kind, registers: m.registers(cpu), flags: m.flags(cpu),
+                            pc: m.instructionAddress(cpu), atInstruction: m.isAtInstruction(cpu))
         }
 
         let cpu = view.cpu
@@ -113,14 +120,7 @@ public struct DebugSnapshot: Sendable {
         disassembly = lines
 
         memory = (0..<view.memoryLength).map { m.debugRead(view.memorySpace, view.memoryAddress + $0) }
-        if let s = m.debugCPU(cpu)?.s {
-            stack = (Int(s) + 1..<min(0x100, Int(s) + 49)).map { offset in
-                let a = UInt16(0x100 + offset)
-                return (a, read(a))
-            }
-        } else {
-            stack = []
-        }
+        stack = m.stackContents(cpu)
         breakpoints = debugger.breakpoints
         hardware = m.hardwareState
         tracing = debugger.tracing
@@ -131,8 +131,7 @@ public struct DebugSnapshot: Sendable {
                 if e.interrupt {
                     text = "— interrupt —"
                 } else {
-                    let bytes = [e.bytes.0, e.bytes.1, e.bytes.2]
-                    text = disassembler.disassemble(at: e.pc) { bytes[Int($0 &- e.pc) % 3] }.text
+                    text = disassembler.disassemble(at: e.pc) { e.byte(at: $0) }.text
                 }
                 return TraceLine(index: index, entry: e, text: text)
             }
@@ -154,7 +153,7 @@ public struct DebugSnapshot: Sendable {
 
     /// A disassembly start a few instructions before `pc` that lands on it:
     /// preferably one in `known` (addresses instructions ran from).
-    static func start(before pc: UInt16, known: Set<UInt16> = [], disassembler: M6502Disassembler,
+    static func start(before pc: UInt16, known: Set<UInt16> = [], disassembler: any InstructionDisassembler,
                       read: (UInt16) -> UInt8) -> UInt16 {
         func lands(from start: UInt16) -> Int? {
             var address = start

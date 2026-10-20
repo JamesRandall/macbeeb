@@ -11,19 +11,17 @@ extension Debugger {
     /// current one, if stopped in the middle of it), and stops there.
     public func stepBack(_ cpu: DebugCPU = .host) throws(ReverseError) {
         guard let rewinder = machine.rewinder else { throw .noHistory }
-        let now = machine.cycles
-        var found: UInt64?
-        search(rewinder, before: now) { found = nil } observe: { which, _, access in
-            // The cycle count after this step: the state just after the
-            // fetch, about to execute.
-            if which == cpu && access == .opcode && self.machine.cycles + 1 < now {
-                found = self.machine.cycles + 1
+        let now = position
+        var found: Position?
+        search(rewinder, before: machine.cycles) { found = nil } observe: { which, _, access in
+            if which == cpu && access == .opcode, self.currentPosition(after: false) < now {
+                found = self.currentPosition(after: false)
             }
         } done: {
             found != nil
         }
         if let found {
-            try? rewinder.seek(to: found)
+            seek(rewinder, to: found, z80Instruction: cpu == .parasite)
             stop(.stepped(cpu))
         } else {
             atHistoryStart(rewinder)
@@ -34,9 +32,9 @@ extension Debugger {
     /// (as if it had just hit). Log points and hit counts don't count.
     public func reverseContinue() throws(ReverseError) {
         guard let rewinder = machine.rewinder else { throw .noHistory }
-        let now = machine.cycles
-        var found: (cycle: UInt64, reason: StopReason)?
-        search(rewinder, before: now) { found = nil } observe: { cpu, address, access in
+        let now = position
+        var found: (position: Position, reason: StopReason)?
+        search(rewinder, before: machine.cycles) { found = nil } observe: { cpu, address, access in
             let kind: Breakpoint.Kind
             switch access {
             case .opcode: kind = .execute
@@ -45,19 +43,65 @@ extension Debugger {
             default: return
             }
             let flags = cpu == .host ? self.hostFlags[Int(address)] : self.parasiteFlags[Int(address)]
-            guard flags & kind.rawValue != 0, self.machine.cycles + 1 < now else { return }
+            // A Z80 stops after the instruction that accessed it.
+            let here = self.currentPosition(after: cpu == .parasite && kind != .execute)
+            guard flags & kind.rawValue != 0, here < now else { return }
             if let index = self.matchingBreakpoints(cpu, address, kind).first(where: { self.breakpoints[$0].logMessage == nil }) {
-                found = (self.machine.cycles + 1, .breakpoint(id: self.breakpoints[index].id, cpu: cpu, address: address, kind: kind))
+                found = (here, .breakpoint(id: self.breakpoints[index].id, cpu: cpu, address: address, kind: kind))
             }
         } done: {
             found != nil
         }
         if let found {
-            try? rewinder.seek(to: found.cycle)
+            if case .breakpoint(_, let cpu, _, let kind) = found.reason {
+                seek(rewinder, to: found.position, z80Instruction: cpu == .parasite && kind == .execute)
+            }
             stop(found.reason)
         } else {
             atHistoryStart(rewinder)
         }
+    }
+
+    /// A point in history a stop can be at: the host cycle a stop
+    /// happened in, and with a Z80, the instructions it had run in that
+    /// cycle (a host stop comes before any).
+    typealias Position = (cycle: UInt64, step: Int)
+
+    /// Where the machine is now.
+    private var position: Position {
+        if let z = machine.z80Processor {
+            return (z.stepCycle, z.executed)
+        }
+        return (machine.cycles &- 1, 0)
+    }
+
+    /// During a search, the position a stop at this access would leave;
+    /// `after` for a Z80 data access (it stops after the instruction).
+    private func currentPosition(after: Bool) -> Position {
+        if let z = machine.z80Processor {
+            return (machine.cycles, z.executed + (after ? 1 : 0))
+        }
+        return (machine.cycles, 0)
+    }
+
+    /// Goes back to `p`. With a Z80, that's into its cycle: as far as the
+    /// instruction (and the next is about to run, so `z80Instruction`
+    /// doesn't stop there again on resuming).
+    private func seek(_ rewinder: Rewinder, to p: Position, z80Instruction: Bool) {
+        guard machine.z80Processor != nil else {
+            try? rewinder.seek(to: p.cycle + 1)
+            return
+        }
+        try? rewinder.seek(to: p.cycle)
+        resume()
+        z80SeekTarget = p.step
+        forceHooks = true
+        // Run the cycle as `run` would, without starting a new future.
+        if machine.cycles % 1000 == 0 { machine.processKeyEvents() }
+        machine.step()
+        z80SeekTarget = nil
+        forceHooks = false
+        z80Skip = z80Instruction && machine.z80Processor?.stoppedEarly == true
     }
 
     /// Replays windows of history, latest first, until `done`: each window

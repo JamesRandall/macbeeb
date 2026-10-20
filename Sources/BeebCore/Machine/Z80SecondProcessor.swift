@@ -18,6 +18,14 @@ public final class Z80SecondProcessor: Z80Bus {
     /// T-states owed: 3 more each host cycle.
     var debt = 0
     unowned(unsafe) let machine: BBCMicro
+    /// Set while the debugger wants to see every instruction and access.
+    unowned(unsafe) var debugger: Debugger?
+    /// The host cycle `step()` last ran in, and the instructions (or
+    /// interrupts) it ran: where in history the Z80 is.
+    var stepCycle: UInt64 = 0
+    var executed = 0
+    /// True if the last `step()` stopped early, for the debugger.
+    var stoppedEarly = false
 
     init(rom romImage: [UInt8], machine: BBCMicro) {
         precondition(romImage.count <= 8192, "Z80 ROM too big")
@@ -49,14 +57,29 @@ public final class Z80SecondProcessor: Z80Bus {
 
     // MARK: Z80Bus
 
-    public func read(_ address: UInt16) -> UInt8 {
+    @inline(__always)
+    func memoryRead(_ address: UInt16) -> UInt8 {
         if address >= 0x8000 {
             inROM = false
         }
         return inROM ? rom[Int(address & 0x1FFF)] : ram[Int(address)]
     }
 
+    public func read(_ address: UInt16) -> UInt8 {
+        debugger?.z80Accessed(address, write: false)
+        return memoryRead(address)
+    }
+
+    public func fetchOpcode(_ address: UInt16) -> UInt8 {
+        memoryRead(address)
+    }
+
+    public func fetchOperand(_ address: UInt16) -> UInt8 {
+        memoryRead(address)
+    }
+
     public func write(_ address: UInt16, _ value: UInt8) {
+        debugger?.z80Accessed(address, write: true)
         ram[Int(address)] = value
     }
 
@@ -71,11 +94,18 @@ public final class Z80SecondProcessor: Z80Bus {
     }
 
     /// Runs the T-states one host cycle owes (3, at 6MHz), an instruction at
-    /// a time.
+    /// a time. A debugger stop can leave some owed until the next.
     @inline(__always)
     func step() {
         debt += 3
+        stepCycle = machine.cycles
+        executed = 0
+        stoppedEarly = false
         while debt > 0 {
+            if debugger != nil && machine.stopRequested {
+                stoppedEarly = true
+                return
+            }
             if machine.tube.tubeResetRequested {
                 machine.tube.reset()
             }
@@ -88,8 +118,32 @@ public final class Z80SecondProcessor: Z80Bus {
             if cpu.nmiPending {
                 inROM = true
             }
-            debt -= cpu.step()
+            if let debugger {
+                // It's about to run: stop before it?
+                if debugger.z80WillStep(self) {
+                    stoppedEarly = true
+                    return
+                }
+                let pc = cpu.pc
+                let tStates = cpu.step()
+                debugger.z80Stepped(pc: pc, tStates: tStates)
+                debt -= tStates
+            } else {
+                debt -= cpu.step()
+            }
+            executed += 1
         }
+    }
+
+    /// Whether the next step takes an interrupt.
+    var interruptNext: Bool {
+        cpu.nmiPending || (cpu.irq && cpu.iff1 && !cpu.eiDelay)
+    }
+
+    /// Where the Z80 is in history: the host cycle, and the instructions
+    /// run in it.
+    var position: (cycle: UInt64, executed: Int) {
+        stoppedEarly ? (stepCycle, executed) : (machine.cycles, 0)
     }
 
     // MARK: State

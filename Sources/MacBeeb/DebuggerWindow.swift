@@ -375,22 +375,20 @@ struct RegistersView: View {
             VStack(alignment: .leading, spacing: 12) {
                 if let state = model.snapshot?.state(model.cpu) {
                     Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 6) {
-                        registerRow("PC", Int(state.pc), digits: 4)
-                        registerRow("A", Int(state.a))
-                        registerRow("X", Int(state.x))
-                        registerRow("Y", Int(state.y))
-                        registerRow("S", Int(state.s))
-                        registerRow("P", Int(state.p))
+                        ForEach(state.registers) { register in
+                            registerRow(register.name, register.value, digits: register.digits)
+                        }
                     }
-                    HStack(spacing: 6) {
-                        ForEach(Array(zip(["N", "V", "-", "B", "D", "I", "Z", "C"], (0..<8).reversed())), id: \.0) { name, bit in
-                            let set = state.p & 1 << bit != 0
-                            Button(name) {
-                                if !["-", "B"].contains(name) { model.setRegister(name, to: set ? 0 : 1) }
+                    // A Z80's flags and flip-flops wrap onto a second row.
+                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(state.kind == .z80 ? 44 : 30), spacing: 6), count: 8),
+                              alignment: .leading, spacing: 6) {
+                        ForEach(state.flags) { flag in
+                            Button(flag.label) {
+                                if let name = flag.register { model.setRegister(name, to: flag.set ? 0 : 1) }
                             }
                             .buttonStyle(.bordered)
-                            .tint(set ? .accentColor : .secondary)
-                            .disabled(!model.isStopped || ["-", "B"].contains(name))
+                            .tint(flag.set ? .accentColor : .secondary)
+                            .disabled(!model.isStopped || flag.register == nil)
                         }
                     }
                     .font(codeFont)
@@ -576,7 +574,7 @@ struct TraceView: View {
                     HStack(spacing: 8) {
                         Text(hex(line.entry.pc, 4)).foregroundStyle(.secondary)
                         Text(line.text).frame(width: 130, alignment: .leading)
-                        Text("A\(hex(line.entry.a)) X\(hex(line.entry.x)) Y\(hex(line.entry.y)) S\(hex(line.entry.s))")
+                        Text(line.entry.registerText)
                             .foregroundStyle(.secondary)
                     }
                     .font(smallCodeFont)
