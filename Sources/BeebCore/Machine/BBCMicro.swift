@@ -13,6 +13,10 @@ public final class BBCMicro {
         public static let userVIA: UInt8 = 1 << 1
     }
 
+    public enum NMIDevice {
+        public static let fdc: UInt8 = 1 << 0
+    }
+
     public let cpu = M6502(variant: .nmos)
     public var systemVIA = VIA6522()
     public var userVIA = VIA6522()
@@ -21,8 +25,12 @@ public final class BBCMicro {
     public var saa5050 = SAA5050()
     public var adc = UPD7002()
     public var soundChip = SN76489()
+    /// The 8271 disc controller and its two drives.
+    public let fdc = Intel8271()
     var mixer: SoundMixer?
     var sampleRing: SampleRing?
+    /// A second copy of the audio, for recording.
+    public var recordingAudio: SampleRing?
 
     /// 6850 ACIA control register. Until serial and tape are emulated, the
     /// ACIA is idle: nothing received, nothing connected.
@@ -68,6 +76,9 @@ public final class BBCMicro {
     var opcodeHooks = false
     var paste: Paste?
     var watchForIdle = false
+    /// Stop address for `runUntil(address:)`.
+    var watchAddress: UInt16?
+    var reachedWatchAddress = false
     /// Set when the CPU fetches from the OS's wait-for-key loop.
     public internal(set) var reachedIdle = false
     /// Characters written through WRCHV while `captureOutput` is set.
@@ -148,6 +159,7 @@ public final class BBCMicro {
         switch address & 0xFFE0 {
         case 0xFE40: return systemVIA.peek(Int(address))
         case 0xFE60: return userVIA.peek(Int(address))
+        case 0xFE80: return fdc.peek(Int(address))
         case 0xFEC0: return adc.peek(Int(address))
         case 0xFE00 where address & 0x19 == 1: return crtc.readData()
         default: return 0xFF
@@ -173,6 +185,8 @@ public final class BBCMicro {
             return systemVIA.read(Int(address))
         case 0xFE60:
             return userVIA.read(Int(address))
+        case 0xFE80:
+            return fdc.read(Int(address))
         case 0xFEC0:
             return adc.read(Int(address))
         default:
@@ -217,6 +231,8 @@ public final class BBCMicro {
             systemVIA.write(Int(address), value)
         case 0xFE60:
             userVIA.write(Int(address), value)
+        case 0xFE80:
+            fdc.write(Int(address), value)
         case 0xFEC0:
             adc.write(Int(address), value)
         default:
@@ -248,6 +264,11 @@ public final class BBCMicro {
     public func detachAudio() {
         mixer = nil
         sampleRing = nil
+    }
+
+    /// Puts a disc in drive 0 or 1 (nil ejects).
+    public func insertDisc(_ disc: Disc?, drive: Int = 0) {
+        fdc.drives[drive].insert(disc)
     }
 
     // MARK: Keyboard
@@ -356,6 +377,7 @@ public final class BBCMicro {
             let output = soundChip.update(write: addressableLatch & 1 == 0, value: systemVIA.a.p)
             if mixer != nil, let sample = mixer!.mix(output) {
                 sampleRing?.write(sample)
+                recordingAudio?.write(sample)
             }
         }
 
@@ -467,6 +489,10 @@ public final class BBCMicro {
                 systemVIA.a.p &= 0x7F
             }
         }
+
+        // The 8271's INT is NMI.
+        fdc.tick()
+        cpu.setNMI(NMIDevice.fdc, fdc.nmi)
 
         // ADC end of conversion is CB1.
         systemVIA.b.c1 = adc.update() ? 1 : 0

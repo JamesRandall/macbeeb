@@ -32,7 +32,7 @@ let package = Package(
         .target(name: "BeebCapture", dependencies: ["BeebCore"]),
 
         // Runs a machine on its own thread, paced by audio or the wall clock.
-        .target(name: "BeebHost", dependencies: ["BeebCore"]),
+        .target(name: "BeebHost", dependencies: ["BeebCore", "BeebCapture"]),
 
         .executableTarget(name: "beeb", dependencies: ["BeebCore", "BeebCapture", "BeebROMs"]),
 

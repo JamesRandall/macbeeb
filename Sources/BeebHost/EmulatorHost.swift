@@ -1,3 +1,4 @@
+import BeebCapture
 import BeebCore
 import Foundation
 import Synchronization
@@ -14,6 +15,15 @@ public final class EmulatorHost: @unchecked Sendable {
         /// Power off and on again.
         case powerCycle
         case loadProgram(disc: [UInt8], file: String)
+        /// Puts a disc image in a drive; nil ejects. `onWrite` gets the
+        /// updated image whenever the BBC writes to the disc.
+        case insertDisc(image: [UInt8]?, doubleSided: Bool, drive: Int, onWrite: (@Sendable ([UInt8]) -> Void)?)
+        case shiftBreak
+        case pressBreak
+        /// Starts recording a movie. `completion` is called (on the
+        /// emulation thread) when the file is finished, with any error.
+        case startRecording(URL, VideoRecorder.Codec)
+        case stopRecording(completion: @Sendable (Error?) -> Void)
         case setPaused(Bool)
         case setSpeedLimited(Bool)
         /// Runs a closure on the emulation thread with the machine.
@@ -92,6 +102,7 @@ public final class EmulatorHost: @unchecked Sendable {
         machine.tv = tv
         machine.attachAudio(sampleRate: sampleRate, ring: audioRing)
 
+        var recorder: MachineRecorder?
         var paused = false
         var speedLimited = true
         var lastPublishedFrame = 0
@@ -119,7 +130,11 @@ public final class EmulatorHost: @unchecked Sendable {
                 case .releaseAllKeys:
                     machine.releaseAllKeys()
                 case .powerCycle:
+                    let discs = (0..<2).map { machine.fdc.drives[$0].disc }
                     machine = makeMachine()
+                    for (drive, disc) in discs.enumerated() {
+                        machine.insertDisc(disc, drive: drive)
+                    }
                     tv = TVOutput()
                     machine.tv = tv
                     machine.attachAudio(sampleRate: sampleRate, ring: audioRing)
@@ -128,6 +143,39 @@ public final class EmulatorHost: @unchecked Sendable {
                     wallStartCycles = machine.cycles
                 case .loadProgram(let disc, let file):
                     machine.loadProgram(disc: disc, file: file)
+                case .insertDisc(let image, let doubleSided, let drive, let onWrite):
+                    guard let image else {
+                        machine.insertDisc(nil, drive: drive)
+                        break
+                    }
+                    do {
+                        let disc = doubleSided ? try Disc.fromDSD(image) : try Disc.fromSSD(image)
+                        if let onWrite {
+                            disc.onTrackWritten = { [unowned disc] _, _ in
+                                if let bytes = try? disc.toSSDOrDSD() {
+                                    onWrite(bytes)
+                                }
+                            }
+                        }
+                        machine.insertDisc(disc, drive: drive)
+                    } catch {
+                        NSLog("MacBeeb: bad disc image: \(error)")
+                    }
+                case .shiftBreak:
+                    machine.shiftBreak()
+                case .pressBreak:
+                    machine.pressBreak()
+                case .startRecording(let url, let codec):
+                    try? recorder?.finish()
+                    recorder = try? MachineRecorder(machine: machine, tv: tv, url: url, codec: codec, sampleRate: sampleRate)
+                case .stopRecording(let completion):
+                    do {
+                        try recorder?.finish()
+                        completion(nil)
+                    } catch {
+                        completion(error)
+                    }
+                    recorder = nil
                 case .setPaused(let value):
                     paused = value
                     wallStart = clock.now
@@ -170,6 +218,14 @@ public final class EmulatorHost: @unchecked Sendable {
 
             machine.run(cycles: sliceCycles)
             emulatedCycles.store(Int(machine.cycles), ordering: .relaxed)
+            if let active = recorder {
+                do {
+                    try active.capture()
+                } catch {
+                    NSLog("MacBeeb: recording failed: \(error)")
+                    recorder = nil
+                }
+            }
 
             if tv.frameCount != lastPublishedFrame {
                 lastPublishedFrame = tv.frameCount

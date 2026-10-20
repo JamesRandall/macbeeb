@@ -32,6 +32,25 @@ extension BBCMicro {
         }
     }
 
+    /// Shift-Break: resets with Shift held, which boots the disc in drive 0.
+    public func shiftBreak() {
+        setKey(.shift, down: true)
+        setKey(.breakKey, down: true)
+        schedule(KeyEvent(cycle: cycles + 200_000, key: .breakKey, down: false))
+        schedule(KeyEvent(cycle: cycles + 2_000_000, key: .shift, down: false))
+    }
+
+    /// Presses and releases Break.
+    public func pressBreak() {
+        setKey(.breakKey, down: true)
+        schedule(KeyEvent(cycle: cycles + 200_000, key: .breakKey, down: false))
+    }
+
+    private func schedule(_ event: KeyEvent) {
+        let index = keyEvents.firstIndex { $0.cycle > event.cycle } ?? keyEvents.endIndex
+        keyEvents.insert(event, at: index)
+    }
+
     /// True while typed text is still being entered.
     public var isTyping: Bool { !keyEvents.isEmpty }
 
@@ -73,13 +92,16 @@ extension BBCMicro {
     public var isPasting: Bool { paste != nil }
 
     func updateOpcodeHooks() {
-        opcodeHooks = paste != nil || watchForIdle || captureOutput
+        opcodeHooks = paste != nil || watchForIdle || captureOutput || watchAddress != nil
     }
 
     /// Called at each opcode fetch while `opcodeHooks` is set, with the
     /// opcode on the data bus.
     func opcodeFetched() {
         let address = cpu.abus
+        if address == watchAddress {
+            reachedWatchAddress = true
+        }
         if watchForIdle && address == Self.osIdleAddress && paste == nil && keyEvents.isEmpty {
             reachedIdle = true
         }
@@ -134,6 +156,24 @@ extension BBCMicro {
         if resetting {
             setKey(.breakKey, down: false)
         }
+    }
+
+    /// Runs until the CPU is about to execute the instruction at `address`.
+    /// Returns false if that didn't happen within `maxSeconds`.
+    @discardableResult
+    public func runUntil(address: UInt16, maxSeconds: Double) -> Bool {
+        watchAddress = address
+        reachedWatchAddress = false
+        updateOpcodeHooks()
+        defer {
+            watchAddress = nil
+            updateOpcodeHooks()
+        }
+        let deadline = cycles + UInt64(maxSeconds * 2_000_000)
+        while !reachedWatchAddress && cycles < deadline {
+            run(cycles: 1000)
+        }
+        return reachedWatchAddress
     }
 
     // MARK: Loading programs

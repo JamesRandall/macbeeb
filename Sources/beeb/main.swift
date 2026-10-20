@@ -1,6 +1,7 @@
 // beeb: run a headless BBC Micro from the command line.
 //
 //   beeb [--load DISC.ssd:FILE] [--seconds N] [--type TEXT] [--screenshot FILE.png] [--text]
+//        [--record FILE.mp4|.mov [--codec h264|hevc|proRes]] [--disc FILE.ssd|.dsd [--boot]]
 //
 // Boots a Model B (OS 1.2, BASIC 2), types TEXT (with \n for Return), runs
 // for N seconds of emulated time after typing finishes (default 3), then
@@ -23,6 +24,10 @@ var printText = false
 var printPCs = false
 var traceCount = 0
 var loads: [(disc: String, file: String)] = []
+var recordPath: String?
+var discPath: String?
+var shiftBreak = false
+var codec = VideoRecorder.Codec.h264
 
 var arguments = CommandLine.arguments.dropFirst()
 while let argument = arguments.popFirst() {
@@ -40,6 +45,17 @@ while let argument = arguments.popFirst() {
         // DISC.ssd:FILE - load a file from a disc image into memory.
         guard let value = arguments.popFirst(), let colon = value.lastIndex(of: ":") else { usage() }
         loads.append((String(value[..<colon]), String(value[value.index(after: colon)...])))
+    case "--disc":
+        guard let value = arguments.popFirst() else { usage() }
+        discPath = value
+    case "--boot":
+        shiftBreak = true
+    case "--record":
+        guard let value = arguments.popFirst() else { usage() }
+        recordPath = value
+    case "--codec":
+        guard let value = arguments.popFirst().flatMap(VideoRecorder.Codec.init(rawValue:)) else { usage() }
+        codec = value
     case "--text":
         printText = true
     case "--pcs":
@@ -52,12 +68,60 @@ while let argument = arguments.popFirst() {
     }
 }
 
-let machine = BBCMicro(os: BeebROMs.data(.os12), sidewaysROMs: [15: BeebROMs.data(.basic2)])
+let machine = BBCMicro(os: BeebROMs.data(.os12),
+                       sidewaysROMs: [15: BeebROMs.data(.basic2), 14: BeebROMs.data(.dfs12)])
+if let discPath {
+    do {
+        let bytes = [UInt8](try Data(contentsOf: URL(fileURLWithPath: discPath)))
+        let disc = discPath.lowercased().hasSuffix(".dsd") ? try Disc.fromDSD(bytes) : try Disc.fromSSD(bytes)
+        machine.insertDisc(disc)
+    } catch {
+        FileHandle.standardError.write(Data("beeb: couldn't read disc \(discPath): \(error)\n".utf8))
+        exit(1)
+    }
+}
+if shiftBreak {
+    machine.setKey(.shift, down: true)
+}
 let tv = TVOutput()
 machine.tv = tv
 
-// Let it boot, load files, then type.
-machine.runUntilIdle()
+// Recording runs from power on. Emulation is in 1/50s slices so frames and
+// sound are captured as they're produced.
+var recorder: MachineRecorder?
+if let recordPath {
+    machine.attachAudio(sampleRate: 48_000, ring: SampleRing(capacity: 48_000))
+    do {
+        recorder = try MachineRecorder(machine: machine, tv: tv, url: URL(fileURLWithPath: recordPath), codec: codec)
+    } catch {
+        FileHandle.standardError.write(Data("beeb: can't record to \(recordPath): \(error)\n".utf8))
+        exit(1)
+    }
+}
+@MainActor func run(seconds: Double) {
+    guard let recorder else {
+        machine.run(seconds: seconds)
+        return
+    }
+    var remaining = seconds
+    while remaining > 0 {
+        let slice = min(remaining, 0.02)
+        machine.run(seconds: slice)
+        remaining -= slice
+        try? recorder.capture()
+    }
+}
+
+// Let it boot (holding Shift to boot the disc), load files, then type.
+if shiftBreak {
+    run(seconds: 1)
+    machine.setKey(.shift, down: false)
+}
+if recorder != nil || shiftBreak {
+    run(seconds: 1)
+} else {
+    machine.runUntilIdle()
+}
 for (discPath, name) in loads {
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: discPath)) else {
         FileHandle.standardError.write(Data("beeb: couldn't read \(discPath)\n".utf8))
@@ -71,10 +135,18 @@ for (discPath, name) in loads {
 if let typeText {
     machine.type(typeText)
     while machine.isTyping {
-        machine.run(seconds: 0.1)
+        run(seconds: 0.1)
     }
 }
-machine.run(seconds: seconds)
+run(seconds: seconds)
+if let recorder {
+    do {
+        try recorder.finish()
+    } catch {
+        FileHandle.standardError.write(Data("beeb: recording failed: \(error)\n".utf8))
+        exit(1)
+    }
+}
 
 if printPCs {
     // Where the CPU is spending its time.
