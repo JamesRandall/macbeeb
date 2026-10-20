@@ -61,6 +61,7 @@ public final class HeadlessSession: MachineSession, MachineContext, @unchecked S
         machine = makeMachine()
         tv = TVOutput()
         machine.tv = tv
+        machine.enableRewind()
     }
 
     public func perform<T: Sendable>(_ body: @escaping @Sendable (MachineSession) throws -> T) throws -> T {
@@ -95,6 +96,7 @@ public final class HeadlessSession: MachineSession, MachineContext, @unchecked S
         machine = makeMachine()
         tv = TVOutput()
         machine.tv = tv
+        machine.enableRewind()
         for (drive, disc) in discs.enumerated() {
             machine.insertDisc(disc, drive: drive)
         }
@@ -123,5 +125,6 @@ public final class HeadlessSession: MachineSession, MachineContext, @unchecked S
         makeMachine = { BBCMicro(configuration: configuration) }
         tv = TVOutput()
         machine.tv = tv
+        machine.enableRewind()
     }
 }

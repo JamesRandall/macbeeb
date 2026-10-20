@@ -85,9 +85,26 @@ Tools: `run_command`, `type_text`, `press_keys`, `load_disc`, `eject_disc`,
 `get_status`, `press_break`, `power_cycle` (which can switch model),
 `save_snapshot`, `restore_snapshot`, `save_state`, `load_state`,
 `start_recording`, `stop_recording`; and for debugging, `set_breakpoint`,
-`list_breakpoints`, `delete_breakpoint`, `continue`, `step`, `registers`,
+`list_breakpoints`, `delete_breakpoint`, `continue`, `step` (including
+back), `reverse_continue`, `rewind`, `registers`,
 `set_register`, `memory_regions`, `trace`, `debug_log` (with `peek`,
 `poke` and `disassemble` taking a CPU and address space).
+
+## Rewind
+
+The machine keeps the last minute: a snapshot every quarter second (with a
+thumbnail), and every key and joystick change with the cycle it arrived on.
+Anything else from outside (typing, loading, poking, discs, tapes, the
+debugger) takes a fresh snapshot. Emulation is deterministic, so restoring
+the nearest snapshot and replaying the inputs reaches any cycle exactly;
+tests check this against random input on a Master with a second processor.
+Machine > Rewind 5 Seconds (⌥⌘←), the toolbar's Rewind button, and the
+timeline (⇧⌥⌘←) go back; running on replaces what came after. It costs
+nothing measurable, and about 30MB (65MB for a Master with a second
+processor).
+
+The debugger uses it to step back (⇧F7) and reverse-continue (⇧⌃⌘Y: back to
+the last time a breakpoint hit, e.g. "who wrote this byte?").
 
 ## Debugging
 

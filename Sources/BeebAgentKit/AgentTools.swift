@@ -215,7 +215,7 @@ public final class AgentTools: Sendable {
             let tape = try Tape(image: bytes)
             let length = String(format: "%.0f", tape.duration)
             return .text(try context.perform { session in
-                session.machine.tape = try Tape(image: bytes)
+                session.machine.insertTape(try Tape(image: bytes))
                 let loaded = "tape: \(url.lastPathComponent) (\(length)s long)"
                 guard load else { return loaded }
                 session.machine.paste("*TAPE\n\(command)\n")
@@ -231,8 +231,8 @@ public final class AgentTools: Sendable {
             inputSchema: schema()
         )) { context, _ in
             .text(try context.perform { session in
-                guard let tape = session.machine.tape else { return "no tape" }
-                tape.rewind()
+                guard session.machine.tape != nil else { return "no tape" }
+                session.machine.rewindTape()
                 return "rewound"
             })
         },

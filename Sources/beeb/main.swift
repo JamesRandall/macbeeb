@@ -84,7 +84,7 @@ while let argument = arguments.popFirst() {
 let machine = BBCMicro(configuration: BeebROMs.configuration(for: model, secondProcessor: secondProcessor))
 if let tapePath {
     do {
-        machine.tape = try Tape(image: [UInt8](Data(contentsOf: URL(fileURLWithPath: tapePath))))
+        machine.insertTape(try Tape(image: [UInt8](Data(contentsOf: URL(fileURLWithPath: tapePath)))))
     } catch {
         FileHandle.standardError.write(Data("beeb: couldn't read tape \(tapePath): \(error)\n".utf8))
         exit(1)

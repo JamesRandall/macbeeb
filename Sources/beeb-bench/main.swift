@@ -56,10 +56,13 @@ for variant in M6502.Variant.allCases {
 
 // The whole Model B: CPU, VIAs, CRTC, ULA, teletext, with and without the
 // TV and the second processor.
-for (withTV, secondProcessor) in [(false, false), (true, false), (true, true)] {
+for (withTV, secondProcessor, rewind) in [(false, false, false), (true, false, false), (true, true, false), (true, false, true)] {
     let machine = BBCMicro(configuration: BeebROMs.configuration(for: .modelB, secondProcessor: secondProcessor))
     if withTV {
         machine.tv = TVOutput()
+    }
+    if rewind {
+        machine.enableRewind()
     }
     machine.run(seconds: 1)
     // A busy BASIC loop drawing in Mode 2.
@@ -73,7 +76,7 @@ for (withTV, secondProcessor) in [(false, false), (true, false), (true, true)] {
     machine.run(seconds: emulatedSeconds)
     let elapsed = clock.now - start
     let elapsedSeconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
-    let name = withTV ? (secondProcessor ? "with TV and 6502 2P" : "with TV") : "headless"
+    let name = !withTV ? "headless" : secondProcessor ? "with TV and 6502 2P" : rewind ? "with TV and rewind" : "with TV"
     print("Model B " + name.padding(toLength: 20, withPad: " ", startingAt: 0)
           + String(format: "%.0fx real time", emulatedSeconds / elapsedSeconds))
 }

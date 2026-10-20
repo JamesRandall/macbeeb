@@ -77,6 +77,14 @@ struct DebuggerToolbar: ToolbarContent {
                 .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF8FunctionKey)!)), modifiers: [])
                 .help("Step out (F8): until this subroutine or interrupt returns")
                 .disabled(!model.isStopped)
+            Button { model.stepBack() } label: { Label("Step Back", systemImage: "arrow.uturn.backward") }
+                .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF7FunctionKey)!)), modifiers: [.shift])
+                .help("Step back (⇧F7): to the previous instruction, from the rewind history")
+                .disabled(!model.isStopped)
+            Button { model.reverseContinue() } label: { Label("Reverse Continue", systemImage: "backward.end.fill") }
+                .keyboardShortcut("y", modifiers: [.command, .control, .shift])
+                .help("Reverse continue (⇧⌃⌘Y): back to the last breakpoint hit")
+                .disabled(!model.isStopped)
             Menu {
                 Button("One Cycle") { model.run(.stepCycle) }
                 Button("Next Scanline") { model.run(.nextScanline) }

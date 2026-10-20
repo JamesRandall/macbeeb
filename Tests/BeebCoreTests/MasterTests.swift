@@ -125,8 +125,8 @@ struct MasterTests {
 
         func trace(_ machine: BBCMicro) -> (Int, Data) {
             var hasher = Hasher()
-            for cycle in 0..<2_000_000 {
-                if cycle % 1000 == 0 { machine.processKeyEvents() }
+            for _ in 0..<2_000_000 {
+                if machine.cycles % 1000 == 0 { machine.processKeyEvents() }
                 machine.step()
                 hasher.combine(machine.cpu.abus)
                 hasher.combine(machine.cpu.dbus)

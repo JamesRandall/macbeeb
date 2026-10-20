@@ -69,6 +69,8 @@ public enum StopReason: Equatable, Sendable, CustomStringConvertible {
     case interrupt(DebugCPU)
     /// Stopped on request (e.g. Pause in the debugger).
     case requested
+    /// Went back as far as the rewind history goes.
+    case historyStart
 
     public var description: String {
         switch self {
@@ -80,6 +82,7 @@ public enum StopReason: Equatable, Sendable, CustomStringConvertible {
         case .scanline: return "start of scanline"
         case .interrupt(let cpu): return "interrupt on the \(cpu.rawValue)"
         case .requested: return "stopped"
+        case .historyStart: return "reached the start of the rewind history"
         }
     }
 
@@ -175,10 +178,10 @@ public final class Debugger {
 
     public private(set) var breakpoints: [Breakpoint] = []
     private var nextBreakpointID = 1
-    private var conditions: [Int: DebugExpression] = [:]
+    var conditions: [Int: DebugExpression] = [:]
     /// Per CPU, per address: the breakpoint kinds set there.
-    private var hostFlags = [UInt8](repeating: 0, count: 0x10000)
-    private var parasiteFlags = [UInt8](repeating: 0, count: 0x10000)
+    var hostFlags = [UInt8](repeating: 0, count: 0x10000)
+    var parasiteFlags = [UInt8](repeating: 0, count: 0x10000)
 
     public private(set) var stopReason: StopReason?
     private var command: RunCommand?
@@ -258,8 +261,13 @@ public final class Debugger {
         updateHooks()
     }
 
-    private func updateHooks() {
-        let any = breakpoints.contains { $0.enabled } || command != nil || tracing
+    /// Forces the hooks on (for searching history).
+    var forceHooks = false {
+        didSet { updateHooks() }
+    }
+
+    func updateHooks() {
+        let any = breakpoints.contains { $0.enabled } || command != nil || tracing || forceHooks
         machine.debugHooks = any
         machine.debugVideoHooks = command == .nextFrame || command == .nextScanline
         machine.secondProcessor?.debugger = any ? self : nil
@@ -343,7 +351,7 @@ public final class Debugger {
         updateHooks()
     }
 
-    private func stop(_ reason: StopReason) {
+    func stop(_ reason: StopReason) {
         guard stopReason == nil else { return }
         stopReason = reason
         machine.stopRequested = true
@@ -401,13 +409,24 @@ public final class Debugger {
 
     // MARK: Hooks
 
+    /// While rewinding, sees accesses instead of the breakpoints.
+    var replayObserver: ((DebugCPU, UInt16, M6502.BusAccess) -> Void)?
+
     @inline(never)
     func hostAccessed(_ address: UInt16, _ access: M6502.BusAccess) {
+        if machine.rewinder?.isReplaying == true {
+            replayObserver?(.host, address, access)
+            return
+        }
         accessed(.host, address, access, flags: hostFlags[Int(address)])
     }
 
     @inline(never)
     func parasiteAccessed(_ address: UInt16, _ access: M6502.BusAccess) {
+        if machine.rewinder?.isReplaying == true {
+            replayObserver?(.parasite, address, access)
+            return
+        }
         accessed(.parasite, address, access, flags: parasiteFlags[Int(address)])
     }
 
@@ -445,17 +464,10 @@ public final class Debugger {
         }
 
         guard flags & kind.rawValue != 0 else { return }
-        for index in breakpoints.indices {
-            let b = breakpoints[index]
-            guard b.enabled, b.cpu == cpu, b.kind.contains(kind), b.covers(address) else { continue }
-            if let bank = b.romBank, cpu == .host {
-                guard address >= 0x8000 && address < 0xC000 && Int(machine.romsel & 0x0F) == bank else { continue }
-            }
-            if let condition = conditions[b.id] {
-                guard (try? condition.isTrue(expressionContext(cpu))) == true else { continue }
-            }
+        for index in matchingBreakpoints(cpu, address, kind) {
             breakpoints[index].hitCount += 1
-            if let target = b.hitTarget, breakpoints[index].hitCount < target { continue }
+            let b = breakpoints[index]
+            if let target = b.hitTarget, b.hitCount < target { continue }
             if let message = b.logMessage {
                 log.append(DebugLogEntry(cycle: machine.cycles, cpu: cpu, text: interpolate(message, cpu: cpu)))
                 if log.count > Self.logLimit { log.removeFirst(log.count - Self.logLimit) }
@@ -466,7 +478,26 @@ public final class Debugger {
         }
     }
 
+    /// The enabled breakpoints matching an access, with their conditions
+    /// true (hit counts aren't touched).
+    func matchingBreakpoints(_ cpu: DebugCPU, _ address: UInt16, _ kind: Breakpoint.Kind) -> [Int] {
+        var matches: [Int] = []
+        for index in breakpoints.indices {
+            let b = breakpoints[index]
+            guard b.enabled, b.cpu == cpu, b.kind.contains(kind), b.covers(address) else { continue }
+            if let bank = b.romBank, cpu == .host {
+                guard address >= 0x8000 && address < 0xC000 && Int(machine.romsel & 0x0F) == bank else { continue }
+            }
+            if let condition = conditions[b.id] {
+                guard (try? condition.isTrue(expressionContext(cpu))) == true else { continue }
+            }
+            matches.append(index)
+        }
+        return matches
+    }
+
     func video(_ output: CRTC6845.Output, last: CRTC6845.Output) {
+        if machine.rewinder?.isReplaying == true { return }
         if command == .nextFrame && output.vsync && !last.vsync {
             stop(.frame)
         } else if command == .nextScanline && output.hsync && !last.hsync {

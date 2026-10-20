@@ -90,6 +90,26 @@ struct AgentDebugToolsTests {
         #expect(!text(b.call("disassemble", arguments: ["address": "&2000", "count": 1])).contains("PHX"))
     }
 
+    @Test func rewindAndReverseDebugging() {
+        let tools = makeTools()
+        loadProgram(tools)
+        _ = tools.call("run_command", arguments: ["text": "CALL &2000"])
+        _ = tools.call("run", arguments: ["seconds": 1])
+        // Who wrote &71?
+        _ = tools.call("set_breakpoint", arguments: ["address": "&71", "type": "write"])
+        let back = text(tools.call("reverse_continue", arguments: [:]))
+        #expect(back.contains("stopped: breakpoint 1 (write &0071)"), "\(back)")
+        #expect(back.contains("PC=&2015"), "\(back)")
+        // Stopped mid-STA: back to its start, then the instruction before.
+        let step = text(tools.call("step", arguments: ["kind": "back"]))
+        #expect(step.contains("> 2015"), "\(step)")
+        #expect(text(tools.call("step", arguments: ["kind": "back"])).contains("> 2013"))
+        _ = tools.call("delete_breakpoint", arguments: ["all": true])
+        _ = tools.call("continue", arguments: ["max_seconds": .number(0.2)])
+        let rewound = text(tools.call("rewind", arguments: ["seconds": 30]))
+        #expect(rewound.contains("now at cycle"), "\(rewound)")
+    }
+
     @Test func secondProcessor() {
         let tools = makeTools(secondProcessor: true)
         let registers = text(tools.call("registers", arguments: [:]))

@@ -7,9 +7,9 @@ struct SaveStateTests {
     /// Runs `cycles` and returns a hash of every bus access, plus RAM.
     func trace(_ machine: BBCMicro, cycles: Int) -> (Int, [UInt8]) {
         var hasher = Hasher()
-        for cycle in 0..<cycles {
+        for _ in 0..<cycles {
             // As run(cycles:) does.
-            if cycle % 1000 == 0 {
+            if machine.cycles % 1000 == 0 {
                 machine.processKeyEvents()
             }
             machine.step()

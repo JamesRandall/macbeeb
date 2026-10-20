@@ -297,6 +297,9 @@ final class HostSession: MachineSession {
 
     private func attach() {
         machine.tv = tv
+        if machine.rewinder == nil {
+            machine.enableRewind()
+        }
         machine.attachAudio(sampleRate: host.sampleRate, ring: host.audioRing)
         lastPublishedFrame = 0
     }

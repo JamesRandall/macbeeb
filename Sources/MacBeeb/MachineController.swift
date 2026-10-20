@@ -120,6 +120,24 @@ final class MachineController {
             if let disc {
                 insertDisc(URL(fileURLWithPath: disc))
                 try? await Task.sleep(for: .seconds(25))
+            } else if UserDefaults.standard.bool(forKey: "MacBeebSelfTestRewind") {
+                host.send(.type("PRINT \"BEFORE\"\n"))
+                try? await Task.sleep(for: .seconds(2))
+                host.send(.type("CLS\n"))
+                try? await Task.sleep(for: .seconds(1))
+                showingTimeline = true
+                try? await Task.sleep(for: .seconds(1.5))
+                if let sheet = NSApp.windows.compactMap(\.attachedSheet).first,
+                   let frameView = sheet.contentView?.superview,
+                   let rep = frameView.bitmapImageRepForCachingDisplay(in: frameView.bounds) {
+                    frameView.cacheDisplay(in: frameView.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?
+                        .write(to: URL(fileURLWithPath: path.replacingOccurrences(of: ".png", with: "-rewind.png")))
+                }
+                // Back to before the CLS, still paused: the picture shows it.
+                showingTimeline = false
+                rewind(seconds: 4)
+                try? await Task.sleep(for: .seconds(0.3))
             } else if UserDefaults.standard.bool(forKey: "MacBeebSelfTestDebugger") {
                 // Stop at OSWRCH as the key is echoed, then capture the
                 // debugger window.
@@ -207,6 +225,64 @@ final class MachineController {
 
     func powerCycle() {
         host.send(.powerCycle)
+    }
+
+    // MARK: Rewind
+
+    /// Shows the rewind timeline.
+    var showingTimeline = false
+
+    /// Goes back `seconds` of emulated time (as far as the history goes).
+    func rewind(seconds: Double) {
+        host.send(.perform { session in
+            let m = session.machine
+            guard let earliest = m.rewinder?.earliestCycle else { return }
+            let back = UInt64(seconds * 2_000_000)
+            Self.seek(session, to: m.cycles > earliest + back ? m.cycles - back : earliest)
+        })
+    }
+
+    /// Seeks to a frame before `cycle` and runs up to it, so the TV has
+    /// drawn the picture (even when paused).
+    nonisolated static func seek(_ session: MachineSession, to cycle: UInt64) {
+        guard let rewinder = session.machine.rewinder, let earliest = rewinder.earliestCycle else { return }
+        let start = max(earliest, cycle > 40_000 ? cycle - 40_000 : 0)
+        try? rewinder.seek(to: start)
+        let m = session.machine
+        if cycle > m.cycles {
+            session.advance(cycles: Int(cycle - m.cycles))
+        }
+    }
+
+    /// The rewind history's points: their cycles, and the current cycle.
+    func rewindPoints() async -> (points: [UInt64], now: UInt64) {
+        (try? await host.performAsync { session in
+            (session.machine.rewinder?.points.map(\.cycle) ?? [], session.machine.cycles)
+        }) ?? ([], 0)
+    }
+
+    /// A rewind point's thumbnail.
+    func rewindThumbnail(_ index: Int) async -> CGImage? {
+        let pixels = try? await host.performAsync { session -> [UInt32] in
+            let points = session.machine.rewinder?.points ?? []
+            return points.indices.contains(index) ? points[index].thumbnail : []
+        }
+        guard let pixels, pixels.count == Rewinder.thumbnailWidth * Rewinder.thumbnailHeight,
+              let provider = CGDataProvider(data: Data(bytes: pixels, count: pixels.count * 4) as CFData) else { return nil }
+        return CGImage(width: Rewinder.thumbnailWidth, height: Rewinder.thumbnailHeight, bitsPerComponent: 8, bitsPerPixel: 32,
+                       bytesPerRow: Rewinder.thumbnailWidth * 4, space: CGColorSpaceCreateDeviceRGB(),
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
+                       provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+    }
+
+    func seek(to cycle: UInt64) {
+        host.send(.perform { Self.seek($0, to: cycle) })
+    }
+
+    /// Pauses (or unpauses) without the menu's toggle.
+    func setPaused(_ value: Bool) {
+        paused = value
+        host.send(.setPaused(value))
     }
 
     /// Switches model, which power cycles. Discs stay in the drives.
@@ -312,7 +388,7 @@ final class MachineController {
             return
         }
         host.send(.perform { session in
-            session.machine.tape = try? Tape(image: image)
+            session.machine.insertTape(try? Tape(image: image))
             if load {
                 session.machine.paste("*TAPE\nCHAIN \"\"\n")
             }
@@ -322,11 +398,11 @@ final class MachineController {
     }
 
     func rewindTape() {
-        host.send(.perform { $0.machine.tape?.rewind() })
+        host.send(.perform { $0.machine.rewindTape() })
     }
 
     func ejectTape() {
-        host.send(.perform { $0.machine.tape = nil })
+        host.send(.perform { $0.machine.insertTape(nil) })
         tapeName = nil
     }
 

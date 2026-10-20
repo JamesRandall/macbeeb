@@ -79,6 +79,21 @@ struct MachineToolbar: CustomizableToolbarContent {
             .help("Switch off and on again")
         }
 
+        ToolbarItem(id: "rewind") {
+            Menu {
+                Button("Back 1 Second") { machine.rewind(seconds: 1) }
+                Button("Back 5 Seconds") { machine.rewind(seconds: 5) }
+                Button("Back 30 Seconds") { machine.rewind(seconds: 30) }
+                Divider()
+                Button("Timeline…") { machine.showingTimeline = true }
+            } label: {
+                Label("Rewind", systemImage: "backward.fill")
+            } primaryAction: {
+                machine.rewind(seconds: 5)
+            }
+            .help("Go back 5 seconds; hold for more")
+        }
+
         ToolbarItem(id: "pause") {
             Button { machine.togglePause() } label: {
                 Label(machine.paused ? "Resume" : "Pause", systemImage: machine.paused ? "play.fill" : "pause.fill")

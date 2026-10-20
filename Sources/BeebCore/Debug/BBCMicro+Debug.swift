@@ -169,15 +169,18 @@ extension BBCMicro {
             guard (0..<0x10000).contains(address), address < 0xFC00 || address >= 0xFF00,
                   let page = readPages[pageTable + address >> 12] else { return false }
             page[address & 0xFFF] = value
+            rewinder?.keyframe()
             return true
         case .cpu(.parasite):
             guard let p = secondProcessor, (0..<0x10000).contains(address), address & 0xFFF0 != 0xFEF0 else { return false }
             if p.bootMode && address >= 0xF000 { return false }
             p.ram[address] = value
+            rewinder?.keyframe()
             return true
         default:
             guard let pointer = storage(space, address) else { return false }
             pointer.pointee = value
+            rewinder?.keyframe()
             return true
         }
     }
@@ -250,6 +253,7 @@ extension BBCMicro {
         default:
             throw .unknown(name)
         }
+        rewinder?.keyframe()
     }
 
     /// The disassembler for a CPU.

@@ -63,6 +63,9 @@ public final class BBCMicro {
     /// cycle, so host cycles alternate 1 and 2 parasite cycles (3MHz).
     var parasiteCredit = 0
 
+    /// Rewind history, if enabled.
+    public internal(set) var rewinder: Rewinder?
+
     /// What the video is showing now, for the TV's metadata.
     var videoMetadata: UInt32 = 0
 
@@ -84,7 +87,7 @@ public final class BBCMicro {
     /// cassette interface, and RS423 with nothing connected.
     public internal(set) var serial = SerialULA()
     /// The tape in the cassette recorder.
-    public var tape: Tape?
+    public internal(set) var tape: Tape?
     /// Called when the cassette motor relay switches (true: on).
     public var onCassetteMotor: ((Bool) -> Void)?
 
@@ -679,6 +682,19 @@ public final class BBCMicro {
     /// Puts a disc in drive 0 or 1 (nil ejects).
     public func insertDisc(_ disc: Disc?, drive: Int = 0) {
         drives[drive].insert(disc)
+        rewinder?.keyframe()
+    }
+
+    /// Puts a tape in the cassette recorder (nil ejects).
+    public func insertTape(_ newTape: Tape?) {
+        tape = newTape
+        rewinder?.keyframe()
+    }
+
+    /// Rewinds the tape to the start.
+    public func rewindTape() {
+        tape?.rewind()
+        rewinder?.keyframe()
     }
 
     // MARK: Joysticks
@@ -686,6 +702,11 @@ public final class BBCMicro {
     /// Sets analogue joystick 0 or 1: `x` and `y` from -1 (left/down) to 1
     /// (right/up), and its fire button.
     public func setJoystick(_ index: Int, x: Double, y: Double, fire: Bool) {
+        rewinder?.record(.joystick(index, x: x, y: y, fire: fire))
+        applyJoystick(index, x: x, y: y, fire: fire)
+    }
+
+    func applyJoystick(_ index: Int, x: Double, y: Double, fire: Bool) {
         precondition(index == 0 || index == 1)
         // The BBC reads high values for left and up.
         func channel(_ value: Double, inverted: Bool) -> UInt16 {
@@ -711,6 +732,13 @@ public final class BBCMicro {
     /// Presses or releases a key. Break halts the CPU while held and resets
     /// it on release.
     public func setKey(_ key: BeebKey, down: Bool) {
+        rewinder?.record(.key(key, down: down))
+        applyKey(key, down: down)
+    }
+
+    /// `setKey` without recording it for rewind (for the machine's own key
+    /// presses: typing, pasting, replay).
+    func applyKey(_ key: BeebKey, down: Bool) {
         var key = key
         if key.isKeypad && model == .modelB {
             guard let equivalent = key.mainKeyboardEquivalent else { return }
@@ -752,12 +780,17 @@ public final class BBCMicro {
         if isStoppedByDebugger {
             return 0
         }
+        rewinder?.flushKeyframe()
         stopRequested = false
         var done = 0
         while done < count && !stopRequested {
-            // Key events are applied at 0.5ms granularity.
-            let chunk = min(count - done, 1000)
-            processKeyEvents()
+            // Key events are applied every 0.5ms, on absolute cycle counts,
+            // so how the run is divided up doesn't matter (for replay).
+            let chunk = min(count - done, 1000 - Int(cycles % 1000))
+            if cycles % 1000 == 0 {
+                processKeyEvents()
+                rewinder?.tick()
+            }
             var i = 0
             while i < chunk {
                 step()

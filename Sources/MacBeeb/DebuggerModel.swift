@@ -110,6 +110,15 @@ final class DebuggerModel {
         }
     }
 
+    func stepBack() {
+        let cpu = view.cpu
+        command { try $0.debugger.stepBack(cpu) }
+    }
+
+    func reverseContinue() {
+        command { try $0.debugger.reverseContinue() }
+    }
+
     // MARK: Breakpoints
 
     func toggleBreakpoint(at address: UInt16) {

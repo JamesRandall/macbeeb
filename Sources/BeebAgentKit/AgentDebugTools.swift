@@ -300,8 +300,8 @@ extension AgentTools {
 
         Tool(definition: ToolDefinition(
             name: "step",
-            description: "Step one CPU: instruction (into subroutines), over (a JSR runs to the next instruction), out (until the subroutine or interrupt handler returns), cycle (one 2MHz cycle), scanline, frame, interrupt (until one starts), or to (an address, given in address). Repeats count times. Returns the registers and code.",
-            inputSchema: schema(["kind": ["type": "string", "enum": ["instruction", "over", "out", "cycle", "scanline", "frame", "interrupt", "to"],
+            description: "Step one CPU: instruction (into subroutines), over (a JSR runs to the next instruction), out (until the subroutine or interrupt handler returns), cycle (one 2MHz cycle), scanline, frame, interrupt (until one starts), to (an address, given in address), or back (to the previous instruction, using the rewind history). Repeats count times. Returns the registers and code.",
+            inputSchema: schema(["kind": ["type": "string", "enum": ["instruction", "over", "out", "cycle", "scanline", "frame", "interrupt", "to", "back"],
                                           "description": "What to step (default instruction)"] as JSONValue,
                                  "count": prop("integer", "How many (default 1, max 10000)"),
                                  "address": prop("string", "For kind to: where to run to"),
@@ -314,6 +314,17 @@ extension AgentTools {
             return .text(try context.perform { session in
                 let m = session.machine
                 guard m.debugCPU(cpu) != nil else { throw ToolFailure("there's no second processor") }
+                if args["kind"]?.stringValue == "back" {
+                    for _ in 0..<count {
+                        do {
+                            try m.debugger.stepBack(cpu)
+                        } catch {
+                            throw ToolFailure("\(error)")
+                        }
+                        if m.debugger.stopReason == .historyStart { break }
+                    }
+                    return debugSummary(session, cpu: cpu, reason: m.debugger.stopReason)
+                }
                 let command: RunCommand
                 switch args["kind"]?.stringValue ?? "instruction" {
                 case "instruction": command = .stepInstruction
@@ -336,6 +347,44 @@ extension AgentTools {
                     if reason == nil { break }
                 }
                 return debugSummary(session, cpu: cpu, reason: reason)
+            })
+        },
+
+        Tool(definition: ToolDefinition(
+            name: "reverse_continue",
+            description: "Run backwards to the last time a breakpoint or watchpoint hit (e.g. \"who wrote &70?\": set a write breakpoint on &70, then reverse_continue), using the rewind history (about the last 60 seconds). Stops there, as if it had just hit.",
+            inputSchema: schema()
+        )) { context, _ in
+            .text(try context.perform { session in
+                let m = session.machine
+                do {
+                    try m.debugger.reverseContinue()
+                } catch {
+                    throw ToolFailure("\(error)")
+                }
+                return debugSummary(session, cpu: .host, reason: m.debugger.stopReason)
+            })
+        },
+
+        Tool(definition: ToolDefinition(
+            name: "rewind",
+            description: "Go back in time: by seconds (of emulated time), or to an exact cycle. History covers about the last 60 seconds. Running on afterwards replaces what came after.",
+            inputSchema: schema(["seconds": prop("number", "How far back"),
+                                 "cycle": prop("integer", "Or: the cycle to go to")])
+        )) { context, args in
+            let seconds = args["seconds"]?.doubleValue
+            let cycle = args["cycle"]?.intValue
+            guard seconds != nil || cycle != nil else { throw ToolFailure("give seconds or cycle") }
+            return .text(try context.perform { session in
+                let m = session.machine
+                guard let rewinder = m.rewinder, let earliest = rewinder.earliestCycle else { throw ToolFailure("no rewind history") }
+                let target = cycle.map { UInt64(max(0, $0)) } ?? UInt64(max(Int(earliest), Int(m.cycles) - Int(seconds! * 2_000_000)))
+                do {
+                    try rewinder.seek(to: max(target, earliest))
+                } catch {
+                    throw ToolFailure("\(error)")
+                }
+                return summary(session, extra: "now at cycle \(m.cycles) (history from cycle \(earliest))")
             })
         },
 

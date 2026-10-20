@@ -8,7 +8,7 @@ import BeebROMs
 struct TapeLoadingTests {
     func machine(_ model: BBCMicro.Model) throws -> BBCMicro {
         let machine = BBCMicro(configuration: BeebROMs.configuration(for: model))
-        machine.tape = try Tape(image: testResource("tapes/pugwash.uef"))
+        machine.insertTape(try Tape(image: testResource("tapes/pugwash.uef")))
         #expect(machine.runUntilIdle())
         return machine
     }

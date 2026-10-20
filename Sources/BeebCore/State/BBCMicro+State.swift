@@ -136,6 +136,10 @@ extension BBCMicro {
         ic15Byte = s.ic15Byte
         unit = s.unit
         updateOpcodeHooks()
+        // Restoring from outside starts a new history.
+        if let rewinder, !rewinder.isReplaying {
+            rewinder.reset()
+        }
     }
 }
 

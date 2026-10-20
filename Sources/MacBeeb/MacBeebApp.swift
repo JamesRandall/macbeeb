@@ -102,6 +102,13 @@ struct MacBeebApp: App {
                 Button("Power Cycle") { machine?.powerCycle() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
                 Divider()
+                Button("Rewind 5 Seconds") { machine?.rewind(seconds: 5) }
+                    .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+                    .disabled(machine == nil)
+                Button("Rewind Timeline…") { machine?.showingTimeline = true }
+                    .keyboardShortcut(.leftArrow, modifiers: [.command, .option, .shift])
+                    .disabled(machine == nil)
+                Divider()
                 Picker("Model", selection: Binding(
                     get: { machine?.model ?? .modelB },
                     set: { machine?.setModel($0) }
@@ -167,6 +174,9 @@ struct MachineWindow: View {
                     machine.debuggerRequested = false
                     openWindow(id: "debugger", value: machine.id)
                 }
+            }
+            .sheet(isPresented: $machine.showingTimeline) {
+                RewindSheet(machine: machine)
             }
             .toolbar(id: "machine") {
                 MachineToolbar(machine: machine)

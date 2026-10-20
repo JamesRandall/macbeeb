@@ -30,20 +30,23 @@ extension BBCMicro {
             }
             time += Self.typingKeyUpCycles
         }
+        rewinder?.keyframe()
     }
 
     /// Shift-Break: resets with Shift held, which boots the disc in drive 0.
     public func shiftBreak() {
-        setKey(.shift, down: true)
-        setKey(.breakKey, down: true)
+        applyKey(.shift, down: true)
+        applyKey(.breakKey, down: true)
         schedule(KeyEvent(cycle: cycles + 200_000, key: .breakKey, down: false))
         schedule(KeyEvent(cycle: cycles + 2_000_000, key: .shift, down: false))
+        rewinder?.keyframe()
     }
 
     /// Presses and releases Break.
     public func pressBreak() {
-        setKey(.breakKey, down: true)
+        applyKey(.breakKey, down: true)
         schedule(KeyEvent(cycle: cycles + 200_000, key: .breakKey, down: false))
+        rewinder?.keyframe()
     }
 
     private func schedule(_ event: KeyEvent) {
@@ -58,7 +61,7 @@ extension BBCMicro {
     func processKeyEvents() {
         while let event = keyEvents.first, event.cycle <= cycles {
             keyEvents.removeFirst()
-            setKey(event.key, down: event.down)
+            applyKey(event.key, down: event.down)
         }
     }
 
@@ -91,8 +94,9 @@ extension BBCMicro {
         }
         guard !bytes.isEmpty else { return }
         paste = Paste(text: bytes)
-        setKey(.space, down: true)
+        applyKey(.space, down: true)
         updateOpcodeHooks()
+        rewinder?.keyframe()
     }
 
     public var isPasting: Bool { paste != nil }
@@ -119,7 +123,7 @@ extension BBCMicro {
         }
         if address == Self.osrdch, var paste {
             if paste.waiting {
-                setKey(.space, down: false)
+                applyKey(.space, down: false)
                 paste.waiting = false
                 cpu.a = 127
             } else {
@@ -184,11 +188,16 @@ extension BBCMicro {
     /// Releases every key (e.g. when the window loses focus, so keys
     /// aren't left held down).
     public func releaseAllKeys() {
+        rewinder?.record(.releaseAllKeys)
+        applyReleaseAllKeys()
+    }
+
+    func applyReleaseAllKeys() {
         for column in 0..<16 {
             keyColumns[column] = 0
         }
         if resetting {
-            setKey(.breakKey, down: false)
+            applyKey(.breakKey, down: false)
         }
     }
 
@@ -226,6 +235,7 @@ extension BBCMicro {
         for (offset, byte) in bytes.enumerated() {
             poke(address &+ UInt16(offset), byte)
         }
+        rewinder?.keyframe()
     }
 
     /// Installs a tokenised BASIC program at PAGE, as LOAD would. BASIC

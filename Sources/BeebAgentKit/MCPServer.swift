@@ -134,7 +134,8 @@ Debugging: set_breakpoint (execute, or read/write watchpoints, with conditions a
 step (instruction, over, out, cycle, scanline, frame, interrupt); registers and set_register; trace for the last N instructions; \
 peek/poke take a space (main, shadow, bank0-F, os, parasite_ram...; see memory_regions) and addresses can be expressions \
 such as "{&FFFE}" or "PC+3". When the debugger stops the machine it stays stopped (other tools say so) until continue or step. \
-Each tool takes cpu: parasite for the second processor.
+Each tool takes cpu: parasite for the second processor. \
+History: rewind goes back up to about 60 seconds; step kind back and reverse_continue debug backwards ("who wrote this?").
 
 The machine starts at the BASIC prompt. In BASIC, lines with numbers are stored (then RUN); lines without run immediately. \
 Mode 7 is the default screen mode (40x25 teletext text).
