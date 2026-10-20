@@ -17,7 +17,8 @@ struct Z80DebuggerTests {
     ///     0200 LD B,7
     ///     0202 RET
     func machine(rewind: Bool = false) throws -> BBCMicro {
-        let m = BBCMicro(configuration: BeebROMs.configuration(for: .modelB, secondProcessor: true, coprocessor: .z80))
+        let m = BBCMicro(configuration: BeebROMs.configuration(for: .modelB, secondProcessor: true, coprocessor: .z80,
+                                                               systemDisc: false))
         if rewind { m.enableRewind(seconds: 5) }
         m.run(seconds: 2)
         let program: [UInt8] = [0x3E, 0x05, 0x32, 0x00, 0x40, 0xCD, 0x00, 0x02, 0x3C, 0x18, 0xFE]

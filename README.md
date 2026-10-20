@@ -211,8 +211,16 @@ on any 1770 machine, and writes go back to the file as with DFS discs.
 
 Or the Acorn Z80 Second Processor, for CP/M (Machine > Model > Second
 Processor, `--z80`): a 6MHz Z80 with 64K, client ROM 1.21, wired as BeebEm
-has it; it boots a CP/M system disc to `A>`. The Z80 core passes ZEXDOC and
+has it. It starts with the bundled CP/M 2.2 system disc (Acorn's CP/M
+Utilities disc) in drive 0 and boots to `A>`. The Z80 core passes ZEXDOC and
 ZEXALL in full, undocumented flags included.
+
+Or, on a Master 128, the Acorn Master 512 (`--master --512`): an 80186 with
+1MB, its BIOS, the Tube on I/O ports and disc transfers by DMA, wired as
+BeebEm has it. It starts with the bundled DOS Plus 1.2 boot disc in drive 0
+and boots to `A>`, which takes about 40 seconds, as on the real machine. A
+disc of your own in drive 0 takes its place; across a power cycle that changes
+co-processor, the system disc changes with it.
 
 Or the Acorn ARM Second Processor, the ARM Evaluation System (`--arm`): an
 8MHz ARM1 with 4MB, supervisor ROM 1.00, wired as BeebEm has it, with an ARM

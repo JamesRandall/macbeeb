@@ -89,7 +89,7 @@ public final class HeadlessSession: MachineSession, MachineContext, @unchecked S
         if let configuration {
             makeMachine = { BBCMicro(configuration: configuration) }
         }
-        let discs = (0..<2).map { machine.drives[$0].disc }
+        let old = machine
         let recording = recorder
         recorder = nil
         try? recording?.finish()
@@ -97,9 +97,7 @@ public final class HeadlessSession: MachineSession, MachineContext, @unchecked S
         tv = TVOutput()
         machine.tv = tv
         machine.enableRewind()
-        for (drive, disc) in discs.enumerated() {
-            machine.insertDisc(disc, drive: drive)
-        }
+        machine.insertDiscs(from: old)
     }
 
     public func startRecording(to url: URL, codec: VideoRecorder.Codec) throws {

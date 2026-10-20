@@ -52,7 +52,8 @@ struct IdleTests {
     /// The Z80 asking for its CP/M disc: the DFS waits for the drive, not
     /// for a key.
     @Test func z80WaitingForADiscIsntWaitingForAKey() {
-        let m = BBCMicro(configuration: BeebROMs.configuration(for: .modelB, secondProcessor: true, coprocessor: .z80))
+        let m = BBCMicro(configuration: BeebROMs.configuration(for: .modelB, secondProcessor: true, coprocessor: .z80,
+                                                               systemDisc: false))
         #expect(!m.runUntilIdle(maxSeconds: 3))
         #expect(screen(m).last == "Insert CP/M System disc in drive A")
     }

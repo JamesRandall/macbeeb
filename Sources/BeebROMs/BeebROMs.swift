@@ -41,6 +41,32 @@ public enum BeebROMs {
         return Bundle.module
     }()
 
+    /// The bundled system discs for the co-processors that need one.
+    public enum SystemDisc: String, CaseIterable, Sendable {
+        /// Acorn CP/M 2.2 (BIOS 1.20) and its utilities, for the Z80.
+        case cpm = "cpm-utilities.dsd"
+        /// DOS Plus 1.2's boot disc, for the Master 512.
+        case dosPlus = "dosplus-boot.adl"
+
+        public init?(for coprocessor: BBCMicro.Coprocessor) {
+            switch coprocessor {
+            case .z80: self = .cpm
+            case .master512: self = .dosPlus
+            case .mos6502, .arm: return nil
+            }
+        }
+
+        public var format: Disc.ImageFormat { Disc.ImageFormat(path: rawValue)! }
+
+        public var data: [UInt8] {
+            guard let url = bundle.url(forResource: rawValue, withExtension: nil, subdirectory: "Discs"),
+                  let data = try? Data(contentsOf: url) else {
+                preconditionFailure("missing bundled disc \(rawValue)")
+            }
+            return [UInt8](data)
+        }
+    }
+
     public static func data(_ image: Image) -> [UInt8] {
         guard let url = bundle.url(forResource: image.rawValue, withExtension: "rom", subdirectory: "ROMs"),
               let data = try? Data(contentsOf: url) else {
@@ -69,11 +95,15 @@ extension BeebROMs {
     /// given: the Z80 (client ROM 1.21) or the ARM Evaluation System
     /// (supervisor ROM 1.00).
     ///
+    /// The Z80 and the Master 512 start with their system disc in drive 0
+    /// (CP/M, DOS Plus), so they boot, unless `systemDisc` is false.
+    ///
     /// On the Model B, `discInterface` picks the disc controller and its
     /// filing system (in bank 14).
     public static func configuration(for model: BBCMicro.Model, secondProcessor: Bool = false,
                                      coprocessor: BBCMicro.Coprocessor = .mos6502,
-                                     discInterface: BBCMicro.DiscInterface = .intel8271) -> BBCMicro.Configuration {
+                                     discInterface: BBCMicro.DiscInterface = .intel8271,
+                                     systemDisc: Bool = true) -> BBCMicro.Configuration {
         var configuration = standardConfiguration(for: model)
         configuration.coprocessor = coprocessor
         if model == .modelB {
@@ -94,6 +124,9 @@ extension BeebROMs {
             case .arm: .armEval100
             }
             configuration.secondProcessorROM = data(rom)
+            if systemDisc, let disc = SystemDisc(for: coprocessor) {
+                configuration.startupDisc = .init(name: disc.rawValue, image: disc.data, format: disc.format)
+            }
         }
         return configuration
     }

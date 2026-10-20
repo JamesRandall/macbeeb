@@ -303,11 +303,29 @@ public final class BBCMicro {
         public var coprocessor: Coprocessor
         /// The Model B's disc interface (the others' are built in).
         public var discInterface: DiscInterface
+        /// A disc in drive 0 at power on: the co-processor's system disc,
+        /// so it boots. Not saved with the configuration (a save state has
+        /// its discs).
+        public var startupDisc: StartupDisc?
+
+        public struct StartupDisc: Sendable, Equatable {
+            public var name: String
+            public var image: [UInt8]
+            public var format: Disc.ImageFormat
+
+            public init(name: String, image: [UInt8], format: Disc.ImageFormat) {
+                self.name = name
+                self.image = image
+                self.format = format
+            }
+        }
 
         public init(model: Model = .modelB, os: [UInt8], sidewaysROMs: [Int: [UInt8]],
                     sidewaysRAMBanks: Set<Int>? = nil, secondProcessorROM: [UInt8]? = nil,
-                    discInterface: DiscInterface = .intel8271, coprocessor: Coprocessor = .mos6502) {
+                    discInterface: DiscInterface = .intel8271, coprocessor: Coprocessor = .mos6502,
+                    startupDisc: StartupDisc? = nil) {
             self.discInterface = discInterface
+            self.startupDisc = startupDisc
             self.coprocessor = coprocessor
             self.model = model
             self.os = os
@@ -338,6 +356,8 @@ public final class BBCMicro {
     }
 
     public let configuration: Configuration
+    /// The disc made from `configuration.startupDisc`, if any.
+    public private(set) var startupDisc: Disc?
 
     /// Creates a Model B with the given OS and sideways ROMs, keyed by bank
     /// 0-15.
@@ -431,6 +451,10 @@ public final class BBCMicro {
         }
         if configuration.coprocessor == .arm, let rom = tubeROM {
             armProcessor = ARMSecondProcessor(rom: rom, machine: self)
+        }
+        if let startup = configuration.startupDisc {
+            startupDisc = try? Disc.fromImage(startup.image, format: startup.format)
+            insertDisc(startupDisc)
         }
     }
 
@@ -851,6 +875,22 @@ public final class BBCMicro {
     public func insertDisc(_ disc: Disc?, drive: Int = 0) {
         drives[drive].insert(disc)
         rewinder?.keyframe()
+    }
+
+    /// After a power cycle, puts the discs `old` had back in the drives.
+    /// Its startup disc stays only if this machine has the same one (so
+    /// changing co-processor changes system disc); an empty drive keeps
+    /// this machine's.
+    public func insertDiscs(from old: BBCMicro) {
+        for drive in drives.indices {
+            guard let disc = old.drives[drive].disc else { continue }
+            if disc === old.startupDisc {
+                guard old.configuration.startupDisc == configuration.startupDisc else { continue }
+                // The same one, with anything written to it.
+                startupDisc = disc
+            }
+            insertDisc(disc, drive: drive)
+        }
     }
 
     /// Puts a tape in the cassette recorder (nil ejects).

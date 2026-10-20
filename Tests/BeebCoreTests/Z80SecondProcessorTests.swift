@@ -1,5 +1,5 @@
-// The Acorn Z80 Second Processor. CP/M runs only when BeebEm's CP/M
-// Utilities disc is in reference/ (it isn't redistributed here).
+// The Acorn Z80 Second Processor, on its own and booting the bundled CP/M
+// disc.
 
 import Foundation
 import Testing
@@ -7,13 +7,9 @@ import Testing
 import BeebROMs
 
 struct Z80SecondProcessorTests {
-    static let cpmDisc = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("reference/beebem-windows/UserData/DiscIms/CPM_Utilities_Disc.dsd")
-    static var cpmAvailable: Bool { FileManager.default.fileExists(atPath: cpmDisc.path) }
-
-    func machine(_ model: BBCMicro.Model = .modelB) -> BBCMicro {
-        BBCMicro(configuration: BeebROMs.configuration(for: model, secondProcessor: true, coprocessor: .z80))
+    func machine(_ model: BBCMicro.Model = .modelB, systemDisc: Bool = false) -> BBCMicro {
+        BBCMicro(configuration: BeebROMs.configuration(for: model, secondProcessor: true, coprocessor: .z80,
+                                                       systemDisc: systemDisc))
     }
 
     func screen(_ m: BBCMicro) -> [String] { m.screenText().filter { !$0.isEmpty } }
@@ -58,10 +54,10 @@ struct Z80SecondProcessorTests {
         #expect(throws: BBCMicro.RestoreError.self) { try other.restore(snapshot) }
     }
 
-    @Test(.enabled(if: cpmAvailable))
-    func runsCPM() throws {
-        let m = machine()
-        m.insertDisc(try Disc.fromDSD([UInt8](Data(contentsOf: Self.cpmDisc))))
+    @Test(arguments: [BBCMicro.Model.modelB, .master128])
+    func runsCPM(_ model: BBCMicro.Model) throws {
+        let m = machine(model, systemDisc: true)
+        #expect(m.drives[0].disc === m.startupDisc && m.startupDisc != nil)
         m.run(seconds: 8)
         #expect(screen(m).suffix(2) == ["Acorn CP/M 2.2 - Bios 1.20", "A>"], "\(screen(m))")
         m.type("DIR\n")

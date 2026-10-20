@@ -114,6 +114,9 @@ public final class AgentTools: Sendable {
                 let pc = cpu.isAboutToExecute ? cpu.abus : cpu.pc
                 let discs = (0..<2).map { drive -> String in
                     guard let disc = m.drives[drive].disc else { return "drive \(drive): empty" }
+                    if disc === m.startupDisc, let name = m.configuration.startupDisc?.name {
+                        return "drive \(drive): the bundled system disc (\(name))"
+                    }
                     let title = (try? DFSDisc(side: disc.toSSDOrDSD(force: true)).title) ?? "?"
                     return "drive \(drive): \"\(title)\""
                 }
@@ -130,12 +133,12 @@ public final class AgentTools: Sendable {
 
         Tool(definition: ToolDefinition(
             name: "power_cycle",
-            description: "Switch the BBC off and on again. Discs stay in the drives. Runs until the BASIC prompt. With model, switches to that machine: model_b (OS 1.20, BASIC 2, DFS 1.20), b_plus (B+ 128K: MOS 2.00, BASIC 2, DFS 2.26, shadow RAM) master_128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS, View, ViewSheet, Edit; 1770 disc controller, shadow RAM, sideways RAM in banks 4-7), or master_compact (MOS 5.10, ADFS only, so it needs .adf/.adl discs; no Tube). With second_processor, fits or removes a 6502 Second Processor (3MHz 65C02, 64K, on the Tube): BASIC is copied across and runs in the second processor (PAGE &800, HIMEM &8000), and the host just does the I/O.",
+            description: "Switch the BBC off and on again. Discs stay in the drives (a bundled system disc changes with the co-processor). Runs until the BASIC prompt. With model, switches to that machine: model_b (OS 1.20, BASIC 2, DFS 1.20), b_plus (B+ 128K: MOS 2.00, BASIC 2, DFS 2.26, shadow RAM) master_128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS, View, ViewSheet, Edit; 1770 disc controller, shadow RAM, sideways RAM in banks 4-7), or master_compact (MOS 5.10, ADFS only, so it needs .adf/.adl discs; no Tube). With second_processor, fits or removes a 6502 Second Processor (3MHz 65C02, 64K, on the Tube): BASIC is copied across and runs in the second processor (PAGE &800, HIMEM &8000), and the host just does the I/O.",
             inputSchema: schema(["model": ["type": "string", "enum": ["model_a", "model_b", "b_plus", "master_128", "master_compact"],
                                            "description": "Machine to switch to (default: keep the current one)"] as JSONValue,
                                  "second_processor": prop("boolean", "Fit a second processor (default: keep as is)"),
                                  "coprocessor": ["type": "string", "enum": ["mos6502", "z80", "master512", "arm"],
-                                                 "description": "Which second processor: mos6502 (default), z80 (CP/M: boot a CP/M system disc), master512 (an 80186 for DOS Plus: on a master_128, boot the DOS Plus disc) or arm (the ARM Evaluation System: 8MHz ARM1, 4MB, an A* supervisor prompt)"] as JSONValue,
+                                                 "description": "Which second processor: mos6502 (default), z80 (CP/M; it starts with the bundled CP/M system disc in drive 0 and boots to A>), master512 (an 80186 for DOS Plus, on a master_128; it starts with the bundled DOS Plus boot disc in drive 0 and boots to A>, which takes about 40 emulated seconds) or arm (the ARM Evaluation System: 8MHz ARM1, 4MB, an A* supervisor prompt)"] as JSONValue,
                                  "disc_interface": ["type": "string", "enum": ["intel8271", "acorn1770", "watfordDDB2", "watfordDDB3", "opus"],
                                                     "description": "Model B only: the disc interface and its filing system (default: keep as is)"] as JSONValue])
         )) { context, args in
@@ -169,7 +172,8 @@ public final class AgentTools: Sendable {
                                                            discInterface: interface ?? current.configuration.discInterface)
                 }
                 session.powerCycle(configuration: configuration)
-                runUntilIdle(session, maxSeconds: 10)
+                // Booting a system disc (DOS Plus especially) takes longer.
+                runUntilIdle(session, maxSeconds: session.machine.startupDisc != nil ? 60 : 10)
                 return summary(session)
             })
         },

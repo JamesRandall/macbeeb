@@ -346,15 +346,13 @@ final class HostSession: MachineSession {
         if let configuration {
             makeMachine = { BBCMicro(configuration: configuration) }
         }
-        let discs = (0..<2).map { machine.drives[$0].disc }
+        let old = machine
         try? recorder?.finish()
         recorder = nil
         machine = makeMachine()
         tv = TVOutput()
         attach()
-        for (drive, disc) in discs.enumerated() {
-            machine.insertDisc(disc, drive: drive)
-        }
+        machine.insertDiscs(from: old)
     }
 
     func insertDisc(image: [UInt8]?, format: Disc.ImageFormat, drive: Int, onWrite: (@Sendable ([UInt8]) -> Void)?) {

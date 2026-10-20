@@ -1,7 +1,6 @@
 // The Acorn Master 512 board: on its own beside a Master 128 (stepped by
-// hand, with test ROMs), then fitted, with the bundled BIOS. The DOS Plus
-// boot disc comes from BeebEm in reference/ (not redistributed here); the
-// test that needs it is skipped without it.
+// hand, with test ROMs), then fitted, with the bundled BIOS, and booting
+// the bundled DOS Plus disc.
 
 import Foundation
 import Testing
@@ -9,17 +8,11 @@ import Testing
 import BeebROMs
 
 struct Master512Tests {
-    static let beebem = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("reference/beebem-windows/UserData")
-    static let bootDiscURL = beebem.appendingPathComponent("DiscIms/BBCMaster512-Disc1-DosPlusBoot.adl")
-    static var dosAvailable: Bool { FileManager.default.fileExists(atPath: bootDiscURL.path) }
-
     /// A Master 128 with the Tube enabled. The machine only opens the Tube
     /// to the host when it has a co-processor of its own, so it gets a Z80
     /// whose ROM is all HALT: it never touches the Tube.
     static func host() -> BBCMicro {
-        var configuration = BeebROMs.configuration(for: .master128, secondProcessor: true, coprocessor: .z80)
+        var configuration = BeebROMs.configuration(for: .master128, secondProcessor: true, coprocessor: .z80, systemDisc: false)
         configuration.secondProcessorROM = [UInt8](repeating: 0x76, count: 4096)
         return BBCMicro(configuration: configuration)
     }
@@ -28,9 +21,11 @@ struct Master512Tests {
         Master512(rom: rom, machine: m)
     }
 
-    /// A Master 128 with the Master 512 fitted.
-    static func fitted() -> BBCMicro {
-        BBCMicro(configuration: BeebROMs.configuration(for: .master128, secondProcessor: true, coprocessor: .master512))
+    /// A Master 128 with the Master 512 fitted, with or without the DOS
+    /// Plus disc.
+    static func fitted(systemDisc: Bool = false) -> BBCMicro {
+        BBCMicro(configuration: BeebROMs.configuration(for: .master128, secondProcessor: true, coprocessor: .master512,
+                                                       systemDisc: systemDisc))
     }
 
     static func screen(_ m: BBCMicro) -> [String] { m.screenText().filter { !$0.isEmpty } }
@@ -176,10 +171,8 @@ struct Master512Tests {
         #expect(throws: BBCMicro.RestoreError.self) { try other.restore(m.snapshot()) }
     }
 
-    @Test(.enabled(if: dosAvailable))
-    func bootsDOSPlus() throws {
-        let m = Self.fitted()
-        m.insertDisc(try Disc.fromADL([UInt8](Data(contentsOf: Self.bootDiscURL))))
+    @Test func bootsDOSPlus() throws {
+        let m = Self.fitted(systemDisc: true)
         // DOS Plus reads the keyboard itself, so waiting at the prompt is
         // seen by its polling.
         #expect(m.runUntilIdle(maxSeconds: 60))

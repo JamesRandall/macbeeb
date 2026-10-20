@@ -30,8 +30,9 @@ let package = Package(
             swiftSettings: [.unsafeFlags(["-enforce-exclusivity=unchecked"])]
         ),
 
-        // The standard ROM images (Acorn copyright, not GPL).
-        .target(name: "BeebROMs", dependencies: ["BeebCore"], resources: [.copy("ROMs")]),
+        // The standard ROM images and the co-processors' system discs
+        // (Acorn and Digital Research copyright, not GPL).
+        .target(name: "BeebROMs", dependencies: ["BeebCore"], resources: [.copy("ROMs"), .copy("Discs")]),
 
         // Screenshots (and later, video recording).
         .target(name: "BeebCapture", dependencies: ["BeebCore"]),

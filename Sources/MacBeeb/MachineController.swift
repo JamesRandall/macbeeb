@@ -92,6 +92,8 @@ final class MachineController {
         host.start()
         audio.start()
         joysticks = Joysticks(host: host)
+        startupDiscName = configuration.startupDisc?.name
+        discNames[0] = startupDiscName
         lightsTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
@@ -282,6 +284,10 @@ final class MachineController {
     }
 
     func powerCycle() {
+        // An empty drive 0 gets the system disc back.
+        if discNames[0] == nil {
+            discNames[0] = startupDiscName
+        }
         host.send(.powerCycle)
     }
 
@@ -390,8 +396,16 @@ final class MachineController {
     }
 
     private func changeMachine() {
-        host.send(.changeMachine(BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
-                                                        discInterface: discInterface)))
+        let configuration = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
+                                                   discInterface: discInterface)
+        // As BBCMicro.insertDiscs: an empty drive 0, or one with the old
+        // machine's system disc, gets the new machine's.
+        let startup = configuration.startupDisc?.name
+        if discNames[0] == nil || discNames[0] == startupDiscName {
+            discNames[0] = startup
+        }
+        startupDiscName = startup
+        host.send(.changeMachine(configuration))
     }
 
     func togglePause() {
@@ -440,6 +454,9 @@ final class MachineController {
 
     /// Disc images the BBC has in its drives, by drive.
     private(set) var discNames: [Int: String] = [:]
+    /// The bundled system disc the machine starts with (the Z80's CP/M,
+    /// the Master 512's DOS Plus), if any.
+    @ObservationIgnored private var startupDiscName: String?
 
     static let discTypes: [UTType] = Disc.ImageFormat.extensions.map { UTType(filenameExtension: $0) ?? .data }
 
@@ -589,6 +606,7 @@ final class MachineController {
             coprocessor = file.configuration.coprocessor
             discInterface = file.configuration.discInterface
             discNames = [:]
+            startupDiscName = nil
             tapeName = file.snapshot.hasTape ? "Tape" : nil
             NSDocumentController.shared.noteNewRecentDocumentURL(url)
         } catch {
