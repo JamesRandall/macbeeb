@@ -124,6 +124,16 @@ struct MacBeebApp: App {
                     set: { machine?.setSecondProcessor($0) }
                 ))
                 .disabled(!(machine?.model.hasTube ?? false))
+                Picker("Disc Interface", selection: Binding(
+                    get: { machine?.discInterface ?? .intel8271 },
+                    set: { machine?.setDiscInterface($0) }
+                )) {
+                    ForEach(BBCMicro.DiscInterface.allCases, id: \.self) { interface in
+                        Text(interface.displayName).tag(interface)
+                    }
+                }
+                .disabled(machine?.model != .modelB)
+                .help("The Model B's disc interface; the B+ and Masters have a 1770 built in")
             }
         }
 

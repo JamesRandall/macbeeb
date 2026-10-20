@@ -30,6 +30,9 @@ final class MachineController {
     /// Whether a 6502 Second Processor is fitted. Remembered like the model.
     private(set) var secondProcessor: Bool
     private static let secondProcessorDefaultsKey = "MacBeebSecondProcessor"
+    /// The Model B's disc interface. Remembered like the model.
+    private(set) var discInterface: BBCMicro.DiscInterface
+    private static let discInterfaceDefaultsKey = "MacBeebDiscInterface"
     /// Identifies this machine to its debugger window.
     let id = UUID()
     /// Open machines, for finding a debugger window's machine.
@@ -66,7 +69,10 @@ final class MachineController {
         self.model = model
         let secondProcessor = UserDefaults.standard.bool(forKey: Self.secondProcessorDefaultsKey)
         self.secondProcessor = secondProcessor
-        let configuration = BeebROMs.configuration(for: model, secondProcessor: secondProcessor)
+        let discInterface = UserDefaults.standard.string(forKey: Self.discInterfaceDefaultsKey)
+            .flatMap(BBCMicro.DiscInterface.init(rawValue:)) ?? .intel8271
+        self.discInterface = discInterface
+        let configuration = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, discInterface: discInterface)
         host = EmulatorHost {
             BBCMicro(configuration: configuration)
         }
@@ -343,6 +349,16 @@ final class MachineController {
         changeMachine()
     }
 
+    /// Changes the Model B's disc interface, which power cycles.
+    func setDiscInterface(_ interface: BBCMicro.DiscInterface) {
+        guard interface != discInterface else { return }
+        discInterface = interface
+        UserDefaults.standard.set(interface.rawValue, forKey: Self.discInterfaceDefaultsKey)
+        if model == .modelB {
+            changeMachine()
+        }
+    }
+
     /// Fits or removes the 6502 Second Processor, which power cycles.
     func setSecondProcessor(_ fitted: Bool) {
         guard fitted != secondProcessor else { return }
@@ -352,7 +368,7 @@ final class MachineController {
     }
 
     private func changeMachine() {
-        host.send(.changeMachine(BeebROMs.configuration(for: model, secondProcessor: secondProcessor)))
+        host.send(.changeMachine(BeebROMs.configuration(for: model, secondProcessor: secondProcessor, discInterface: discInterface)))
     }
 
     func togglePause() {
@@ -547,6 +563,7 @@ final class MachineController {
             host.send(.loadState(file))
             model = file.configuration.model
             secondProcessor = file.configuration.secondProcessorROM != nil
+            discInterface = file.configuration.discInterface
             discNames = [:]
             tapeName = file.snapshot.hasTape ? "Tape" : nil
             NSDocumentController.shared.noteNewRecentDocumentURL(url)

@@ -39,6 +39,40 @@ public final class BBCMicro {
         public var hasCassette: Bool { self != .masterCompact }
     }
 
+    /// The Model B's disc interface.
+    public enum DiscInterface: String, Codable, Sendable, CaseIterable {
+        /// The Intel 8271 (Acorn DFS 1.20).
+        case intel8271
+        /// Acorn's 1770 board (DFS 2.26).
+        case acorn1770
+        /// Watford's 1770 boards (DDFS 1.53, DDFS 1.54T).
+        case watfordDDB2
+        case watfordDDB3
+        /// Opus's 1770 board (DDOS 3.45).
+        case opus
+
+        public var displayName: String {
+            switch self {
+            case .intel8271: "Intel 8271 (Acorn DFS)"
+            case .acorn1770: "Acorn 1770 (DFS 2.26)"
+            case .watfordDDB2: "Watford DDB2 (DDFS 1.53)"
+            case .watfordDDB3: "Watford DDB3 (DDFS 1.54T)"
+            case .opus: "Opus DDOS 1770 (DDOS 3.45)"
+            }
+        }
+
+        /// The 1770 latch layout, for a 1770 board.
+        public var layout: WD1770.ControlLayout? {
+            switch self {
+            case .intel8271: nil
+            case .acorn1770: .acorn1770
+            case .watfordDDB2: .watfordDDB2
+            case .watfordDDB3: .watfordDDB3
+            case .opus: .opus
+            }
+        }
+    }
+
     public enum IRQDevice {
         public static let systemVIA: UInt8 = 1 << 0
         public static let userVIA: UInt8 = 1 << 1
@@ -65,8 +99,12 @@ public final class BBCMicro {
     public let drives = [DiscDrive(id: 0), DiscDrive(id: 1)]
     /// The Model B's disc controller.
     public let intel8271: Intel8271?
-    /// The Master's disc controller.
+    /// The 1770 (the B+'s and Masters', or a board in a Model B).
     public let wd1770: WD1770?
+    /// The 1770 board's latch layout, on the B and B+ (at &FE80).
+    var boardLayout: WD1770.ControlLayout {
+        configuration.discInterface.layout ?? .acorn1770
+    }
     /// The 6502 Second Processor, if fitted, and the Tube to it.
     public let secondProcessor: SecondProcessor?
     public internal(set) var tube = Tube()
@@ -212,9 +250,13 @@ public final class BBCMicro {
         public var sidewaysRAMBanks: Set<Int>
         /// A 6502 Second Processor on the Tube, with this ROM (TUBE110).
         public var secondProcessorROM: [UInt8]?
+        /// The Model B's disc interface (the others' are built in).
+        public var discInterface: DiscInterface
 
         public init(model: Model = .modelB, os: [UInt8], sidewaysROMs: [Int: [UInt8]],
-                    sidewaysRAMBanks: Set<Int>? = nil, secondProcessorROM: [UInt8]? = nil) {
+                    sidewaysRAMBanks: Set<Int>? = nil, secondProcessorROM: [UInt8]? = nil,
+                    discInterface: DiscInterface = .intel8271) {
+            self.discInterface = discInterface
             self.model = model
             self.os = os
             self.sidewaysROMs = sidewaysROMs
@@ -228,7 +270,7 @@ public final class BBCMicro {
         }
 
         enum CodingKeys: CodingKey {
-            case model, os, sidewaysROMs, sidewaysRAMBanks, secondProcessorROM
+            case model, os, sidewaysROMs, sidewaysRAMBanks, secondProcessorROM, discInterface
         }
 
         public init(from decoder: Decoder) throws {
@@ -238,6 +280,7 @@ public final class BBCMicro {
             sidewaysROMs = try c.decode([Int: [UInt8]].self, forKey: .sidewaysROMs)
             sidewaysRAMBanks = try c.decodeIfPresent(Set<Int>.self, forKey: .sidewaysRAMBanks) ?? []
             secondProcessorROM = try c.decodeIfPresent([UInt8].self, forKey: .secondProcessorROM)
+            discInterface = try c.decodeIfPresent(DiscInterface.self, forKey: .discInterface) ?? .intel8271
         }
     }
 
@@ -293,8 +336,13 @@ public final class BBCMicro {
 
         switch model {
         case .modelB:
-            intel8271 = Intel8271(drives: drives)
-            wd1770 = nil
+            if configuration.discInterface == .intel8271 {
+                intel8271 = Intel8271(drives: drives)
+                wd1770 = nil
+            } else {
+                intel8271 = nil
+                wd1770 = WD1770(drives: drives)
+            }
             teletextBases = (0x3C00, 0x7C00)
         case .bPlus:
             intel8271 = nil
@@ -449,7 +497,12 @@ public final class BBCMicro {
         case 0xFEE0 where tubeAccessible: return tube.hostPeek(Int(address))
         case 0xFE80:
             if let fdc = intel8271 { return fdc.peek(Int(address)) }
-            return address & 0x1C == 0x04 ? wd1770!.peek(Int(address)) : 0xFF
+            if let fdc = wd1770 {
+                let (latchAt, fdcAt) = boardAddresses
+                if address & 0x1F == latchAt { return boardLayout.isReadable ? fdc.latch : 0xFF }
+                if address & 0x1C == fdcAt { return fdc.peek(Int(address)) }
+            }
+            return 0xFF
         case 0xFEC0: return adc.peek(Int(address))
         case 0xFE00 where address & 0x19 == 1: return crtc.readData()
         case 0xFE00 where address & 0x18 == 0x08: return serial.peekACIA(Int(address))
@@ -484,9 +537,11 @@ public final class BBCMicro {
             if let fdc = intel8271 {
                 return fdc.read(Int(address))
             }
-            // Acorn 1770: latch at &FE80 (write only), controller at &FE84.
-            if address & 0x1C == 0x04 {
-                return wd1770!.read(Int(address))
+            // A 1770 board: the latch (readable on some) and the controller.
+            if let fdc = wd1770 {
+                let (latchAt, fdcAt) = boardAddresses
+                if address & 0x1F == latchAt && boardLayout.isReadable { return fdc.latch }
+                if address & 0x1C == fdcAt { return fdc.read(Int(address)) }
             }
         case 0xFEC0:
             return adc.read(Int(address))
@@ -548,10 +603,13 @@ public final class BBCMicro {
         case 0xFE80:
             if let fdc = intel8271 {
                 fdc.write(Int(address), value)
-            } else if address & 0x1F == 0x00 {
-                wd1770!.writeControl(value, layout: .acorn1770)
-            } else if address & 0x1C == 0x04 {
-                wd1770!.write(Int(address), value)
+            } else if let fdc = wd1770 {
+                let (latchAt, fdcAt) = boardAddresses
+                if address & 0x1F == latchAt {
+                    fdc.writeControl(value, layout: boardLayout)
+                } else if address & 0x1C == fdcAt {
+                    fdc.write(Int(address), value)
+                }
             }
         case 0xFEC0:
             adc.write(Int(address), value)
@@ -665,6 +723,12 @@ public final class BBCMicro {
                 unmappedIOWriteObserver?(address, value)
             }
         }
+    }
+
+    /// Where a 1770 board's latch and controller are, from &FE80: Opus
+    /// swaps them.
+    var boardAddresses: (latch: UInt16, controller: UInt16) {
+        boardLayout == .opus ? (0x04, 0x00) : (0x00, 0x04)
     }
 
     private func writeSerialULA(_ value: UInt8) {

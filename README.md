@@ -183,6 +183,10 @@ Sound is the SN76489 through b2's filter model; discs are an Intel 8271
 (ported from jsbeeb/beebjit) with DFS 1.20. Analogue joysticks come from
 game controllers.
 
+The Model B can have a 1770 board instead of its 8271 (Machine > Disc
+Interface): Acorn's (DFS 2.26), Watford's DDB2 (DDFS 1.53) or DDB3 (DDFS
+1.54T), or Opus's (DDOS 3.45), with their latch layouts as b2 has them.
+
 The B+ 128K adds shadow RAM, its 12K of paged RAM, sideways RAM in banks 0,
 1, 12 and 13, and an Acorn 1770 (DFS 2.26).
 

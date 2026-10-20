@@ -29,6 +29,23 @@ public final class WD1770 {
         /// selects the upper side, 5 is single density. (BeebEm takes bit 3
         /// for drive 2, which isn't wired here.)
         case master128
+        /// Watford DDB2: bit 0 single density, 1 the upper side, 2 drive 1
+        /// (else drive 0); never in reset. Readable.
+        case watfordDDB2
+        /// Watford DDB3: as the Acorn board, but readable.
+        case watfordDDB3
+        /// Opus (latch at &FE84, controller at &FE80): bit 0 drive 1 (else
+        /// 0), 1 the upper side, 6 double density; never in reset. Readable.
+        case opus
+
+        /// Whether reading the latch gives it back (others give the stale
+        /// bus).
+        public var isReadable: Bool {
+            switch self {
+            case .acorn1770, .master128: false
+            case .watfordDDB2, .watfordDDB3, .opus: true
+            }
+        }
     }
 
     /// The controller's lines, in the Acorn board's layout.
@@ -268,6 +285,7 @@ public final class WD1770 {
 
     /// Writes the board's drive control latch.
     public func writeControl(_ value: UInt8, layout: ControlLayout) {
+        latch = value
         setControl(Self.controlLines(value, layout: layout))
         updateNextEvent()
     }
@@ -284,8 +302,23 @@ public final class WD1770 {
             if value & 0x10 != 0 { lines |= Control.side }
             if value & 0x20 != 0 { lines |= Control.singleDensity }
             return lines
+        case .watfordDDB2:
+            var lines = Control.notReset | (value & 0x04 != 0 ? Control.drive1 : Control.drive0)
+            if value & 0x01 != 0 { lines |= Control.singleDensity }
+            if value & 0x02 != 0 { lines |= Control.side }
+            return lines
+        case .watfordDDB3:
+            return controlLines(value, layout: .acorn1770)
+        case .opus:
+            var lines = Control.notReset | (value & 0x01 != 0 ? Control.drive1 : Control.drive0)
+            if value & 0x40 == 0 { lines |= Control.singleDensity }
+            if value & 0x02 != 0 { lines |= Control.side }
+            return lines
         }
     }
+
+    /// The latch as last written, for the boards that can read it back.
+    public private(set) var latch: UInt8 = 0
 
     /// The selected drive (drive 0 if the latch selects both), if any.
     public var selectedDrive: Int? {
@@ -1065,6 +1098,7 @@ public final class WD1770 {
         fileprivate var time: Int
         fileprivate var timerAt: Int
         fileprivate var control: UInt8
+        fileprivate var latch: UInt8?
         fileprivate var statusRegister: UInt8
         fileprivate var trackRegister: UInt8
         fileprivate var sectorRegister: UInt8
@@ -1101,7 +1135,7 @@ public final class WD1770 {
 
     public var state: State {
         State(variant: variant, drives: drives.map(\.state), intrq: intrq, drq: drq, time: time, timerAt: timerAt,
-              control: control, statusRegister: statusRegister, trackRegister: trackRegister,
+              control: control, latch: latch, statusRegister: statusRegister, trackRegister: trackRegister,
               sectorRegister: sectorRegister, dataRegister: dataRegister, doRaiseIntRq: doRaiseIntRq,
               isIndexPulse: isIndexPulse, isInterruptOnIndexPulse: isInterruptOnIndexPulse,
               isWriteTrackCRCSecondByte: isWriteTrackCRCSecondByte, command: command, commandType: commandType,
@@ -1124,6 +1158,7 @@ public final class WD1770 {
         time = state.time
         timerAt = state.timerAt
         control = state.control
+        latch = state.latch ?? 0
         // Only the latch picks the drive.
         currentDrive = control & (Control.drive0 | Control.drive1) != 0
             ? drives[control & Control.drive0 != 0 ? 0 : 1] : nil

@@ -37,6 +37,12 @@ final class WDHost {
             return 0x20 | (drive == 0 ? 0x01 : 0x02) | (upper ? 0x04 : 0) | (doubleDensity ? 0 : 0x08)
         case .master128:
             return 0x04 | (drive == 0 ? 0x01 : 0x02) | (upper ? 0x10 : 0) | (doubleDensity ? 0 : 0x20)
+        case .watfordDDB2:
+            return (drive == 0 ? 0 : 0x04) | (upper ? 0x02 : 0) | (doubleDensity ? 0 : 0x01)
+        case .watfordDDB3:
+            return controlValue(.acorn1770, drive: drive, upper: upper, doubleDensity: doubleDensity)
+        case .opus:
+            return (drive == 0 ? 0 : 0x01) | (upper ? 0x02 : 0) | (doubleDensity ? 0x40 : 0)
         }
     }
 

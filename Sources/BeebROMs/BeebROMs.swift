@@ -9,6 +9,9 @@ public enum BeebROMs {
         case dfs226 = "dfs226"
         case bPlusMOS = "bplus-mos"
         case tube110 = "tube110"
+        case watfordDDFS153 = "watford-ddfs153"
+        case watfordDDFS154T = "watford-ddfs154t"
+        case opusDDOS345 = "opus-ddos345"
         case mos510 = "mos510-mos"
         case mos510Utils = "mos510-utils"
         case mos510BASIC4 = "mos510-basic4"
@@ -60,8 +63,22 @@ extension BeebROMs {
     ///
     /// With `secondProcessor`, a 6502 Second Processor (Tube OS 1.10) is
     /// fitted (not on the Compact, which has no Tube).
-    public static func configuration(for model: BBCMicro.Model, secondProcessor: Bool = false) -> BBCMicro.Configuration {
+    ///
+    /// On the Model B, `discInterface` picks the disc controller and its
+    /// filing system (in bank 14).
+    public static func configuration(for model: BBCMicro.Model, secondProcessor: Bool = false,
+                                     discInterface: BBCMicro.DiscInterface = .intel8271) -> BBCMicro.Configuration {
         var configuration = standardConfiguration(for: model)
+        if model == .modelB {
+            configuration.discInterface = discInterface
+            configuration.sidewaysROMs[14] = switch discInterface {
+            case .intel8271: data(.dfs12)
+            case .acorn1770: data(.dfs226)
+            case .watfordDDB2: data(.watfordDDFS153)
+            case .watfordDDB3: data(.watfordDDFS154T)
+            case .opus: data(.opusDDOS345)
+            }
+        }
         if secondProcessor && model.hasTube {
             configuration.secondProcessorROM = data(.tube110)
         }

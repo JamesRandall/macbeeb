@@ -132,7 +132,9 @@ public final class AgentTools: Sendable {
             description: "Switch the BBC off and on again. Discs stay in the drives. Runs until the BASIC prompt. With model, switches to that machine: model_b (OS 1.20, BASIC 2, DFS 1.20), b_plus (B+ 128K: MOS 2.00, BASIC 2, DFS 2.26, shadow RAM) master_128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS, View, ViewSheet, Edit; 1770 disc controller, shadow RAM, sideways RAM in banks 4-7), or master_compact (MOS 5.10, ADFS only, so it needs .adf/.adl discs; no Tube). With second_processor, fits or removes a 6502 Second Processor (3MHz 65C02, 64K, on the Tube): BASIC is copied across and runs in the second processor (PAGE &800, HIMEM &8000), and the host just does the I/O.",
             inputSchema: schema(["model": ["type": "string", "enum": ["model_b", "b_plus", "master_128", "master_compact"],
                                            "description": "Machine to switch to (default: keep the current one)"] as JSONValue,
-                                 "second_processor": prop("boolean", "Fit a 6502 Second Processor (default: keep as is)")])
+                                 "second_processor": prop("boolean", "Fit a 6502 Second Processor (default: keep as is)"),
+                                 "disc_interface": ["type": "string", "enum": ["intel8271", "acorn1770", "watfordDDB2", "watfordDDB3", "opus"],
+                                                    "description": "Model B only: the disc interface and its filing system (default: keep as is)"] as JSONValue])
         )) { context, args in
             var requestedModel: BBCMicro.Model?
             if let name = args["model"]?.stringValue {
@@ -141,12 +143,19 @@ public final class AgentTools: Sendable {
             }
             let model = requestedModel
             let secondProcessor = args["second_processor"]?.boolValue
+            var discInterface: BBCMicro.DiscInterface?
+            if let name = args["disc_interface"]?.stringValue {
+                guard let named = BBCMicro.DiscInterface(rawValue: name) else { throw ToolFailure("unknown disc_interface \(name)") }
+                discInterface = named
+            }
+            let interface = discInterface
             return .text(try context.perform { session in
                 var configuration: BBCMicro.Configuration?
-                if model != nil || secondProcessor != nil {
+                if model != nil || secondProcessor != nil || interface != nil {
                     let current = session.machine
                     configuration = BeebROMs.configuration(for: model ?? current.model,
-                                                           secondProcessor: secondProcessor ?? (current.secondProcessor != nil))
+                                                           secondProcessor: secondProcessor ?? (current.secondProcessor != nil),
+                                                           discInterface: interface ?? current.configuration.discInterface)
                 }
                 session.powerCycle(configuration: configuration)
                 runUntilIdle(session, maxSeconds: 10)
