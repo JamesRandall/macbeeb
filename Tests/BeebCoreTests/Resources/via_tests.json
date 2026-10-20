@@ -1,0 +1,271 @@
+{
+ "_comment": "scarybeasts' VIA tests with real-BBC results, from jsbeeb's tests/integration/via.js (GPLv3).",
+ "tests": [
+  {
+   "name": "VIA.AC1 - Does ACR write restart timer?",
+   "source": "DIM MC% 100\nR% = 256\nP% = MC%\n[\nOPT 2\nSEI\nLDA #&FF\nSTA &FE62\nLDA #&00\nSTA &FE60\nLDA #&7F\nSTA &FE6E\nLDA #&80\nSTA &FE6B\nLDA #&04\nSTA &FE64\nLDA #&00\nSTA &FE65\nNOP\nNOP\nNOP\nLDA &FE6D\nSTA R%\nNOP\nNOP\nLDA #&C0\nSTA &FE6B\nLDA &FE64\nSTA R%+1\nLDA &FE6D\nSTA R%+2\nLDA &FE60\nSTA R%+3\nCLI\nRTS\n]\nCALL MC%\nPRINT \"VIA TEST: DOES ACR WRITE RESTART TIMER?\"\nPRINT \"REAL BBC: 64, 0, 0, 128\"\nPRINT ?(R%)\nPRINT ?(R%+1)\nPRINT ?(R%+2)\nPRINT ?(R%+3)",
+   "expected": [
+    64,
+    0,
+    0,
+    128
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.AC2 - Does ACR write at timer expiry affect behaviour #1?",
+   "source": "DIM MC% 100\nR% = 256\nP% = MC%\n[\nOPT 2\nSEI\nLDA #&7F\nSTA &FE6E\nLDA #&00\nSTA &FE6B\nLDA #&02\nSTA &FE64\nLDA #&00\nSTA &FE65\nLDA #&40\nSTA &FE6B\nLDA &FE64\nSTA R%\nLDA &FE6D\nSTA R%+1\nCLI\nRTS\n]\nCALL MC%\nPRINT \"VIA TEST: DOES ACR WRITE AT TIMER EXPIRY AFFECT BEHAVIOR #1?\"\nPRINT \"REAL BBC: 0, 0\"\nPRINT ?(R%)\nPRINT ?(R%+1)",
+   "expected": [
+    0,
+    0
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.AC3 - Does ACR write at timer expiry affect behaviour #2?",
+   "source": "DIM MC% 100\nR% = 256\nP% = MC%\n[\nOPT 2\nSEI\nLDA #&7F\nSTA &FE6E\nLDA #&40\nSTA &FE6B\nLDA #&02\nSTA &FE64\nLDA #&00\nSTA &FE65\nLDA #&00\nSTA &FE6B\nLDA &FE64\nSTA R%\nLDA &FE6D\nSTA R%+1\nCLI\nRTS\n]\nCALL MC%\nPRINT \"VIA TEST: DOES ACR WRITE AT TIMER EXPIRY AFFECT BEHAVIOR #2?\"\nPRINT \"REAL BBC: 0, 0\"\nPRINT ?(R%)\nPRINT ?(R%+1)",
+   "expected": [
+    0,
+    0
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.AC4 - flip ACR mode to one-shot after expiry, does it IRQ?",
+   "source": "DIM MC% 256\nR% = 256\nP% = MC%\n[\nOPT 2\nSEI\nLDA #&7F\nSTA &FE6E\nLDA #&40\nSTA &FE6B\nLDA #10\nSTA &FE64\nLDA #&00\nSTA &FE65\nLDA &FE6D\nSTA R%\nLDA &FE64\nSTA R%+1\nNOP\nNOP\nLDA &FE6D\nSTA R%+2\nLDA &FE64\nSTA R%+3\nNOP\nNOP\nLDA &FE6D\nSTA R%+4\nLDA &FE64\nSTA R%+5\nNOP\nNOP\nLDA #&00\nSTA &FE6B\nNOP\nNOP\nNOP\nNOP\nNOP\nNOP\nNOP\nNOP\nLDA &FE6D\nSTA R%+6\nLDA &FE64\nSTA R%+7\nNOP\nNOP\nLDA &FE6D\nSTA R%+8\nLDA &FE64\nSTA R%+9\nCLI\nRTS\n]\nCALL MC%\nREM REAL BBC! 0, 3, 64, 3, 64, 3, 64, 3, 0, 3\nPRINT \"VIA TEST: FLIP ACR MODE TO ONE-SHOT AFTER EXPIRY, DOES IT IRQ?\"\nPRINT \"REAL BBC: 0, 3, 64, 3, 64, 3, 64, 3, 0, 3\"\nPRINT ?(R%)\nPRINT ?(R%+1)\nPRINT ?(R%+2)\nPRINT ?(R%+3)\nPRINT ?(R%+4)\nPRINT ?(R%+5)\nPRINT ?(R%+6)\nPRINT ?(R%+7)\nPRINT ?(R%+8)\nPRINT ?(R%+9)",
+   "expected": [
+    0,
+    3,
+    64,
+    3,
+    64,
+    3,
+    64,
+    3,
+    0,
+    3
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.AC5 - flip ACR mode to continuous after expiry, does it IRQ?",
+   "source": "DIM MC% 256\nR% = 256\nP% = MC%\n[\nOPT 2\nSEI\nLDA #&7F\nSTA &FE6E\nLDA #&00\nSTA &FE6B\nLDA #10\nSTA &FE64\nLDA #&00\nSTA &FE65\nLDA &FE6D\nSTA R%\nLDA &FE64\nSTA R%+1\nNOP\nNOP\nLDA &FE6D\nSTA R%+2\nLDA &FE64\nSTA R%+3\nNOP\nNOP\nLDA &FE6D\nSTA R%+4\nLDA &FE64\nSTA R%+5\nNOP\nNOP\nLDA #&40\nSTA &FE6B\nNOP\nNOP\nNOP\nNOP\nNOP\nNOP\nNOP\nNOP\nLDA &FE6D\nSTA R%+6\nLDA &FE64\nSTA R%+7\nNOP\nNOP\nLDA &FE6D\nSTA R%+8\nLDA &FE64\nSTA R%+9\nCLI\nRTS\n]\nCALL MC%\nREM REAL BBC! 0, 3, 64, 3, 0, 3, 0, 3, 0, 3\nPRINT \"VIA TEST: FLIP ACR MODE TO CONT AFTER EXPIRY, DOES IT IRQ?\"\nPRINT \"REAL BBC: 0, 3, 64, 3, 0, 3, 0, 3, 0, 3\"\nPRINT ?(R%)\nPRINT ?(R%+1)\nPRINT ?(R%+2)\nPRINT ?(R%+3)\nPRINT ?(R%+4)\nPRINT ?(R%+5)\nPRINT ?(R%+6)\nPRINT ?(R%+7)\nPRINT ?(R%+8)\nPRINT ?(R%+9)",
+   "expected": [
+    0,
+    3,
+    64,
+    3,
+    0,
+    3,
+    0,
+    3,
+    0,
+    3
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.AC6 - getting to the bottom of ACR write at IRQ time #1",
+   "source": "DIM MC% 256\nR% = 256\nP% = MC%\n[\nOPT 0\nSEI\nLDA #&7F\nSTA &FE6E\nLDA #6\nSTA &FE64\n\nLDA #&40\nSTA &FE6B\nLDA #&00\nSTA &FE65\n\nLDA #&00\nSTA &FE6B\nNOP : NOP : NOP : NOP\nLDA &FE6D\nLDY &FE64\nNOP : NOP\nLDX &FE6D\nLDY &FE64\nSTA R%\nSTX R%+1\nSTY R%+2\n\nLDA #&40\nSTA &FE6B\nLDA #&00\nSTA &FE65\n\nLDA #&00\nNOP : NOP : NOP : NOP\nSTA &FE6B\nLDA &FE6D\nLDY &FE64\nNOP : NOP\nLDX &FE6D\nLDY &FE64\nSTA R%+3\nSTX R%+4\nSTY R%+5\n\nLDA #&40\nSTA &FE6B\nLDA #&00\nSTA &FE65\n\nLDA #&00\nNOP : NOP : NOP\nSTA &FE6B\nNOP\nLDA &FE6D\nLDY &FE64\nNOP : NOP\nLDX &FE6D\nLDY &FE64\nSTA R%+6\nSTX R%+7\nSTY R%+8\n\nLDA #&40\nSTA &FE6B\nLDA #&00\nSTA &FE65\n\nLDA #&00\nLDX &00\nNOP : NOP : NOP\nSTA &FE6B\nLDA &FE6D\nLDY &FE64\nNOP : NOP\nLDX &FE6D\nLDY &FE64\nSTA R%+9\nSTX R%+10\nSTY R%+11\n\nLDA #&40\nSTA &FE6B\nLDA #&00\nSTA &FE65\n\nLDA #&C0\nNOP : NOP : NOP : NOP\nSTA &FE6B\nLDA &FE6D\nLDY &FE64\nNOP : NOP\nLDX &FE6D\nLDY &FE64\nSTA R%+12\nSTX R%+13\nSTY R%+14\nCLI\nRTS\n]\nCALL MC%\nPRINT \"VIA TEST: GETTING TO THE BOTTOM OF ACR WRITE AT IRQ TIME #1\"\nPRINT \"REAL BBC: 64, 0, 1, 64, 0, 1, 64, 0, 1, 64, 0, 1, 64, 64, 1\"\nPRINT \"40 -> 00 IMMEDIATE\"\nREM REAL BBC! 64, 0, 1\nPRINT ?(R%)\nPRINT ?(R%+1)\nPRINT ?(R%+2)\nPRINT \"40 -> 00 AT -1\"\nREM REAL BBC! 64, 0, 1\nPRINT ?(R%+3)\nPRINT ?(R%+4)\nPRINT ?(R%+5)\nPRINT \"40 -> 00 AT 0\"\nREM REAL BBC! 64, 0, 1\nPRINT ?(R%+6)\nPRINT ?(R%+7)\nPRINT ?(R%+8)\nPRINT \"40 -> 00 AT -1, 2 CYCLE STORE\"\nREM REAL BBC! 64, 0, 1\nPRINT ?(R%+9)\nPRINT ?(R%+10)\nPRINT ?(R%+11)\nPRINT \"40 -> C0 AT -1\"\nREM REAL BBC! 64, 64, 1\nPRINT ?(R%+12)\nPRINT ?(R%+13)\nPRINT ?(R%+14)",
+   "expected": [
+    64,
+    0,
+    1,
+    64,
+    0,
+    1,
+    64,
+    0,
+    1,
+    64,
+    0,
+    1,
+    64,
+    64,
+    1
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.AC7 - getting to the bottom of ACR write at IRQ time #2",
+   "source": "DIM MC% 256\nR% = 256\nP% = MC%\n[\nOPT 0\nSEI\nLDA #&7F\nSTA &FE6E\nLDA #6\nSTA &FE64\n\nLDA #&00\nSTA &FE6B\nLDA #&00\nSTA &FE65\n\nLDA #&40\nSTA &FE6B\nNOP : NOP : NOP : NOP\nLDA &FE6D\nLDY &FE64\nNOP : NOP\nLDX &FE6D\nLDY &FE64\nSTA R%\nSTX R%+1\nSTY R%+2\n\nLDA #&00\nSTA &FE6B\nLDA #&00\nSTA &FE65\n\nLDA #&40\nNOP : NOP : NOP : NOP\nSTA &FE6B\nLDA &FE6D\nLDY &FE64\nNOP : NOP\nLDX &FE6D\nLDY &FE64\nSTA R%+3\nSTX R%+4\nSTY R%+5\n\nLDA #&00\nSTA &FE6B\nLDA #&00\nSTA &FE65\n\nLDA #&40\nNOP : NOP : NOP\nSTA &FE6B\nNOP\nLDA &FE6D\nLDY &FE64\nNOP : NOP\nLDX &FE6D\nLDY &FE64\nSTA R%+6\nSTX R%+7\nSTY R%+8\n\nLDA #&00\nSTA &FE6B\nLDA #&00\nSTA &FE65\n\nLDA #&40\nLDX &00\nNOP : NOP : NOP\nSTA &FE6B\nLDA &FE6D\nLDY &FE64\nNOP : NOP\nLDX &FE6D\nLDY &FE64\nSTA R%+9\nSTX R%+10\nSTY R%+11\n\nLDA #&00\nSTA &FE6B\nLDA #&00\nSTA &FE65\n\nLDA #&C0\nNOP : NOP : NOP : NOP\nSTA &FE6B\nLDA &FE6D\nLDY &FE64\nNOP : NOP\nLDX &FE6D\nLDY &FE64\nSTA R%+12\nSTX R%+13\nSTY R%+14\nCLI\nRTS\n]\nCALL MC%\nPRINT \"VIA TEST: GETTING TO THE BOTTOM OF ACR WRITE AT IRQ TIME #2\"\nPRINT \"REAL BBC: 64, 64, 1, 64, 0, 1, 64, 64, 1, 64, 0, 1, 64, 0, 1\"\nPRINT \"00 -> 40 IMMEDIATE\"\nREM REAL BBC! 64, 64, 1\nPRINT ?(R%)\nPRINT ?(R%+1)\nPRINT ?(R%+2)\nPRINT \"00 -> 40 AT -1\"\nREM REAL BBC! 64, 0, 1\nPRINT ?(R%+3)\nPRINT ?(R%+4)\nPRINT ?(R%+5)\nPRINT \"00 -> 40 AT 0\"\nREM REAL BBC! 64, 64, 1\nPRINT ?(R%+6)\nPRINT ?(R%+7)\nPRINT ?(R%+8)\nPRINT \"00 -> 40 AT -1, 2 CYCLE STORE\"\nREM REAL BBC! 64, 0, 1\nPRINT ?(R%+9)\nPRINT ?(R%+10)\nPRINT ?(R%+11)\nPRINT \"00 -> C0 AT -1\"\nREM REAL BBC! 64, 0, 1\nPRINT ?(R%+12)\nPRINT ?(R%+13)\nPRINT ?(R%+14)",
+   "expected": [
+    64,
+    64,
+    1,
+    64,
+    0,
+    1,
+    64,
+    64,
+    1,
+    64,
+    0,
+    1,
+    64,
+    0,
+    1
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.C1",
+   "source": "DIM MC% 256\nR% = 256\nP% = MC%\n[\nOPT 2\nSEI\nLDX #0\nLDY #0\nLDA #20\nSTA &FE64\nLDA #0\nSTA &FE65\nLDA &FE64\nSTA &FE6A\nCLI\nRTS\n]\nCALL MC%\nPRINT ?&FE6A\n?R% = ?&FE6A",
+   "expected": [
+    18
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.C2",
+   "source": "DIM MC% 256\nR% = 256\nP% = MC%\n[\nOPT 2\nSEI\nLDA #&64\nSTA &50\nLDA #&FE\nSTA &51\nLDX #0\nLDY #0\nLDA #20\nSTA &FE64\nLDA #0\nSTA &FE65\nLDA (&50),Y\nSTA &FE6A\nCLI\nRTS\n]\nCALL MC%\nPRINT ?&FE6A\n?R% = ?&FE6A",
+   "expected": [
+    18
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.C3",
+   "source": "DIM MC% 256\nR% = 256\nP% = MC%\n[\nOPT 2\nSEI\nLDA #&64\nSTA &50\nLDA #&FE\nSTA &51\nLDX #0\nLDY #0\nLDA #20\nSTA &FE64\nLDA #0\nSTA &FE65\nLDA (&50,X)\nSTA &FE6A\nCLI\nRTS\n]\nCALL MC%\nPRINT ?&FE6A\n?R% = ?&FE6A",
+   "expected": [
+    17
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.C4 (Model B)",
+   "source": "DIM MC% 256\nR% = 256\nP% = MC%\n[\nOPT 2\nSEI\nLDX #0\nLDY #0\nLDA #20\nSTA &FE64\nLDA #0\nSTA &FE65\nASL &FE64,X\nLDA &FE64\nSTA &FE6A\nCLI\nRTS\n]\nCALL MC%\nPRINT ?&FE6A\n?R% = ?&FE6A",
+   "expected": [
+    12
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.C4 (Master)",
+   "source": "DIM MC% 256\nR% = 256\nP% = MC%\n[\nOPT 2\nSEI\nLDX #0\nLDY #0\nLDA #20\nSTA &FE64\nLDA #0\nSTA &FE65\nASL &FE64,X\nLDA &FE64\nSTA &FE6A\nCLI\nRTS\n]\nCALL MC%\nPRINT ?&FE6A\n?R% = ?&FE6A",
+   "expected": [
+    13
+   ],
+   "model": "\"Master\","
+  },
+  {
+   "name": "VIA.C5",
+   "source": "DIM MC% 256\nR% = 256\nP% = MC%\n[\nOPT 2\nSEI\nLDA #&64\nSTA &50\nLDA #&FE\nSTA &51\nLDX #0\nLDY #0\nLDA #20\nSTA &FE64\nLDA #0\nSTA &FE65\nEQUB &03  \\\\ SLO ($50, X)\nEQUB &50\nLDA &FE64\nSTA &FE6A\nCLI\nRTS\n]\nCALL MC%\nPRINT ?&FE6A\n?R% = ?&FE6A",
+   "expected": [
+    12
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.I1 - does T1LH write clear int in on-shot",
+   "source": "DIM MC% 256\nR% = 256\nP% = MC%\n[\nOPT 2\nSEI\nLDA #&7F\nSTA &FE6E\nLDA #&00\nSTA &FE6B\nSTA &FE64\nSTA &FE65\nNOP\nNOP\nLDA &FE6D\nSTA R%\nLDA #&00\nSTA &FE67\nLDA &FE6D\nSTA R%+1\nCLI\nRTS\n]\nCALL MC%\nPRINT \"VIA TEST: DOES T1LH WRITE CLEAR INT IN ONE-SHOT?\"\nPRINT \"REAL BBC: YES: 64, 0\"\nREM REAL BBC! YES: 64, 0\nPRINT ?(R%)\nPRINT ?(R%+1)",
+   "expected": [
+    64,
+    0
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.I2 - does timer interrupt fire if IFR cleared at the same time?",
+   "source": "DIM IRQ% 100\nDIM MC% 256\nR% = 256\nDIM BAK% 3\nP% = IRQ%\n[\nOPT 2\nINC R%\nRTI\n]\nP% = MC%\n[\nOPT 2\nSEI\nLDA #&00\nSTA R%\nLDA &0204\nSTA BAK%\nLDA &0205\nSTA BAK%+1\nLDA &FE4E\nSTA BAK%+2\nLDA #(IRQ% MOD 256)\nSTA &0204\nLDA #(IRQ% DIV 256)\nSTA &0205\nLDA #&7F\nSTA &FE6E\nSTA &FE4E\nLDA #&C0\nSTA &FE6E\nLDA #&00\nSTA &FE6B\nLDA #&03\nSTA &FE64\nLDA #&00\nLDX #&7F\nSTA &FE65\nNOP\nNOP\nSTX &FE6D\nLDA &FE6D\nSTA R%+1\nCLI\nSEI\nLDA BAK%\nSTA &0204\nLDA BAK%+1\nSTA &0205\nLDA BAK%+2\nSTA &FE4E\nLDA #&7F\nSTA &FE6E\nCLI\nRTS\n]\nPRINT ~MC%\nPRINT ~IRQ%\nCALL MC%\nPRINT \"VIA TEST: DOES TIMER INTERRUPT FIRE IF IFR CLEARED AT SAME TIME?\"\nPRINT \"REAL BBC: YES: 1, 192\"\nPRINT ?(R%)\nPRINT ?(R%+1)",
+   "expected": [
+    1,
+    192
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.PB2 - does pb7 toggle if ACR not in PB7 mode?",
+   "source": "DIM MC% 256\nR% = 256\nP% = MC%\n[\nOPT 3\nSEI\nLDA #&FF\nSTA &FE62\nLDA #&00\nSTA &FE60\nLDA #&7F\nSTA &FE6E\nLDA #&80\nSTA &FE6B\nLDA #&03\nSTA &FE64\nLDA #&00\nSTA &FE65\nSTA &FE6B\nNOP\nNOP\nLDA #&80\nSTA &FE6B\nLDA &FE60\nSTA R%\nCLI\nRTS\n]\nCALL MC%\nREM REAL BBC! YES: 128\nPRINT ?(R%)",
+   "expected": [
+    128
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.PB7 - user via checks",
+   "source": "PRINT \"RUN AFTER FRESH BOOT\"\nR% = 256\n?R% = 0\nPROCcheck(0, ?&FE62, \"SYSVIA DDRB &FE62\")\nPROCcheck(255, ?&FE60, \"SYSVIA PORT B &FE60\")\n?&FE62 = 255\nPROCcheck(0, ?&FE60, \"SYSVIA PORT B OUTPUT\")\n?&FE62 = 0\nPROCcheck(255, ?&FE60, \"SYSVIA PORT B INPUT\")\nPROCcheck(0, ?&FE6B, \"SYSVIA ACR\")\n?&FE6B = 128\n?&FE60 = 0\n?&FE64 = 0\n?&FE65 = 255\nREM READ QUICKLY BEFORE TIMER HITS\nA% = ?&FE60\nREM TIMER EXPIRES IN 65MS\nT%=TIME+10:REPEAT UNTIL TIME>T%\nPROCcheck(127, A%, \"SYSVIA PORT B INPUT PB7 LOW\")\nPROCcheck(255, ?&FE60, \"SYSVIA PORT B INPUT PB7 HIGH\")\n?&FE62 = 255\nPROCcheck(128, ?&FE60, \"SYSVIA PORT B OUTPUT PB7 HIGH\")\n?&FE6B = 0\nPROCcheck(0, ?&FE60, \"SYSVIA PORT B OUTPUT\")\n?&FE60 = 0\n?&FE62 = 0\nEND\nDEF PROCcheck(E%, A%, N$)\nR$ = \"OK\"\nIF E% <> A% THEN R$ = \"FAIL!\"\nIF E% <> A% THEN ?R% = 255\nPRINT R$ + \": \" + N$ + \": \" + STR$(A%) + \" (expected \" + STR$(E%) + \")\"\nENDPROC",
+   "expected": [
+    0
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.T11 - How does T1 tick across expiry?",
+   "source": "REM RESET ACR TO DEFAULT BOOT + MOS 1.2 STATE\nR% = 256\nPRINT \"VIA TEST: HOW DOES T1 TICK ACROSS EXPIRY?\"\nPRINT \"REAL BBC: 1, 0, 255, 4, 3, 2\"\n?&FE6B = 0\nREM QUICK CHECKS TO SEE IF TIMERS ARE RUNNING ETC.\nPRINT \"USER VIA IFR: \" + STR$(?&FE6D)\nFOR A%=0 TO 1\nPRINT \"USER VIA T1CH: \" + STR$(?&FE65)\nPRINT \"USER VIA T1CL: \" + STR$(?&FE64)\nNEXT\nDIM MC% 100\nPROCtimeit(1)\nPROCtimeit(2)\nPROCtimeit(3)\nPROCtimeit(4)\nPROCtimeit(5)\nPROCtimeit(6)\nEND\nDEF PROCtimeit(N%)\nP% = MC%\n[\nOPT 0\nSEI\nLDX #0\nLDY #0\nLDA #4\nSTA &FE64\nLDA #0\nSTA &FE65\n]\nFOR A%=1 TO N%\n[\nOPT 0\nNOP\n]\nNEXT\n[\nOPT 0\nLDA &FE64\nSTA &FE6A\nCLI\nRTS\n]\nCALL MC%\nPRINT \"USER VIA T1CL: \" + STR$(?&FE6A)\n?R% = ?&FE6A\nR% = R% + 1\nENDPROC",
+   "expected": [
+    1,
+    0,
+    255,
+    4,
+    3,
+    2
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.T12 - When do T1L writes take effect vs. timer expiry?",
+   "source": "DIM MC% 100\nR% = 256\nP% = MC%\n[\nOPT 3\nSEI\nLDA #&00\nSTA &FE6B\nLDA #&7F\nSTA &FE6E\nLDA #&02\nSTA &FE64\nLDA #&00\nSTA &FE65\nLDA #&FF\nSTA &FE66\nLDA &FE64\nSTA R%\nLDA #&03\nSTA &FE64\nLDA #&00\nSTA &FE65\nNOP\nNOP\nLDA #&FF\nSTA &FE66\nLDA &FE64\nSTA R%+1\nCLI\nRTS\n]\nCALL MC%\nREM REAL BBC: 253, 0\nPRINT \"VIA TEST: WHEN DO T1L WRITES TAKE EFFECT VS. TIMER EXPIRY?\"\nPRINT \"REAL BBC: 253, 0\"\nPRINT ?(R%)\nPRINT ?(R%+1)",
+   "expected": [
+    253,
+    0
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.T21 - user VIA T2 to pulse counting?",
+   "source": "REM USER VIA T2 TO PULSE COUNTING\nREM FREEZES T2\nR% = 256\nPRINT \"VIA TEST: T2 IN PULSE COUNTING MODE\"\nPRINT \"REAL BBC: 1, 255, 255\"\n?&FE6B = &20\n?&FE68 = 1\n?&FE69 = 0\nR%?0 = ?&FE68\n?&FE68 = &FF\n?&FE69 = &FF\nR%?1 = ?&FE68\nR%?2 = ?&FE68\nPRINT \"USER VIA T2CL: \" + STR$(R%?0)\nPRINT \"USER VIA T2CL: \" + STR$(R%?1)\nPRINT \"USER VIA T2CL: \" + STR$(R%?2)",
+   "expected": [
+    1,
+    255,
+    255
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.T22 - T2 ticking past expiry",
+   "source": "REM RESET ACR TO DEFAULT BOOT + MOS 1.2 STATE\nR% = 256\nPRINT \"VIA TEST: T2 TICKING PAST EXPIRY\"\nPRINT \"REAL BBC: 1, 0, 255, 254, 253, 252\"\n?&FE6B = 0\nREM QUICK CHECKS TO SEE IF TIMERS ARE RUNNING ETC.\nPRINT \"USER VIA IFR: \" + STR$(?&FE6D)\nFOR A%=0 TO 1\nPRINT \"USER VIA T2CH: \" + STR$(?&FE69)\nPRINT \"USER VIA T2CL: \" + STR$(?&FE68)\nNEXT\nDIM MC% 100\nPROCtimeit(1)\nPROCtimeit(2)\nPROCtimeit(3)\nPROCtimeit(4)\nPROCtimeit(5)\nPROCtimeit(6)\nEND\nDEF PROCtimeit(N%)\nP% = MC%\n[\nOPT 0\nSEI\nLDX #0\nLDY #0\nLDA #4\nSTA &FE68\nLDA #0\nSTA &FE69\n]\nFOR A%=1 TO N%\n[\nOPT 0\nNOP\n]\nNEXT\n[\nOPT 0\nLDA &FE68\nSTA &FE6A\nCLI\nRTS\n]\nCALL MC%\nPRINT \"USER VIA T2CL: \" + STR$(?&FE6A)\n?R% = ?&FE6A\nR% = R% + 1\nENDPROC",
+   "expected": [
+    1,
+    0,
+    255,
+    254,
+    253,
+    252
+   ],
+   "model": null
+  },
+  {
+   "name": "VIA.T23 - what values do we get freezing and starting T2?",
+   "source": "DIM MC% 100\nR% = 256\nP% = MC%\n[\nOPT 3\nSEI\nLDA #&40\nSTA &FE4B\nLDA #&FF\nSTA &FE48\nSTA &FE49\nLDA #&60\nSTA &FE4B\nLDA &FE48\nSTA R%\nLDA #&40\nSTA &FE4B\nLDA &FE48\nSTA R%+1\nLDA #&60\nSTA &FE4B\nCLI\nRTS\n]\nCALL MC%\nREM REAL BBC: 251, 249\nPRINT \"VIA TEST: WHAT VALUES DO WE GET FREEZING AND STARTING T2?\"\nPRINT \"REAL BBC: 251, 249\"\nPRINT ?(R%)\nPRINT ?(R%+1)",
+   "expected": [
+    251,
+    249
+   ],
+   "model": null
+  },
+  {
+   "name": "T.VIA.PB6 - VIA T2 doesn't count manually-induced PB6 pulses",
+   "source": "REM DISABLE IRQS\nN%=0\nR%=256\n?&FE6E=&7F\n?&FE6D=&7F\n:\nREM T2 PULSE COUNTING MODE\n?&FE6B=?&FE6B OR&20\n:\nREM RESET T2\n?&FE68=100\n?&FE69=0\n:\nREM PB OUTPUTS\n:\nPROCP\nPRINT\"TOGGLE IN OUTPUT MODE\"\n?&FE62=0\n?&FE6F=&40\nPROCP\n?&FE62=&FF\nPROCP\n?&FE6F=&40\nPROCP\n?&FE6F=&00\nPROCP\nPRINT\"TOGGLE VIA DDRB\"\n?&FE62=0\nPROCP\n?&FE62=&FF\nPROCP\n?&FE62=0\nPROCP\nEND\n:\nDEFPROCP:LOCALT2%\nT2%=?&FE69*256+?&FE68\nR%!N%=T2%\nN%=N%+2\nPRINT\"T2=\";T2%\" (&\";~T2%\")\"\nENDPROC",
+   "expected": [
+    100,
+    0,
+    100,
+    0,
+    99,
+    0,
+    99,
+    0,
+    99,
+    0,
+    99,
+    0,
+    98,
+    0,
+    98,
+    0
+   ],
+   "model": null
+  }
+ ]
+}

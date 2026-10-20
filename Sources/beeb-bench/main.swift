@@ -3,6 +3,7 @@
 // Usage: swift run -c release beeb-bench [seconds]
 
 import BeebCore
+import BeebROMs
 import Foundation
 
 let seconds = CommandLine.arguments.count > 1 ? Double(CommandLine.arguments[1]) ?? 3 : 3
@@ -51,4 +52,25 @@ for variant in M6502.Variant.allCases {
     let mhz = Double(cycles) / elapsedSeconds / 1e6
     print(String(format: "%-9@ %8.1f MHz  (%.0fx a 2MHz BBC)", variant.rawValue, mhz, mhz / 2))
     memory.deallocate()
+}
+
+// The whole Model B: CPU, VIAs, CRTC, ULA, teletext, with and without the TV.
+for withTV in [false, true] {
+    let machine = BBCMicro(os: BeebROMs.data(.os12), sidewaysROMs: [15: BeebROMs.data(.basic2)])
+    if withTV {
+        machine.tv = TVOutput()
+    }
+    machine.run(seconds: 1)
+    // A busy BASIC loop drawing in Mode 2.
+    machine.type("MODE 2\nREPEAT:GCOL0,RND(7):DRAW RND(1280),RND(1024):UNTIL FALSE\n")
+    while machine.isTyping {
+        machine.run(seconds: 0.1)
+    }
+    let emulatedSeconds = 20.0
+    let clock = ContinuousClock()
+    let start = clock.now
+    machine.run(seconds: emulatedSeconds)
+    let elapsed = clock.now - start
+    let elapsedSeconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+    print(String(format: "Model B %@ %.0fx real time", withTV ? "with TV   " : "headless  ", emulatedSeconds / elapsedSeconds))
 }

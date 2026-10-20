@@ -7,6 +7,9 @@ let package = Package(
     platforms: [.macOS(.v26)],
     products: [
         .library(name: "BeebCore", targets: ["BeebCore"]),
+        .library(name: "BeebCapture", targets: ["BeebCapture"]),
+        .library(name: "BeebROMs", targets: ["BeebROMs"]),
+        .executable(name: "beeb", targets: ["beeb"]),
         .executable(name: "beeb-bench", targets: ["beeb-bench"]),
         .executable(name: "m6502-gen", targets: ["m6502-gen"]),
     ],
@@ -21,16 +24,24 @@ let package = Package(
             swiftSettings: [.unsafeFlags(["-enforce-exclusivity=unchecked"])]
         ),
 
+        // The standard ROM images (Acorn copyright, not GPL).
+        .target(name: "BeebROMs", resources: [.copy("ROMs")]),
+
+        // Screenshots (and later, video recording).
+        .target(name: "BeebCapture", dependencies: ["BeebCore"]),
+
+        .executableTarget(name: "beeb", dependencies: ["BeebCore", "BeebCapture", "BeebROMs"]),
+
         // 6502 state machine generator. Run `swift run m6502-gen` after
         // changing M6502GenKit; a test checks the output is up to date.
         .target(name: "M6502GenKit"),
         .executableTarget(name: "m6502-gen", dependencies: ["M6502GenKit"]),
 
-        .executableTarget(name: "beeb-bench", dependencies: ["BeebCore"]),
+        .executableTarget(name: "beeb-bench", dependencies: ["BeebCore", "BeebROMs"]),
 
         .testTarget(
             name: "BeebCoreTests",
-            dependencies: ["BeebCore", "M6502GenKit"],
+            dependencies: ["BeebCore", "BeebROMs", "BeebCapture", "M6502GenKit"],
             resources: [.copy("Resources")]
         ),
 

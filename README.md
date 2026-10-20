@@ -11,9 +11,12 @@ headers.
 | Path | What |
 | --- | --- |
 | `Sources/BeebCore` | The emulation core: pure Swift, no UI frameworks |
+| `Sources/BeebROMs` | Bundled ROM images (Acorn copyright, not GPL) |
+| `Sources/BeebCapture` | Screenshots |
+| `Sources/beeb` | Headless command-line BBC Micro |
 | `Sources/M6502GenKit`, `Sources/m6502-gen` | Generator for the 6502's per-cycle state machine |
 | `Sources/beeb-bench` | Core speed benchmark |
-| `Tests/BeebCoreTests` | CPU test suites (Lorenz, Dormann, CMOS ADC/SBC from real hardware, datasheet timings) |
+| `Tests/BeebCoreTests` | CPU suites (Lorenz, Dormann, CMOS ADC/SBC from real hardware, datasheet timings), VIA and timing tests against real-hardware results |
 | `Tests/Oracle6502Tests` | Cycle-by-cycle comparison with [perfect6502](https://github.com/mist64/perfect6502) |
 
 ## Building and testing
@@ -26,6 +29,29 @@ make bench
 
 `Sources/BeebCore/CPU/M6502+Generated.swift` is generated. After changing
 `Sources/M6502GenKit`, run `make generate`; a test fails if it's stale.
+
+## The command line
+
+```
+swift run -c release beeb --type 'PRINT 1+1\n' --text
+swift run -c release beeb --type 'MODE 2\nDRAW 640,512\n' --screenshot out.png
+swift run -c release beeb --load disc.ssd:PROGRAM --type 'RUN\n' --seconds 5 --text
+```
+
+`--pcs` and `--trace N` show where the CPU is spending its time.
+
+## The Model B
+
+`BBCMicro` follows b2's per-cycle machine loop: CPU with 1MHz cycle
+stretching, system and user VIAs, 6845 CRTC, Video ULA, SAA5050, keyboard
+matrix, addressable latch and uPD7002 ADC. The video stream feeds a
+simulated TV (`TVOutput`) that locks to sync like a real monitor.
+
+Checked against real hardware with scarybeasts' VIA tests, dp111's and Tom
+Seddon's timing suites, RMW and BCD tests, jsbeeb's IRQ timing results, and
+an IRQ-load test where real Model Bs give 1066-1072 (macbeeb: 1070).
+
+Still to come: sound, discs, tape, serial (the ACIA is a stub).
 
 ## The 6502
 
