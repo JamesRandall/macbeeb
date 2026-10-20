@@ -206,6 +206,11 @@ cassette or clock: MOS 5.10 with ADFS, BASIC 4 and Utils, a 1772 with
 PCD8572 EEPROM. It boots ADFS, so it wants .adf/.adl discs; ADFS images work
 on any 1770 machine, and writes go back to the file as with DFS discs.
 
+Or the Acorn Z80 Second Processor, for CP/M (Machine > Model > Second
+Processor, `--z80`): a 6MHz Z80 with 64K, client ROM 1.21, wired as BeebEm
+has it; it boots a CP/M system disc to `A>`. The Z80 core passes ZEXDOC and
+ZEXALL in full, undocumented flags included.
+
 Any of them except the Compact can have a 6502 Second Processor (Machine > Model, `--tube`):
 a 3MHz 65C02 with 64K on the Tube, booting Tube OS 1.10, following b2.
 

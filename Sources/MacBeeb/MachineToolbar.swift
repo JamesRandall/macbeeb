@@ -17,9 +17,15 @@ struct MachineToolbar: CustomizableToolbarContent {
                 }
                 .pickerStyle(.inline)
                 Divider()
-                Toggle("6502 Second Processor", isOn: Binding(get: { machine.secondProcessor },
-                                                             set: { machine.setSecondProcessor($0) }))
-                    .disabled(!machine.model.hasTube)
+                Picker("Second Processor", selection: Binding(get: { machine.fittedCoprocessor },
+                                                              set: { machine.setCoprocessor($0) })) {
+                    Text("No Second Processor").tag(BBCMicro.Coprocessor?.none)
+                    ForEach(BBCMicro.Coprocessor.allCases, id: \.self) { coprocessor in
+                        Text(coprocessor.displayName).tag(BBCMicro.Coprocessor?.some(coprocessor))
+                    }
+                }
+                .pickerStyle(.inline)
+                .disabled(!machine.model.hasTube)
             } label: {
                 Label("Model", systemImage: "desktopcomputer")
             }

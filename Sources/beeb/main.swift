@@ -2,7 +2,7 @@
 //
 //   beeb [--load DISC.ssd:FILE] [--seconds N] [--type TEXT] [--screenshot FILE.png] [--text]
 //        [--record FILE.mp4|.mov [--codec h264|hevc|proRes]] [--disc FILE.ssd|.dsd [--boot]]
-//        [--master | --bplus | --compact] [--tube] [--tape FILE.uef|.csw]
+//        [--master | --bplus | --compact] [--tube | --z80] [--tape FILE.uef|.csw]
 //
 // Boots a Model B (OS 1.2, BASIC 2) or with --master a Master 128, types TEXT (with \n for Return), runs
 // for N seconds of emulated time after typing finishes (default 3), then
@@ -32,6 +32,7 @@ var codec = VideoRecorder.Codec.h264
 var model = BBCMicro.Model.modelB
 var tapePath: String?
 var secondProcessor = false
+var coprocessor = BBCMicro.Coprocessor.mos6502
 
 var arguments = CommandLine.arguments.dropFirst()
 while let argument = arguments.popFirst() {
@@ -71,6 +72,9 @@ while let argument = arguments.popFirst() {
         model = .masterCompact
     case "--tube":
         secondProcessor = true
+    case "--z80":
+        secondProcessor = true
+        coprocessor = .z80
     case "--text":
         printText = true
     case "--pcs":
@@ -83,7 +87,7 @@ while let argument = arguments.popFirst() {
     }
 }
 
-let machine = BBCMicro(configuration: BeebROMs.configuration(for: model, secondProcessor: secondProcessor))
+let machine = BBCMicro(configuration: BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor))
 if let tapePath {
     do {
         machine.insertTape(try Tape(image: [UInt8](Data(contentsOf: URL(fileURLWithPath: tapePath)))))

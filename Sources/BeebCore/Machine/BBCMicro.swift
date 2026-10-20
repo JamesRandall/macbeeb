@@ -39,6 +39,21 @@ public final class BBCMicro {
         public var hasCassette: Bool { self != .masterCompact }
     }
 
+    /// What's on the Tube.
+    public enum Coprocessor: String, Codable, Sendable, CaseIterable {
+        /// The 6502 Second Processor (3MHz 65C02).
+        case mos6502
+        /// The Acorn Z80 Second Processor (6MHz, CP/M).
+        case z80
+
+        public var displayName: String {
+            switch self {
+            case .mos6502: "6502 Second Processor"
+            case .z80: "Z80 Second Processor"
+            }
+        }
+    }
+
     /// The Model B's disc interface.
     public enum DiscInterface: String, Codable, Sendable, CaseIterable {
         /// The Intel 8271 (Acorn DFS 1.20).
@@ -107,6 +122,8 @@ public final class BBCMicro {
     }
     /// The 6502 Second Processor, if fitted, and the Tube to it.
     public let secondProcessor: SecondProcessor?
+    /// The Z80 Second Processor, if fitted instead.
+    public private(set) var z80Processor: Z80SecondProcessor?
     public internal(set) var tube = Tube()
     /// Parasite half-cycles owed: 3 more each host cycle, 2 per parasite
     /// cycle, so host cycles alternate 1 and 2 parasite cycles (3MHz).
@@ -248,15 +265,18 @@ public final class BBCMicro {
         /// Banks that are RAM. (On the B+ 128K, 0, 1, 12 and 13; on the
         /// Master, 4-7.)
         public var sidewaysRAMBanks: Set<Int>
-        /// A 6502 Second Processor on the Tube, with this ROM (TUBE110).
+        /// A second processor on the Tube, with this ROM (TUBE110 for the
+        /// 6502, the Z80 client ROM for the Z80).
         public var secondProcessorROM: [UInt8]?
+        public var coprocessor: Coprocessor
         /// The Model B's disc interface (the others' are built in).
         public var discInterface: DiscInterface
 
         public init(model: Model = .modelB, os: [UInt8], sidewaysROMs: [Int: [UInt8]],
                     sidewaysRAMBanks: Set<Int>? = nil, secondProcessorROM: [UInt8]? = nil,
-                    discInterface: DiscInterface = .intel8271) {
+                    discInterface: DiscInterface = .intel8271, coprocessor: Coprocessor = .mos6502) {
             self.discInterface = discInterface
+            self.coprocessor = coprocessor
             self.model = model
             self.os = os
             self.sidewaysROMs = sidewaysROMs
@@ -270,7 +290,7 @@ public final class BBCMicro {
         }
 
         enum CodingKeys: CodingKey {
-            case model, os, sidewaysROMs, sidewaysRAMBanks, secondProcessorROM, discInterface
+            case model, os, sidewaysROMs, sidewaysRAMBanks, secondProcessorROM, discInterface, coprocessor
         }
 
         public init(from decoder: Decoder) throws {
@@ -281,6 +301,7 @@ public final class BBCMicro {
             sidewaysRAMBanks = try c.decodeIfPresent(Set<Int>.self, forKey: .sidewaysRAMBanks) ?? []
             secondProcessorROM = try c.decodeIfPresent([UInt8].self, forKey: .secondProcessorROM)
             discInterface = try c.decodeIfPresent(DiscInterface.self, forKey: .discInterface) ?? .intel8271
+            coprocessor = try c.decodeIfPresent(Coprocessor.self, forKey: .coprocessor) ?? .mos6502
         }
     }
 
@@ -360,11 +381,15 @@ public final class BBCMicro {
             teletextBases = (0x7C00, 0x7C00)
         }
 
-        secondProcessor = model.hasTube ? configuration.secondProcessorROM.map(SecondProcessor.init(rom:)) : nil
+        let tubeROM = model.hasTube ? configuration.secondProcessorROM : nil
+        secondProcessor = configuration.coprocessor == .mos6502 ? tubeROM.map(SecondProcessor.init(rom:)) : nil
 
         updatePaging()
         oldSystemVIAPB = systemVIA.b.p
         cpu.reset()
+        if configuration.coprocessor == .z80, let rom = tubeROM {
+            z80Processor = Z80SecondProcessor(rom: rom, machine: self)
+        }
     }
 
     deinit {
@@ -624,7 +649,7 @@ public final class BBCMicro {
     /// Whether the host sees the (external) Tube: always on the B and B+;
     /// on the Master, while ACCCON's ITU bit selects the external Tube.
     var tubeAccessible: Bool {
-        secondProcessor != nil && (!model.isMaster || acccon & 0x10 == 0)
+        (secondProcessor != nil || z80Processor != nil) && (!model.isMaster || acccon & 0x10 == 0)
     }
 
     // MARK: Master I/O
@@ -853,6 +878,10 @@ public final class BBCMicro {
                     secondProcessor.reset()
                     tube.reset()
                 }
+                if let z80Processor {
+                    z80Processor.reset()
+                    tube.reset()
+                }
             }
             return
         }
@@ -967,6 +996,9 @@ public final class BBCMicro {
                 secondProcessor.step(tube: &tube)
                 parasiteCredit -= 2
             }
+            cpu.setIRQ(IRQDevice.tube, tubeAccessible && tube.hostIRQ)
+        } else if let z80Processor, !resetting {
+            z80Processor.step()
             cpu.setIRQ(IRQDevice.tube, tubeAccessible && tube.hostIRQ)
         }
 

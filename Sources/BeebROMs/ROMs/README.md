@@ -14,4 +14,5 @@ included, as b2 and jsbeeb do, so the emulator works out of the box.
 | watford-ddfs153.rom, watford-ddfs154t.rom | Watford DDFS for the DDB2 and DDB3 1770 boards | b2 |
 | opus-ddos345.rom | Opus DDOS 3.45 for the Opus 1770 board | b2 |
 | tube110.rom | 6502 Second Processor Tube OS 1.10 | b2 |
+| z80-121.rom | Z80 Second Processor client ROM 1.21 (J.G. Harston's fixes to Acorn's 1.20) | BeebEm |
 | mos320-*.rom | Master 128 MOS 3.20 set: MOS, Terminal (F), View (E), ADFS (D), BASIC 4 (C), Edit (B), ViewSheet (A), DFS 2.24 (9) | b2 |

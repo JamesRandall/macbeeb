@@ -50,6 +50,7 @@ extension BBCMicro {
         var tube: Tube
         var parasiteCredit: Int
         var secondProcessor: SecondProcessorState?
+        var z80: Z80SecondProcessor.State?
 
         /// Whether the snapshot has a tape in the recorder.
         public var hasTape: Bool { tape != nil }
@@ -72,7 +73,7 @@ extension BBCMicro {
                  keyColumns: keyColumns, keyScanColumn: keyScanColumn, notJoystickButtons: notJoystickButtons, resetting: resetting,
                  keyEvents: keyEvents, paste: paste, serial: serial,
                  tape: tape?.state, tube: tube, parasiteCredit: parasiteCredit,
-                 secondProcessor: secondProcessor.map(SecondProcessorState.init),
+                 secondProcessor: secondProcessor.map(SecondProcessorState.init), z80: z80Processor?.state,
                  crtcLastOutput: crtcLastOutput,
                  ic15Byte: ic15Byte, unit: unit)
     }
@@ -86,7 +87,9 @@ extension BBCMicro {
     public func restore(_ s: Snapshot) throws {
         guard s.version == Snapshot.currentVersion else { throw RestoreError.unsupportedVersion(s.version) }
         guard s.model == model else { throw RestoreError.wrongModel(s.model) }
-        guard (s.secondProcessor != nil) == (secondProcessor != nil) else { throw RestoreError.wrongSecondProcessor }
+        guard (s.secondProcessor != nil) == (secondProcessor != nil), (s.z80 != nil) == (z80Processor != nil) else {
+            throw RestoreError.wrongSecondProcessor
+        }
         cycles = s.cycles
         cpu.restore(s.cpu)
         systemVIA = s.systemVIA
@@ -127,6 +130,9 @@ extension BBCMicro {
         parasiteCredit = s.parasiteCredit
         if let secondProcessor, let state = s.secondProcessor {
             state.restore(into: secondProcessor)
+        }
+        if let z80Processor, let state = s.z80 {
+            z80Processor.restore(state)
         }
         if let state = s.tape {
             if let tape {

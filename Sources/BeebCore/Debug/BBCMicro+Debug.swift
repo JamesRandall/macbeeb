@@ -110,6 +110,8 @@ extension BBCMicro {
         regions.append(MemoryRegion(space: .osROM, name: "OS ROM", base: 0xC000, size: 0x4000, isROM: true))
         if secondProcessor != nil {
             regions.append(MemoryRegion(space: .cpu(.parasite), name: "Second processor's view", base: 0, size: 0x10000, isROM: false))
+        }
+        if secondProcessor != nil || z80Processor != nil {
             regions.append(MemoryRegion(space: .parasiteRAM, name: "Second processor RAM", base: 0, size: 0x10000, isROM: false))
         }
         return regions
@@ -135,8 +137,8 @@ extension BBCMicro {
         case .osROM:
             return (0xC000..<0x10000).contains(address) ? osROM + address - 0xC000 : nil
         case .parasiteRAM:
-            guard let p = secondProcessor, (0..<0x10000).contains(address) else { return nil }
-            return p.ram + address
+            guard (0..<0x10000).contains(address), let ram = secondProcessor?.ram ?? z80Processor?.ram else { return nil }
+            return ram + address
         }
     }
 

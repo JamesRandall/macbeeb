@@ -30,6 +30,14 @@ final class MachineController {
     /// Whether a 6502 Second Processor is fitted. Remembered like the model.
     private(set) var secondProcessor: Bool
     private static let secondProcessorDefaultsKey = "MacBeebSecondProcessor"
+    /// Which second processor, when one's fitted.
+    private(set) var coprocessor: BBCMicro.Coprocessor
+    private static let coprocessorDefaultsKey = "MacBeebCoprocessor"
+
+    /// The second processor fitted, if any.
+    var fittedCoprocessor: BBCMicro.Coprocessor? {
+        secondProcessor && model.hasTube ? coprocessor : nil
+    }
     /// The Model B's disc interface. Remembered like the model.
     private(set) var discInterface: BBCMicro.DiscInterface
     private static let discInterfaceDefaultsKey = "MacBeebDiscInterface"
@@ -69,10 +77,14 @@ final class MachineController {
         self.model = model
         let secondProcessor = UserDefaults.standard.bool(forKey: Self.secondProcessorDefaultsKey)
         self.secondProcessor = secondProcessor
+        let coprocessor = UserDefaults.standard.string(forKey: Self.coprocessorDefaultsKey)
+            .flatMap(BBCMicro.Coprocessor.init(rawValue:)) ?? .mos6502
+        self.coprocessor = coprocessor
         let discInterface = UserDefaults.standard.string(forKey: Self.discInterfaceDefaultsKey)
             .flatMap(BBCMicro.DiscInterface.init(rawValue:)) ?? .intel8271
         self.discInterface = discInterface
-        let configuration = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, discInterface: discInterface)
+        let configuration = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
+                                                   discInterface: discInterface)
         host = EmulatorHost {
             BBCMicro(configuration: configuration)
         }
@@ -359,6 +371,16 @@ final class MachineController {
         }
     }
 
+    /// Fits a second processor (nil removes it), which power cycles.
+    func setCoprocessor(_ new: BBCMicro.Coprocessor?) {
+        guard new != fittedCoprocessor else { return }
+        secondProcessor = new != nil
+        if let new { coprocessor = new }
+        UserDefaults.standard.set(secondProcessor, forKey: Self.secondProcessorDefaultsKey)
+        UserDefaults.standard.set(coprocessor.rawValue, forKey: Self.coprocessorDefaultsKey)
+        changeMachine()
+    }
+
     /// Fits or removes the 6502 Second Processor, which power cycles.
     func setSecondProcessor(_ fitted: Bool) {
         guard fitted != secondProcessor else { return }
@@ -368,7 +390,8 @@ final class MachineController {
     }
 
     private func changeMachine() {
-        host.send(.changeMachine(BeebROMs.configuration(for: model, secondProcessor: secondProcessor, discInterface: discInterface)))
+        host.send(.changeMachine(BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
+                                                        discInterface: discInterface)))
     }
 
     func togglePause() {
@@ -563,6 +586,7 @@ final class MachineController {
             host.send(.loadState(file))
             model = file.configuration.model
             secondProcessor = file.configuration.secondProcessorROM != nil
+            coprocessor = file.configuration.coprocessor
             discInterface = file.configuration.discInterface
             discNames = [:]
             tapeName = file.snapshot.hasTape ? "Tape" : nil

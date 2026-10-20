@@ -9,6 +9,7 @@ public enum BeebROMs {
         case dfs226 = "dfs226"
         case bPlusMOS = "bplus-mos"
         case tube110 = "tube110"
+        case z80121 = "z80-121"
         case watfordDDFS153 = "watford-ddfs153"
         case watfordDDFS154T = "watford-ddfs154t"
         case opusDDOS345 = "opus-ddos345"
@@ -67,8 +68,10 @@ extension BeebROMs {
     /// On the Model B, `discInterface` picks the disc controller and its
     /// filing system (in bank 14).
     public static func configuration(for model: BBCMicro.Model, secondProcessor: Bool = false,
+                                     coprocessor: BBCMicro.Coprocessor = .mos6502,
                                      discInterface: BBCMicro.DiscInterface = .intel8271) -> BBCMicro.Configuration {
         var configuration = standardConfiguration(for: model)
+        configuration.coprocessor = coprocessor
         if model == .modelB {
             configuration.discInterface = discInterface
             configuration.sidewaysROMs[14] = switch discInterface {
@@ -80,7 +83,7 @@ extension BeebROMs {
             }
         }
         if secondProcessor && model.hasTube {
-            configuration.secondProcessorROM = data(.tube110)
+            configuration.secondProcessorROM = data(coprocessor == .z80 ? .z80121 : .tube110)
         }
         return configuration
     }

@@ -117,7 +117,7 @@ public final class AgentTools: Sendable {
                     return "drive \(drive): \"\(title)\""
                 }
                 return """
-                model: \(modelDescription(m.model))\(m.secondProcessor != nil ? " with a 6502 Second Processor" : "")
+                model: \(modelDescription(m.model))\(m.secondProcessor != nil ? " with a 6502 Second Processor" : m.z80Processor != nil ? " with a Z80 Second Processor (CP/M)" : "")
                 emulated time: \(String(format: "%.3f", Double(m.cycles) / 2_000_000))s
                 PC=&\(hex(pc, 4)) A=&\(hex(cpu.a)) X=&\(hex(cpu.x)) Y=&\(hex(cpu.y)) S=&\(hex(cpu.s)) P=&\(hex(cpu.p))
                 screen mode: \(m.peek(0x355))
@@ -132,7 +132,9 @@ public final class AgentTools: Sendable {
             description: "Switch the BBC off and on again. Discs stay in the drives. Runs until the BASIC prompt. With model, switches to that machine: model_b (OS 1.20, BASIC 2, DFS 1.20), b_plus (B+ 128K: MOS 2.00, BASIC 2, DFS 2.26, shadow RAM) master_128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS, View, ViewSheet, Edit; 1770 disc controller, shadow RAM, sideways RAM in banks 4-7), or master_compact (MOS 5.10, ADFS only, so it needs .adf/.adl discs; no Tube). With second_processor, fits or removes a 6502 Second Processor (3MHz 65C02, 64K, on the Tube): BASIC is copied across and runs in the second processor (PAGE &800, HIMEM &8000), and the host just does the I/O.",
             inputSchema: schema(["model": ["type": "string", "enum": ["model_b", "b_plus", "master_128", "master_compact"],
                                            "description": "Machine to switch to (default: keep the current one)"] as JSONValue,
-                                 "second_processor": prop("boolean", "Fit a 6502 Second Processor (default: keep as is)"),
+                                 "second_processor": prop("boolean", "Fit a second processor (default: keep as is)"),
+                                 "coprocessor": ["type": "string", "enum": ["mos6502", "z80"],
+                                                 "description": "Which second processor: mos6502 (default) or z80 (CP/M: boot a CP/M system disc)"] as JSONValue,
                                  "disc_interface": ["type": "string", "enum": ["intel8271", "acorn1770", "watfordDDB2", "watfordDDB3", "opus"],
                                                     "description": "Model B only: the disc interface and its filing system (default: keep as is)"] as JSONValue])
         )) { context, args in
@@ -149,12 +151,20 @@ public final class AgentTools: Sendable {
                 discInterface = named
             }
             let interface = discInterface
+            var requestedCoprocessor: BBCMicro.Coprocessor?
+            if let name = args["coprocessor"]?.stringValue {
+                guard let named = BBCMicro.Coprocessor(rawValue: name) else { throw ToolFailure("coprocessor must be mos6502 or z80") }
+                requestedCoprocessor = named
+            }
+            let coprocessor = requestedCoprocessor
             return .text(try context.perform { session in
                 var configuration: BBCMicro.Configuration?
-                if model != nil || secondProcessor != nil || interface != nil {
+                if model != nil || secondProcessor != nil || interface != nil || coprocessor != nil {
                     let current = session.machine
+                    let fitted = current.secondProcessor != nil || current.z80Processor != nil
                     configuration = BeebROMs.configuration(for: model ?? current.model,
-                                                           secondProcessor: secondProcessor ?? (current.secondProcessor != nil),
+                                                           secondProcessor: secondProcessor ?? (coprocessor != nil || fitted),
+                                                           coprocessor: coprocessor ?? current.configuration.coprocessor,
                                                            discInterface: interface ?? current.configuration.discInterface)
                 }
                 session.powerCycle(configuration: configuration)

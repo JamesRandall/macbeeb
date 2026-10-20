@@ -119,10 +119,15 @@ struct MacBeebApp: App {
                 }
                 .pickerStyle(.inline)
                 .disabled(machine == nil)
-                Toggle("6502 Second Processor", isOn: Binding(
-                    get: { machine?.secondProcessor ?? false },
-                    set: { machine?.setSecondProcessor($0) }
-                ))
+                Picker("Second Processor", selection: Binding(
+                    get: { machine?.fittedCoprocessor },
+                    set: { machine?.setCoprocessor($0) }
+                )) {
+                    Text("None").tag(BBCMicro.Coprocessor?.none)
+                    ForEach(BBCMicro.Coprocessor.allCases, id: \.self) { coprocessor in
+                        Text(coprocessor.displayName).tag(BBCMicro.Coprocessor?.some(coprocessor))
+                    }
+                }
                 .disabled(!(machine?.model.hasTube ?? false))
                 Picker("Disc Interface", selection: Binding(
                     get: { machine?.discInterface ?? .intel8271 },
@@ -209,7 +214,7 @@ struct MachineWindow: View {
     }
 
     private var title: String {
-        let name = machine.model.displayName + (machine.secondProcessor && machine.model.hasTube ? " + 6502 Second Processor" : "")
+        let name = machine.model.displayName + (machine.fittedCoprocessor.map { " + " + $0.displayName } ?? "")
         var title = machine.discNames[0].map { "\(name) — \($0)" } ?? name
         if machine.paused {
             title += " (Paused)"
