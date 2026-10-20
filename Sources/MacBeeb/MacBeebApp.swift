@@ -52,6 +52,18 @@ struct MacBeebApp: App {
                     .keyboardShortcut("v")
                     .disabled(machine == nil)
             }
+            CommandGroup(after: .toolbar) {
+                Picker("Display", selection: Binding(
+                    get: { machine?.displayStyle ?? DisplayStyle.saved },
+                    set: { machine?.displayStyle = $0 }
+                )) {
+                    ForEach(DisplayStyle.allCases) { style in
+                        Text(style.name).tag(style)
+                    }
+                }
+                .disabled(machine == nil)
+                Divider()
+            }
             CommandMenu("Machine") {
                 Button(machine?.paused == true ? "Resume" : "Pause") { machine?.togglePause() }
                     .keyboardShortcut("p")
@@ -84,7 +96,7 @@ struct MachineWindow: View {
     @State private var machine = MachineController()
 
     var body: some View {
-        EmulatorView(host: machine.host)
+        EmulatorView(host: machine.host, style: machine.displayStyle) { machine.renderer = $0 }
             .frame(minWidth: 368, minHeight: 288)
             .background(.black)
             .focusedSceneValue(machine)

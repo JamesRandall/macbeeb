@@ -18,6 +18,12 @@ final class MachineController {
     private(set) var speedLimited = true
     /// The emulated model. New windows start with the last one chosen.
     private(set) var model: BBCMicro.Model
+    /// How the window draws the picture. Shared by all windows.
+    var displayStyle = DisplayStyle.saved {
+        didSet { UserDefaults.standard.set(displayStyle.rawValue, forKey: DisplayStyle.defaultsKey) }
+    }
+    /// The window's renderer, for capturing the display as shown.
+    @ObservationIgnored weak var renderer: Renderer?
 
     private static let modelDefaultsKey = "MacBeebModel"
 
@@ -67,6 +73,11 @@ final class MachineController {
                 try? await Task.sleep(for: .seconds(2))
             }
             let png = screenshotPNG()
+            // The display as drawn, at twice the TV's size.
+            if let image = renderer?.renderImage(width: EmulatorHost.Frame.width * 2, height: EmulatorHost.Frame.height * 2),
+               let display = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) {
+                try? display.write(to: URL(fileURLWithPath: path.replacingOccurrences(of: ".png", with: "-display.png")))
+            }
             let report = "frame=\(host.frame?.number ?? -1) cycles=\(host.cycles) audioQueued=\(host.audioRing.count)\n"
             FileManager.default.createFile(atPath: path + ".txt", contents: Data(report.utf8))
             if let png {

@@ -68,17 +68,29 @@ final class EmulatorNSView: MTKView {
 
 struct EmulatorView: NSViewRepresentable {
     let host: EmulatorHost
+    let style: DisplayStyle
+    /// Called with the renderer once it exists.
+    var onRenderer: (Renderer) -> Void = { _ in }
 
     func makeNSView(context: Context) -> EmulatorNSView {
-        let view = EmulatorNSView(frame: .zero, device: MTLCreateSystemDefaultDevice())
+        let device = MTLCreateSystemDefaultDevice()
+        let view = EmulatorNSView(frame: .zero, device: device)
         view.host = host
         view.colorPixelFormat = .bgra8Unorm
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
         view.preferredFramesPerSecond = 120
-        view.renderer = Renderer(view: view, host: host)
+        if let device {
+            view.renderer = Renderer(device: device, pixelFormat: view.colorPixelFormat, host: host)
+        }
         view.delegate = view.renderer
+        if let renderer = view.renderer {
+            renderer.style = style
+            onRenderer(renderer)
+        }
         return view
     }
 
-    func updateNSView(_ view: EmulatorNSView, context: Context) {}
+    func updateNSView(_ view: EmulatorNSView, context: Context) {
+        view.renderer?.style = style
+    }
 }
