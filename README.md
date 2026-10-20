@@ -106,6 +106,11 @@ b2's paging (shadow RAM, ANDY, HAZEL, the VDU driver's view of shadow RAM),
 sideways RAM in banks 4-7, the MC146818 clock and CMOS RAM, the keypad, and
 a WD1770 (ported from jsbeeb/beebjit) with DFS 2.24 and ADFS.
 
+The keyboard goes by key position (the BBC's layout on the Mac's keys) or,
+in Settings > Keyboard, by the character the Mac's layout types, with the
+BBC's Shift pressed or released per key as needed. Custom mappings put any
+BBC key on any Mac key, in either mode.
+
 Save states (`.beebstate`) and snapshots capture everything, discs and disc
 controllers included, so a restored machine carries on cycle for cycle.
 

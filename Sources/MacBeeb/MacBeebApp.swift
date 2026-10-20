@@ -101,6 +101,10 @@ struct MacBeebApp: App {
                 .disabled(machine == nil)
             }
         }
+
+        Settings {
+            SettingsView()
+        }
     }
 }
 

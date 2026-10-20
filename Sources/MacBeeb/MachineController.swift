@@ -68,6 +68,8 @@ final class MachineController {
             if let disc {
                 insertDisc(URL(fileURLWithPath: disc))
                 try? await Task.sleep(for: .seconds(25))
+            } else if UserDefaults.standard.bool(forKey: "MacBeebSelfTestMacLayout") {
+                await typeThroughWindowInMacLayout()
             } else {
                 host.send(.type("PRINT \"MACBEEB \";6*7\n"))
                 try? await Task.sleep(for: .seconds(2))
@@ -85,6 +87,48 @@ final class MachineController {
             }
             NSApp.terminate(nil)
         }
+    }
+
+    /// Types PRINT 6*7 as Mac key events through the window, with "*" as
+    /// Shift-8 (US/UK layouts), in Mac layout mode.
+    private func typeThroughWindowInMacLayout() async {
+        let settings = KeyboardSettings.shared
+        let savedMode = settings.mode
+        settings.mode = .macLayout
+        defer { settings.mode = savedMode }
+        try? await Task.sleep(for: .milliseconds(100))
+        guard let window = NSApp.windows.first(where: { $0.firstResponder is EmulatorNSView }),
+              let view = window.firstResponder as? EmulatorNSView else { return }
+
+        func key(_ code: UInt16, _ characters: String, shift: Bool = false) async {
+            for type in [NSEvent.EventType.keyDown, .keyUp] {
+                guard let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: shift ? .shift : [],
+                                                   timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                                                   characters: characters, charactersIgnoringModifiers: characters,
+                                                   isARepeat: false, keyCode: code) else { continue }
+                if type == .keyDown { view.keyDown(with: event) } else { view.keyUp(with: event) }
+                try? await Task.sleep(for: .milliseconds(60))
+            }
+        }
+        func shift(_ down: Bool) async {
+            guard let event = NSEvent.keyEvent(with: .flagsChanged, location: .zero, modifierFlags: down ? .shift : [],
+                                               timestamp: 0, windowNumber: window.windowNumber, context: nil,
+                                               characters: "", charactersIgnoringModifiers: "",
+                                               isARepeat: false, keyCode: 0x38) else { return }
+            view.flagsChanged(with: event)
+            try? await Task.sleep(for: .milliseconds(60))
+        }
+
+        for (code, character) in [(UInt16(0x23), "P"), (0x0F, "R"), (0x22, "I"), (0x2D, "N"), (0x11, "T"),
+                                  (0x31, " "), (0x16, "6")] {
+            await key(code, character)
+        }
+        await shift(true)
+        await key(0x1C, "*", shift: true)
+        await shift(false)
+        await key(0x1A, "7")
+        await key(0x24, "\r")
+        try? await Task.sleep(for: .seconds(1))
     }
 
     func powerCycle() {

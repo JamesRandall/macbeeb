@@ -165,6 +165,36 @@ extension BeebKey {
         return nil
     }
 
+    /// Every key, named as on the keycap, in keyboard order (for choosing
+    /// keys in settings).
+    public static let catalogue: [(name: String, key: BeebKey)] = [
+        ("ESCAPE", .escape), ("f0", .f0), ("f1", .f1), ("f2", .f2), ("f3", .f3), ("f4", .f4),
+        ("f5", .f5), ("f6", .f6), ("f7", .f7), ("f8", .f8), ("f9", .f9), ("BREAK", .breakKey),
+        ("1 !", .digit1), ("2 \"", .digit2), ("3 #", .digit3), ("4 $", .digit4), ("5 %", .digit5),
+        ("6 &", .digit6), ("7 '", .digit7), ("8 (", .digit8), ("9 )", .digit9), ("0", .digit0),
+        ("- =", .minus), ("^ ~", .caret), ("\\ |", .backslash), ("←", .left), ("→", .right),
+        ("TAB", .tab), ("Q", .q), ("W", .w), ("E", .e), ("R", .r), ("T", .t), ("Y", .y), ("U", .u),
+        ("I", .i), ("O", .o), ("P", .p), ("@", .at), ("[ {", .leftSquareBracket), ("_ £", .underline),
+        ("↑", .up), ("↓", .down),
+        ("CAPS LOCK", .capsLock), ("CTRL", .ctrl), ("A", .a), ("S", .s), ("D", .d), ("F", .f), ("G", .g),
+        ("H", .h), ("J", .j), ("K", .k), ("L", .l), ("; +", .semicolon), (": *", .colon),
+        ("] }", .rightSquareBracket), ("RETURN", .returnKey),
+        ("SHIFT LOCK", .shiftLock), ("SHIFT", .shift), ("Z", .z), ("X", .x), ("C", .c), ("V", .v),
+        ("B", .b), ("N", .n), ("M", .m), (", <", .comma), (". >", .stop), ("/ ?", .slash),
+        ("DELETE", .delete), ("COPY", .copy), ("SPACE", .space),
+        ("Keypad 0", .keypad0), ("Keypad 1", .keypad1), ("Keypad 2", .keypad2), ("Keypad 3", .keypad3),
+        ("Keypad 4", .keypad4), ("Keypad 5", .keypad5), ("Keypad 6", .keypad6), ("Keypad 7", .keypad7),
+        ("Keypad 8", .keypad8), ("Keypad 9", .keypad9), ("Keypad +", .keypadPlus), ("Keypad -", .keypadMinus),
+        ("Keypad /", .keypadSlash), ("Keypad *", .keypadStar), ("Keypad #", .keypadHash),
+        ("Keypad ,", .keypadComma), ("Keypad .", .keypadStop), ("Keypad DELETE", .keypadDelete),
+        ("Keypad RETURN", .keypadReturn),
+    ]
+
+    /// The keycap name, e.g. "RETURN" or "; +".
+    public var name: String {
+        Self.catalogue.first { $0.key == self }?.name ?? String(format: "&%02X", rawValue)
+    }
+
     public static let namedKeys: [String: BeebKey] = [
         "RETURN": .returnKey, "ENTER": .returnKey, "SPACE": .space, "SHIFT": .shift, "CTRL": .ctrl,
         "CONTROL": .ctrl, "ESCAPE": .escape, "ESC": .escape, "TAB": .tab, "DELETE": .delete,

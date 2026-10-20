@@ -8,19 +8,50 @@ import SwiftUI
 final class EmulatorNSView: MTKView {
     var host: EmulatorHost?
     var renderer: Renderer?
-    private var capsLockOn = false
 
     override var acceptsFirstResponder: Bool { true }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         window?.makeFirstResponder(self)
+        updateTranslator()
         NotificationCenter.default.addObserver(self, selector: #selector(windowDidResignKey),
                                                name: NSWindow.didResignKeyNotification, object: window)
     }
 
     @objc private func windowDidResignKey(_ notification: Notification) {
+        translator.reset()
         host?.send(.releaseAllKeys)
+    }
+
+    /// Rebuilt when the settings change (see `updateTranslator`).
+    private var translator = KeyboardSettings.shared.translator
+
+    /// Picks up keyboard settings changes; keys held across a change
+    /// still release properly.
+    func updateTranslator() {
+        let settings = KeyboardSettings.shared
+        withObservationTracking {
+            translator.mode = settings.mode
+            translator.customKeys = settings.translator.customKeys
+        } onChange: { [weak self] in
+            DispatchQueue.main.async { self?.updateTranslator() }
+        }
+    }
+
+    private func perform(_ actions: [KeyboardTranslator.Action]) {
+        for action in actions {
+            switch action {
+            case .key(let key, let down):
+                host?.send(.key(key, down: down))
+            case .tapCapsLock:
+                host?.send(.key(.capsLock, down: true))
+                let host = self.host
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+                    host?.send(.key(.capsLock, down: false))
+                }
+            }
+        }
     }
 
     override func keyDown(with event: NSEvent) {
@@ -29,40 +60,16 @@ final class EmulatorNSView: MTKView {
             super.keyDown(with: event)
             return
         }
-        guard !event.isARepeat else { return }
-        if let key = KeyMap.physical[event.keyCode] {
-            host?.send(.key(key, down: true))
-        }
+        perform(translator.keyDown(keyCode: event.keyCode, characters: event.characters,
+                                   modifiers: .init(event.modifierFlags), isRepeat: event.isARepeat))
     }
 
     override func keyUp(with event: NSEvent) {
-        if let key = KeyMap.physical[event.keyCode] {
-            host?.send(.key(key, down: false))
-        }
+        perform(translator.keyUp(keyCode: event.keyCode))
     }
 
     override func flagsChanged(with event: NSEvent) {
-        if event.keyCode == KeyMap.capsLock {
-            // macOS only reports Caps Lock toggling, so tap the BBC key
-            // whenever the Mac's state changes.
-            let on = event.modifierFlags.contains(.capsLock)
-            if on != capsLockOn {
-                capsLockOn = on
-                host?.send(.key(.capsLock, down: true))
-                let host = self.host
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
-                    host?.send(.key(.capsLock, down: false))
-                }
-            }
-            return
-        }
-        guard let key = KeyMap.physical[event.keyCode] else { return }
-        let flag: NSEvent.ModifierFlags = switch event.keyCode {
-        case 0x38, 0x3C: .shift
-        case 0x3B, 0x3E: .control
-        default: .option
-        }
-        host?.send(.key(key, down: event.modifierFlags.contains(flag)))
+        perform(translator.flagsChanged(keyCode: event.keyCode, modifiers: .init(event.modifierFlags)))
     }
 }
 

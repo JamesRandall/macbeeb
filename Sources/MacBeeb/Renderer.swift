@@ -25,7 +25,7 @@ enum DisplayStyle: String, CaseIterable, Identifiable {
     static let defaultsKey = "MacBeebDisplayStyle"
 
     static var saved: DisplayStyle {
-        UserDefaults.standard.string(forKey: defaultsKey).flatMap(DisplayStyle.init(rawValue:)) ?? .crt
+        UserDefaults.standard.string(forKey: defaultsKey).flatMap(DisplayStyle.init(rawValue:)) ?? .sharp
     }
 }
 
