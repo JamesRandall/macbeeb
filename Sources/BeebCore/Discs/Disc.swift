@@ -702,6 +702,48 @@ public final class Disc {
         return Array(result[0..<numTracks * sides * Self.ssdTrackSize])
     }
 
+    /// Disc image file formats.
+    public enum ImageFormat: String, Sendable, CaseIterable {
+        /// DFS, one side.
+        case ssd
+        /// DFS, both sides interleaved by track.
+        case dsd
+        /// ADFS S or M (one side; also .ads, .adm).
+        case adf
+        /// ADFS L (both sides).
+        case adl
+
+        /// The format a file name's extension says.
+        public init?(path: String) {
+            switch (path as NSString).pathExtension.lowercased() {
+            case "ssd": self = .ssd
+            case "dsd": self = .dsd
+            case "adf", "ads", "adm": self = .adf
+            case "adl": self = .adl
+            default: return nil
+            }
+        }
+
+        public static let extensions = ["ssd", "dsd", "adf", "ads", "adm", "adl"]
+
+        /// Whether `Disc` can write it back (ADFS images can't yet).
+        public var isWritable: Bool { self == .ssd || self == .dsd }
+    }
+
+    public static func fromImage(_ bytes: [UInt8], format: ImageFormat) throws -> Disc {
+        switch format {
+        case .ssd: try fromSSD(bytes)
+        case .dsd: try fromDSD(bytes)
+        case .adf: try fromADF(bytes)
+        case .adl: try fromADL(bytes)
+        }
+    }
+
+    /// Reads an image, by its file name's extension (DFS .ssd if unknown).
+    public static func fromImage(_ bytes: [UInt8], named path: String) throws -> Disc {
+        try fromImage(bytes, format: ImageFormat(path: path) ?? .ssd)
+    }
+
     // MARK: ADFS (MFM; for a 1770, not readable by the 8271)
 
     /// ADFS S/M: one side.

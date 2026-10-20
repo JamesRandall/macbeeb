@@ -328,9 +328,12 @@ public struct SymbolTable: Sendable {
         case .bPlus:
             hardware += [("ACCCON", 0xFE34), ("FDC_CONTROL", 0xFE80), ("FDC_STATUS", 0xFE84), ("FDC_TRACK", 0xFE85),
                          ("FDC_SECTOR", 0xFE86), ("FDC_DATA", 0xFE87), ("ADC_STATUS", 0xFEC0), ("ADC_HIGH", 0xFEC1), ("ADC_LOW", 0xFEC2)]
-        case .master128:
+        case .master128, .masterCompact:
             hardware += [("ACCCON", 0xFE34), ("FDC_CONTROL", 0xFE24), ("FDC_STATUS", 0xFE28), ("FDC_TRACK", 0xFE29),
-                         ("FDC_SECTOR", 0xFE2A), ("FDC_DATA", 0xFE2B), ("ADC_STATUS", 0xFE18), ("ADC_HIGH", 0xFE19), ("ADC_LOW", 0xFE1A)]
+                         ("FDC_SECTOR", 0xFE2A), ("FDC_DATA", 0xFE2B)]
+            if model.hasADC {
+                hardware += [("ADC_STATUS", 0xFE18), ("ADC_HIGH", 0xFE19), ("ADC_LOW", 0xFE1A)]
+            }
         }
         hardware += (0..<8).map { ("TUBE_\($0)", 0xFEE0 + $0) }
         for (name, address) in hardware { table.add(name, address) }

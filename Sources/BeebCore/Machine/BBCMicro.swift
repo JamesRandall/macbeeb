@@ -18,14 +18,25 @@ public final class BBCMicro {
         case modelB
         case bPlus
         case master128
+        case masterCompact
 
         public var displayName: String {
             switch self {
             case .modelB: "BBC Model B"
             case .bPlus: "BBC Model B+ 128K"
             case .master128: "BBC Master 128"
+            case .masterCompact: "BBC Master Compact"
             }
         }
+
+        /// The Master series: 65C12, MOS paging, I/O map and 1770 at &FE24.
+        public var isMaster: Bool { self == .master128 || self == .masterCompact }
+        /// The Compact has no Tube, analogue port (ADC), clock or keypad.
+        public var hasTube: Bool { self != .masterCompact }
+        public var hasADC: Bool { self != .masterCompact }
+        public var hasKeypad: Bool { self == .master128 }
+        /// Nor a cassette port.
+        public var hasCassette: Bool { self != .masterCompact }
     }
 
     public enum IRQDevice {
@@ -75,6 +86,12 @@ public final class BBCMicro {
     var debugHooks = false
     /// Set while the debugger wants to see the CRTC's syncs.
     var debugVideoHooks = false
+
+    /// The Master Compact's settings EEPROM.
+    public var eeprom = PCD8572()
+    /// The Compact's digital joystick: bit 4 right, 3 up, 2 down, 1 left,
+    /// 0 fire, set when pressed.
+    var digitalJoystick: UInt8 = 0
 
     /// The Master's real-time clock and CMOS RAM.
     public var rtc = MC146818()
@@ -205,7 +222,7 @@ public final class BBCMicro {
             let standardRAMBanks: Set<Int> = switch model {
             case .modelB: []
             case .bPlus: [0, 1, 12, 13]
-            case .master128: [4, 5, 6, 7]
+            case .master128, .masterCompact: [4, 5, 6, 7]
             }
             self.sidewaysRAMBanks = sidewaysRAMBanks ?? standardRAMBanks
         }
@@ -238,7 +255,7 @@ public final class BBCMicro {
         precondition(configuration.os.count == 16384, "OS ROM must be 16K")
         self.configuration = configuration
         model = configuration.model
-        let master = model == .master128
+        let master = model.isMaster
         cpu = M6502(variant: master ? .cmos : .nmos)
 
         ram = .allocate(capacity: Self.ramSize)
@@ -288,9 +305,14 @@ public final class BBCMicro {
             wd1770 = WD1770(drives: drives)
             teletextBases = (0x7C00, 0x7C00)
             rtc.setTime(Date())
+        case .masterCompact:
+            intel8271 = nil
+            // The 1772, with 3.5" drives.
+            wd1770 = WD1770(variant: .wd1772, drives: drives)
+            teletextBases = (0x7C00, 0x7C00)
         }
 
-        secondProcessor = configuration.secondProcessorROM.map(SecondProcessor.init(rom:))
+        secondProcessor = model.hasTube ? configuration.secondProcessorROM.map(SecondProcessor.init(rom:)) : nil
 
         updatePaging()
         oldSystemVIAPB = systemVIA.b.p
@@ -310,7 +332,7 @@ public final class BBCMicro {
 
     /// Rebuilds the page tables from ROMSEL and ACCCON.
     func updatePaging() {
-        let master = model == .master128, bPlus = model == .bPlus
+        let master = model.isMaster, bPlus = model == .bPlus
         let bank = Int(romsel & 0x0F)
         // Master: ANDY, 4K at &8000. B+: 12K at &8000-&AFFF.
         let pagedRAM = (master || bPlus) && romsel & 0x80 != 0
@@ -394,17 +416,17 @@ public final class BBCMicro {
     /// of the OS).
     func fontGlyph(_ character: Int) -> [UInt8] {
         let offset = (character - 32) * 8
-        if model == .master128, let bank = sidewaysBanks[15] {
+        if model.isMaster, let bank = sidewaysBanks[15] {
             return (0..<8).map { bank[0x3900 + offset + $0] }
         }
         return (0..<8).map { osROM[offset + $0] }
     }
 
     func peekIO(_ address: UInt16) -> UInt8 {
-        if model == .master128 {
+        if model.isMaster {
             switch address & 0xFFE0 {
             case 0xFE00:
-                if address & 0x18 == 0x18 { return adc.peek(Int(address)) }
+                if address & 0x18 == 0x18 { return model.hasADC ? adc.peek(Int(address)) : 0xFF }
                 if address & 0x18 == 0x08 { return serial.peekACIA(Int(address)) }
                 if address & 0x19 == 1 { return crtc.readData() }
             case 0xFE20:
@@ -544,7 +566,7 @@ public final class BBCMicro {
     /// Whether the host sees the (external) Tube: always on the B and B+;
     /// on the Master, while ACCCON's ITU bit selects the external Tube.
     var tubeAccessible: Bool {
-        secondProcessor != nil && (model != .master128 || acccon & 0x10 == 0)
+        secondProcessor != nil && (!model.isMaster || acccon & 0x10 == 0)
     }
 
     // MARK: Master I/O
@@ -567,7 +589,9 @@ public final class BBCMicro {
                 writeSerialULA(lastVideoByte)
                 return lastVideoByte
             default:
-                return adc.read(Int(address))
+                if model.hasADC {
+                    return adc.read(Int(address))
+                }
             }
         case 0xFE20:
             switch address & 0x1C {
@@ -604,7 +628,9 @@ public final class BBCMicro {
             case 0x10:
                 writeSerialULA(value)
             default:
-                adc.write(Int(address), value)
+                if model.hasADC {
+                    adc.write(Int(address), value)
+                }
             }
         case 0xFE20:
             switch address & 0x1C {
@@ -708,6 +734,13 @@ public final class BBCMicro {
 
     func applyJoystick(_ index: Int, x: Double, y: Double, fire: Bool) {
         precondition(index == 0 || index == 1)
+        if model == .masterCompact {
+            // A digital joystick: the stick's direction, past halfway.
+            guard index == 0 else { return }
+            digitalJoystick = (x > 0.5 ? 0x10 : 0) | (y > 0.5 ? 0x08 : 0) | (y < -0.5 ? 0x04 : 0)
+                | (x < -0.5 ? 0x02 : 0) | (fire ? 0x01 : 0)
+            return
+        }
         // The BBC reads high values for left and up.
         func channel(_ value: Double, inverted: Bool) -> UInt16 {
             let v = max(-1, min(1, value))
@@ -740,7 +773,7 @@ public final class BBCMicro {
     /// presses: typing, pasting, replay).
     func applyKey(_ key: BeebKey, down: Bool) {
         var key = key
-        if key.isKeypad && model == .modelB {
+        if key.isKeypad && !model.hasKeypad {
             guard let equivalent = key.mainKeyboardEquivalent else { return }
             key = equivalent
         }
@@ -830,7 +863,7 @@ public final class BBCMicro {
             let io = address >= 0xFC00 && address < 0xFF00
             if cpu.access == .write {
                 if io {
-                    if model == .master128 {
+                    if model.isMaster {
                         writeIOMaster(address, cpu.dbus)
                     } else {
                         writeIO(address, cpu.dbus)
@@ -843,10 +876,10 @@ public final class BBCMicro {
                     pageTable = codePageTables[Int(address >> 12)]
                 }
                 if io {
-                    cpu.dbus = model == .master128 ? readIOMaster(address) : readIO(address)
+                    cpu.dbus = model.isMaster ? readIOMaster(address) : readIO(address)
                 } else if let page = readPages[pageTable + Int(address >> 12)] {
                     cpu.dbus = page[Int(address & 0xFFF)]
-                } else if model == .master128 {
+                } else if model.isMaster {
                     cpu.dbus = lastVideoByte
                 }
                 // (An empty socket on the B leaves the data bus alone.)
@@ -1010,8 +1043,14 @@ public final class BBCMicro {
             }
         }
 
-        // Joystick fire buttons.
-        systemVIA.b.p = (systemVIA.b.p & ~0x30) | notJoystickButtons
+        if model == .masterCompact {
+            // The digital joystick on the user VIA: PB4 right, 3 up, 2 down,
+            // 1 left, 0 fire, active low.
+            userVIA.b.p = (userVIA.b.p & ~0x1F) | (0x1F ^ digitalJoystick)
+        } else {
+            // Analogue joysticks' fire buttons.
+            systemVIA.b.p = (systemVIA.b.p & ~0x30) | notJoystickButtons
+        }
 
         // The disc controller's INT is NMI.
         if let fdc = intel8271 {
@@ -1038,7 +1077,14 @@ public final class BBCMicro {
             if model == .master128 && pb & 0x40 != 0 && oldSystemVIAPB & 0x80 != 0 && pb & 0x80 == 0 {
                 rtc.setAddress(systemVIA.a.p)
             }
+            // Compact EEPROM: PB5 is the clock, PB4 data.
+            if model == .masterCompact {
+                eeprom.update(clock: pb & 0x20 != 0, data: pb & 0x10 != 0)
+            }
             oldSystemVIAPB = pb
+        }
+        if model == .masterCompact {
+            systemVIA.b.p = (systemVIA.b.p & ~0x10) | (eeprom.dataOutput ? 0x10 : 0)
         }
 
         if model == .master128 {

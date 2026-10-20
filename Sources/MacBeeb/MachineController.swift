@@ -402,10 +402,7 @@ final class MachineController {
     /// Disc images the BBC has in its drives, by drive.
     private(set) var discNames: [Int: String] = [:]
 
-    static let discTypes: [UTType] = [
-        UTType(filenameExtension: "ssd") ?? .data,
-        UTType(filenameExtension: "dsd") ?? .data,
-    ]
+    static let discTypes: [UTType] = Disc.ImageFormat.extensions.map { UTType(filenameExtension: $0) ?? .data }
 
     /// Asks for a disc image, puts it in `drive`, and (for drive 0, if
     /// `boot`) Shift-Breaks to boot it.
@@ -472,14 +469,14 @@ final class MachineController {
             NSAlert(error: CocoaError(.fileReadUnknown)).runModal()
             return
         }
-        let doubleSided = url.pathExtension.lowercased() == "dsd"
+        let format = Disc.ImageFormat(path: url.path) ?? .ssd
         let writable = FileManager.default.isWritableFile(atPath: url.path)
         let onWrite: (@Sendable ([UInt8]) -> Void)? = writable ? { @Sendable (bytes: [UInt8]) in
             DispatchQueue.global(qos: .utility).async {
                 try? Data(bytes).write(to: url, options: .atomic)
             }
         } : nil
-        host.send(.insertDisc(image: [UInt8](data), doubleSided: doubleSided, drive: drive, onWrite: onWrite))
+        host.send(.insertDisc(image: [UInt8](data), format: format, drive: drive, onWrite: onWrite))
         discNames[drive] = url.lastPathComponent
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
         if boot && drive == 0 {
@@ -488,7 +485,7 @@ final class MachineController {
     }
 
     func ejectDisc(drive: Int) {
-        host.send(.insertDisc(image: nil, doubleSided: false, drive: drive, onWrite: nil))
+        host.send(.insertDisc(image: nil, format: .ssd, drive: drive, onWrite: nil))
         discNames[drive] = nil
     }
 

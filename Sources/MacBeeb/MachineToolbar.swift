@@ -19,6 +19,7 @@ struct MachineToolbar: CustomizableToolbarContent {
                 Divider()
                 Toggle("6502 Second Processor", isOn: Binding(get: { machine.secondProcessor },
                                                              set: { machine.setSecondProcessor($0) }))
+                    .disabled(!machine.model.hasTube)
             } label: {
                 Label("Model", systemImage: "desktopcomputer")
             }
@@ -55,6 +56,7 @@ struct MachineToolbar: CustomizableToolbarContent {
             } primaryAction: {
                 machine.openTape()
             }
+            .disabled(!machine.model.hasCassette)
             .help("Load a tape; hold for more")
         }
 

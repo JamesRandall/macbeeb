@@ -2,7 +2,7 @@
 //
 //   beeb [--load DISC.ssd:FILE] [--seconds N] [--type TEXT] [--screenshot FILE.png] [--text]
 //        [--record FILE.mp4|.mov [--codec h264|hevc|proRes]] [--disc FILE.ssd|.dsd [--boot]]
-//        [--master | --bplus] [--tube] [--tape FILE.uef|.csw]
+//        [--master | --bplus | --compact] [--tube] [--tape FILE.uef|.csw]
 //
 // Boots a Model B (OS 1.2, BASIC 2) or with --master a Master 128, types TEXT (with \n for Return), runs
 // for N seconds of emulated time after typing finishes (default 3), then
@@ -67,6 +67,8 @@ while let argument = arguments.popFirst() {
         model = .master128
     case "--bplus":
         model = .bPlus
+    case "--compact":
+        model = .masterCompact
     case "--tube":
         secondProcessor = true
     case "--text":
@@ -93,7 +95,7 @@ if let tapePath {
 if let discPath {
     do {
         let bytes = [UInt8](try Data(contentsOf: URL(fileURLWithPath: discPath)))
-        let disc = discPath.lowercased().hasSuffix(".dsd") ? try Disc.fromDSD(bytes) : try Disc.fromSSD(bytes)
+        let disc = try Disc.fromImage(bytes, named: discPath)
         machine.insertDisc(disc)
     } catch {
         FileHandle.standardError.write(Data("beeb: couldn't read disc \(discPath): \(error)\n".utf8))

@@ -9,6 +9,10 @@ public enum BeebROMs {
         case dfs226 = "dfs226"
         case bPlusMOS = "bplus-mos"
         case tube110 = "tube110"
+        case mos510 = "mos510-mos"
+        case mos510Utils = "mos510-utils"
+        case mos510BASIC4 = "mos510-basic4"
+        case mos510ADFS = "mos510-adfs"
         case mos320 = "mos320-mos"
         case mos320Terminal = "mos320-terminal"
         case mos320View = "mos320-view"
@@ -51,11 +55,14 @@ extension BeebROMs {
     /// - Master 128: MOS 3.20 and its ROMs in banks 9-15, as b2; sideways
     ///   RAM in 4-7.
     ///
+    /// - Master Compact: MOS 5.10, Utils (bank 15), BASIC 4 (14), ADFS (13),
+    ///   as b2; sideways RAM in 4-7. It boots ADFS (no DFS).
+    ///
     /// With `secondProcessor`, a 6502 Second Processor (Tube OS 1.10) is
-    /// fitted.
+    /// fitted (not on the Compact, which has no Tube).
     public static func configuration(for model: BBCMicro.Model, secondProcessor: Bool = false) -> BBCMicro.Configuration {
         var configuration = standardConfiguration(for: model)
-        if secondProcessor {
+        if secondProcessor && model.hasTube {
             configuration.secondProcessorROM = data(.tube110)
         }
         return configuration
@@ -68,6 +75,12 @@ extension BeebROMs {
         case .bPlus:
             return BBCMicro.Configuration(model: .bPlus, os: data(.bPlusMOS),
                                           sidewaysROMs: [15: data(.basic2), 14: data(.dfs226)])
+        case .masterCompact:
+            return BBCMicro.Configuration(model: .masterCompact, os: data(.mos510), sidewaysROMs: [
+                15: data(.mos510Utils),
+                14: data(.mos510BASIC4),
+                13: data(.mos510ADFS),
+            ])
         case .master128:
             return BBCMicro.Configuration(model: .master128, os: data(.mos320), sidewaysROMs: [
                 15: data(.mos320Terminal),

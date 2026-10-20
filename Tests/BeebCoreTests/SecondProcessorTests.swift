@@ -12,7 +12,7 @@ struct SecondProcessorTests {
         return machine
     }
 
-    @Test(arguments: BBCMicro.Model.allCases)
+    @Test(arguments: BBCMicro.Model.allCases.filter(\.hasTube))
     func basicRunsInTheSecondProcessor(_ model: BBCMicro.Model) throws {
         let machine = boot(model)
         #expect(machine.screenText().contains("Acorn TUBE 6502 64K"), "\(machine.screenText())")

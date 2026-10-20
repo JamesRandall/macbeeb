@@ -69,13 +69,15 @@ public final class AgentTools: Sendable {
         ])
     }
 
-    static let agentModels: [String: BBCMicro.Model] = ["model_b": .modelB, "b_plus": .bPlus, "master_128": .master128]
+    static let agentModels: [String: BBCMicro.Model] = ["model_b": .modelB, "b_plus": .bPlus, "master_128": .master128,
+                                                        "master_compact": .masterCompact]
 
     static func modelDescription(_ model: BBCMicro.Model) -> String {
         switch model {
         case .modelB: "BBC Micro Model B (OS 1.20, BASIC 2, DFS 1.20)"
         case .bPlus: "BBC Micro Model B+ 128K (MOS 2.00, BASIC 2, DFS 2.26; 1770, shadow RAM)"
         case .master128: "BBC Master 128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS 2.03)"
+        case .masterCompact: "BBC Master Compact (MOS 5.10, BASIC 4, ADFS; 1772 and 3.5\" drives, digital joystick, no Tube)"
         }
     }
 
@@ -127,14 +129,14 @@ public final class AgentTools: Sendable {
 
         Tool(definition: ToolDefinition(
             name: "power_cycle",
-            description: "Switch the BBC off and on again. Discs stay in the drives. Runs until the BASIC prompt. With model, switches to that machine: model_b (OS 1.20, BASIC 2, DFS 1.20), b_plus (B+ 128K: MOS 2.00, BASIC 2, DFS 2.26, shadow RAM) or master_128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS, View, ViewSheet, Edit; 1770 disc controller, shadow RAM, sideways RAM in banks 4-7). With second_processor, fits or removes a 6502 Second Processor (3MHz 65C02, 64K, on the Tube): BASIC is copied across and runs in the second processor (PAGE &800, HIMEM &8000), and the host just does the I/O.",
-            inputSchema: schema(["model": ["type": "string", "enum": ["model_b", "b_plus", "master_128"],
+            description: "Switch the BBC off and on again. Discs stay in the drives. Runs until the BASIC prompt. With model, switches to that machine: model_b (OS 1.20, BASIC 2, DFS 1.20), b_plus (B+ 128K: MOS 2.00, BASIC 2, DFS 2.26, shadow RAM) master_128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS, View, ViewSheet, Edit; 1770 disc controller, shadow RAM, sideways RAM in banks 4-7), or master_compact (MOS 5.10, ADFS only, so it needs .adf/.adl discs; no Tube). With second_processor, fits or removes a 6502 Second Processor (3MHz 65C02, 64K, on the Tube): BASIC is copied across and runs in the second processor (PAGE &800, HIMEM &8000), and the host just does the I/O.",
+            inputSchema: schema(["model": ["type": "string", "enum": ["model_b", "b_plus", "master_128", "master_compact"],
                                            "description": "Machine to switch to (default: keep the current one)"] as JSONValue,
                                  "second_processor": prop("boolean", "Fit a 6502 Second Processor (default: keep as is)")])
         )) { context, args in
             var requestedModel: BBCMicro.Model?
             if let name = args["model"]?.stringValue {
-                guard let named = agentModels[name] else { throw ToolFailure("model must be model_b, b_plus or master_128") }
+                guard let named = agentModels[name] else { throw ToolFailure("model must be model_b, b_plus, master_128 or master_compact") }
                 requestedModel = named
             }
             let model = requestedModel
@@ -170,7 +172,7 @@ public final class AgentTools: Sendable {
 
         Tool(definition: ToolDefinition(
             name: "load_disc",
-            description: "Put a .ssd/.dsd disc image file in a drive. With boot=true (default, drive 0 only), Shift-Break to boot it and run until it waits for input. Returns the disc's catalogue.",
+            description: "Put a disc image file in a drive: DFS .ssd/.dsd, or ADFS .adf/.adl (for the 1770 machines: B+, Master, Compact). With boot=true (default, drive 0 only), Shift-Break to boot it and run until it waits for input. Returns the disc's catalogue.",
             inputSchema: schema(["path": prop("string", "Path to the .ssd or .dsd file"),
                                  "drive": prop("integer", "0 or 1 (default 0)"),
                                  "boot": prop("boolean", "Shift-Break to boot it (default true for drive 0)"),
@@ -180,14 +182,14 @@ public final class AgentTools: Sendable {
             guard let path = args["path"]?.stringValue else { throw ToolFailure("path is required") }
             let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
             let bytes = [UInt8](try Data(contentsOf: url))
-            let doubleSided = url.pathExtension.lowercased() == "dsd"
+            let format = Disc.ImageFormat(path: url.path) ?? .ssd
             let drive = args["drive"]?.intValue ?? 0
             guard drive == 0 || drive == 1 else { throw ToolFailure("drive must be 0 or 1") }
             let boot = args["boot"]?.boolValue ?? (drive == 0)
             let maxSeconds = args["max_seconds"]?.doubleValue ?? 30
-            let catalogue = catalogueText(bytes, doubleSided: doubleSided)
+            let catalogue = format == .ssd || format == .dsd ? catalogueText(bytes, doubleSided: format == .dsd) : "ADFS disc"
             return .text(try context.perform { session in
-                let disc = doubleSided ? try Disc.fromDSD(bytes) : try Disc.fromSSD(bytes)
+                let disc = try Disc.fromImage(bytes, format: format)
                 session.machine.insertDisc(disc, drive: drive)
                 guard boot else { return catalogue }
                 session.machine.shiftBreak()

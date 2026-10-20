@@ -19,6 +19,7 @@
 			<array>
 				<string>com.accidentalfish.macbeeb.ssd</string>
 				<string>com.accidentalfish.macbeeb.dsd</string>
+				<string>com.accidentalfish.macbeeb.adfs</string>
 			</array>
 		</dict>
 		<dict>
@@ -162,6 +163,27 @@
 				<key>public.filename-extension</key>
 				<array>
 					<string>csw</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.disk-image</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>BBC Micro ADFS disc image</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.accidentalfish.macbeeb.adfs</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>adf</string>
+					<string>ads</string>
+					<string>adm</string>
+					<string>adl</string>
 				</array>
 			</dict>
 		</dict>

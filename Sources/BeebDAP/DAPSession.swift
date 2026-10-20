@@ -249,7 +249,7 @@ public actor DAPSession {
                 m.debugger.resume()
                 if let disc = args["disc"]?.stringValue {
                     let bytes = [UInt8](try Data(contentsOf: URL(fileURLWithPath: disc)))
-                    let image = disc.lowercased().hasSuffix(".dsd") ? try Disc.fromDSD(bytes) : try Disc.fromSSD(bytes)
+                    let image = try Disc.fromImage(bytes, named: disc)
                     m.insertDisc(image)
                 }
                 m.watchForIdle(true)
@@ -309,6 +309,7 @@ public actor DAPSession {
         case "modelb", "b", "model_b": .modelB
         case "bplus", "b+", "b_plus": .bPlus
         case "master", "master128", "master_128": .master128
+        case "compact", "mastercompact", "master_compact": .masterCompact
         default: BBCMicro.Model(rawValue: name)
         }
     }

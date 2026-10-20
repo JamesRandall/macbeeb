@@ -20,7 +20,7 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
         case loadProgram(disc: [UInt8], file: String)
         /// Puts a disc image in a drive; nil ejects. `onWrite` gets the
         /// updated image whenever the BBC writes to the disc.
-        case insertDisc(image: [UInt8]?, doubleSided: Bool, drive: Int, onWrite: (@Sendable ([UInt8]) -> Void)?)
+        case insertDisc(image: [UInt8]?, format: Disc.ImageFormat, drive: Int, onWrite: (@Sendable ([UInt8]) -> Void)?)
         case shiftBreak
         case pressBreak
         case setPaused(Bool)
@@ -174,8 +174,8 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
                     resetWallClock()
                 case .loadProgram(let disc, let file):
                     machine.loadProgram(disc: disc, file: file)
-                case .insertDisc(let image, let doubleSided, let drive, let onWrite):
-                    session.insertDisc(image: image, doubleSided: doubleSided, drive: drive, onWrite: onWrite)
+                case .insertDisc(let image, let format, let drive, let onWrite):
+                    session.insertDisc(image: image, format: format, drive: drive, onWrite: onWrite)
                 case .shiftBreak:
                     machine.shiftBreak()
                 case .pressBreak:
@@ -357,14 +357,14 @@ final class HostSession: MachineSession {
         }
     }
 
-    func insertDisc(image: [UInt8]?, doubleSided: Bool, drive: Int, onWrite: (@Sendable ([UInt8]) -> Void)?) {
+    func insertDisc(image: [UInt8]?, format: Disc.ImageFormat, drive: Int, onWrite: (@Sendable ([UInt8]) -> Void)?) {
         guard let image else {
             machine.insertDisc(nil, drive: drive)
             return
         }
         do {
-            let disc = doubleSided ? try Disc.fromDSD(image) : try Disc.fromSSD(image)
-            if let onWrite {
+            let disc = try Disc.fromImage(image, format: format)
+            if let onWrite, format.isWritable {
                 disc.onTrackWritten = { [unowned disc] _, _ in
                     if let bytes = try? disc.toSSDOrDSD() {
                         onWrite(bytes)

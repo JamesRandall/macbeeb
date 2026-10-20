@@ -75,6 +75,7 @@ extension BBCMicro {
         case .modelB: 0xE581
         case .bPlus: 0xDF70
         case .master128: 0xE7D7
+        case .masterCompact: 0xE907
         }
     }
 

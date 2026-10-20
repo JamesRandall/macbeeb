@@ -44,6 +44,12 @@ extension BBCMicro {
         if secondProcessor != nil {
             sections.append(tubeState)
         }
+        if model == .masterCompact {
+            sections.append(HardwareSection("Settings EEPROM (PCD8572)", [
+                ("Contents", eeprom.contents.prefix(20).map { String(format: "%02X", $0) }.joined(separator: " ") + " …"),
+                ("Joystick", "%" + String(digitalJoystick, radix: 2)),
+            ]))
+        }
         if model == .master128 {
             sections.append(HardwareSection("Clock (MC146818)", [
                 ("Address", hex(rtc.address)),
@@ -131,7 +137,7 @@ extension BBCMicro {
         case .bPlus:
             rows.append(("Paged RAM at &8000", romsel & 0x80 != 0 ? "yes" : "no"))
             rows.append(("ACCCON", "\(hex(acccon)) (shadow \(acccon & 0x80 != 0 ? "on" : "off"))"))
-        case .master128:
+        case .master128, .masterCompact:
             let flags = ["D display shadow", "E VDU shadow", "X shadow", "Y HAZEL", "ITU", "IFJ", "TST", "IRR"]
             let set = (0..<8).filter { acccon & 1 << $0 != 0 }.map { flags[$0] }
             rows.append(("ANDY at &8000", romsel & 0x80 != 0 ? "yes" : "no"))

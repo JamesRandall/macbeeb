@@ -34,7 +34,7 @@ struct MacBeebApp: App {
                 Divider()
                 Button("Load Tape…") { machine?.openTape() }
                     .keyboardShortcut("t", modifiers: [.command, .option])
-                    .disabled(machine == nil)
+                    .disabled(!(machine?.model.hasCassette ?? false))
                 Button("Rewind Tape") { machine?.rewindTape() }
                     .disabled(machine?.tapeName == nil)
                 Button("Eject Tape") { machine?.ejectTape() }
@@ -123,7 +123,7 @@ struct MacBeebApp: App {
                     get: { machine?.secondProcessor ?? false },
                     set: { machine?.setSecondProcessor($0) }
                 ))
-                .disabled(machine == nil)
+                .disabled(!(machine?.model.hasTube ?? false))
             }
         }
 
@@ -186,7 +186,7 @@ struct MachineWindow: View {
 
     private func open(_ url: URL) -> Bool {
         switch url.pathExtension.lowercased() {
-        case "ssd", "dsd":
+        case "ssd", "dsd", "adf", "ads", "adm", "adl":
             machine.insertDisc(url)
         case "uef", "csw":
             machine.insertTape(url)
@@ -199,7 +199,7 @@ struct MachineWindow: View {
     }
 
     private var title: String {
-        let name = machine.model.displayName + (machine.secondProcessor ? " + 6502 Second Processor" : "")
+        let name = machine.model.displayName + (machine.secondProcessor && machine.model.hasTube ? " + 6502 Second Processor" : "")
         var title = machine.discNames[0].map { "\(name) — \($0)" } ?? name
         if machine.paused {
             title += " (Paused)"

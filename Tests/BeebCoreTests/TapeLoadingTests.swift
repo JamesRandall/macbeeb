@@ -13,7 +13,7 @@ struct TapeLoadingTests {
         return machine
     }
 
-    @Test(arguments: BBCMicro.Model.allCases)
+    @Test(arguments: BBCMicro.Model.allCases.filter(\.hasCassette))
     func chainsAProgram(_ model: BBCMicro.Model) throws {
         let machine = try machine(model)
         var relaySwitches = 0
