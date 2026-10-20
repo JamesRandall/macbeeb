@@ -67,6 +67,13 @@ public final class BBCMicro {
             case .arm: "ARM Evaluation System"
             }
         }
+
+        /// Whether it can be fitted to `model`: any of them to a machine
+        /// with a Tube, but the Master 512 (a board inside the Master) only
+        /// to the Master 128.
+        public func fits(_ model: Model) -> Bool {
+            model.hasTube && (self != .master512 || model == .master128)
+        }
     }
 
     /// The Model B's disc interface.
@@ -448,7 +455,7 @@ public final class BBCMicro {
         if configuration.coprocessor == .z80, let rom = tubeROM {
             z80Processor = Z80SecondProcessor(rom: rom, machine: self)
         }
-        if configuration.coprocessor == .master512, let rom = tubeROM {
+        if configuration.coprocessor == .master512, model == .master128, let rom = tubeROM {
             master512 = Master512(rom: rom, machine: self)
         }
         if configuration.coprocessor == .arm, let rom = tubeROM {

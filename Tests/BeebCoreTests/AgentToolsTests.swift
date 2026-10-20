@@ -24,6 +24,20 @@ struct AgentToolsTests {
         #expect(text(result).contains("42"))
     }
 
+    @Test func powerCycleKeepsTheMaster512ToTheMaster() {
+        let session = HeadlessSession {
+            BBCMicro(configuration: BeebROMs.configuration(for: .master128, secondProcessor: true, coprocessor: .master512,
+                                                           systemDisc: false))
+        }
+        let tools = AgentTools(context: session)
+        // Asked for on a B: refused.
+        let refused = tools.call("power_cycle", arguments: ["model": "model_b", "coprocessor": "master512"])
+        #expect(refused.isError && text(refused).contains("master_128"), "\(text(refused))")
+        // Kept from the Master: the B gets a 6502 instead.
+        #expect(!tools.call("power_cycle", arguments: ["model": "model_b"]).isError)
+        #expect(session.machine.model == .modelB && session.machine.master512 == nil && session.machine.secondProcessor != nil)
+    }
+
     @Test func peekAndPoke() {
         let tools = makeTools()
         #expect(!tools.call("poke", arguments: ["address": "&3000", "bytes": [0x12, 0xAB]]).isError)

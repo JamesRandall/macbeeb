@@ -36,7 +36,7 @@ final class MachineController {
 
     /// The second processor fitted, if any.
     var fittedCoprocessor: BBCMicro.Coprocessor? {
-        secondProcessor && model.hasTube ? coprocessor : nil
+        secondProcessor && coprocessor.fits(model) ? coprocessor : nil
     }
     /// The Model B's disc interface. Remembered like the model.
     private(set) var discInterface: BBCMicro.DiscInterface

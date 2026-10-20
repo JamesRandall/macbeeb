@@ -155,6 +155,22 @@ struct Master512Tests {
         print(String(format: "Master 512: 2s with the board in %.3fs; host alone %.3fs", both, hostOnly))
     }
 
+    /// The board goes inside a Master 128, so nothing else takes it.
+    @Test func onlyFitsTheMaster128() {
+        #expect(BBCMicro.Coprocessor.master512.fits(.master128))
+        for model in [BBCMicro.Model.modelA, .modelB, .bPlus, .masterCompact] {
+            #expect(!BBCMicro.Coprocessor.master512.fits(model))
+            let configuration = BeebROMs.configuration(for: model, secondProcessor: true, coprocessor: .master512)
+            #expect(configuration.secondProcessorROM == nil && configuration.startupDisc == nil)
+        }
+        #expect(BBCMicro.Coprocessor.z80.fits(.bPlus) && !BBCMicro.Coprocessor.z80.fits(.masterCompact))
+        // Even given its ROM, a B doesn't get one.
+        var configuration = BeebROMs.configuration(for: .modelB)
+        configuration.coprocessor = .master512
+        configuration.secondProcessorROM = BeebROMs.data(.master512BIOS)
+        #expect(BBCMicro(configuration: configuration).master512 == nil)
+    }
+
     @Test func savesStateAndRewinds() throws {
         let m = Self.fitted()
         m.enableRewind(seconds: 2)

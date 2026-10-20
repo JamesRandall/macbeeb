@@ -136,7 +136,7 @@ extension BeebROMs {
             case .opus: data(.opusDDOS345)
             }
         }
-        if secondProcessor && model.hasTube {
+        if secondProcessor && coprocessor.fits(model) {
             let rom: Image = switch coprocessor {
             case .mos6502: .tube110
             case .z80: .z80121

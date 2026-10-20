@@ -166,9 +166,19 @@ public final class AgentTools: Sendable {
                 if model != nil || secondProcessor != nil || interface != nil || coprocessor != nil {
                     let current = session.machine
                     let fitted = current.secondProcessor != nil || current.z80Processor != nil || current.master512 != nil || current.armProcessor != nil
-                    configuration = BeebROMs.configuration(for: model ?? current.model,
+                    let newModel = model ?? current.model
+                    // One kept from before that doesn't fit the new model
+                    // (the Master 512 on a B) gives way to the 6502.
+                    var newCoprocessor = coprocessor ?? current.configuration.coprocessor
+                    if !newCoprocessor.fits(newModel) {
+                        guard coprocessor == nil else {
+                            throw ToolFailure("the \(newCoprocessor.displayName) can't be fitted to the \(newModel.displayName)\(newCoprocessor == .master512 ? " (only to the master_128)" : "")")
+                        }
+                        newCoprocessor = .mos6502
+                    }
+                    configuration = BeebROMs.configuration(for: newModel,
                                                            secondProcessor: secondProcessor ?? (coprocessor != nil || fitted),
-                                                           coprocessor: coprocessor ?? current.configuration.coprocessor,
+                                                           coprocessor: newCoprocessor,
                                                            discInterface: interface ?? current.configuration.discInterface)
                 }
                 session.powerCycle(configuration: configuration)

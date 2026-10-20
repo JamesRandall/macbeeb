@@ -155,6 +155,7 @@ struct MacBeebApp: App {
                     Text("None").tag(BBCMicro.Coprocessor?.none)
                     ForEach(BBCMicro.Coprocessor.allCases, id: \.self) { coprocessor in
                         Text(coprocessor.displayName).tag(BBCMicro.Coprocessor?.some(coprocessor))
+                            .disabled(!coprocessor.fits(machine?.model ?? .modelB))
                     }
                 }
                 .disabled(!(machine?.model.hasTube ?? false))
