@@ -332,6 +332,63 @@ public final class AgentTools: Sendable {
         },
 
         Tool(definition: ToolDefinition(
+            name: "mouse",
+            description: "Use the AMX mouse on the user port (GEM on the Master 512, AMX software on the BBC): move it by dx, dy counts (right and down positive), at a hand's pace; then set the buttons held, or click one. Under GEM a count moves the pointer about 4 of its 640 pixels across and 2 of its 256 down (moves go at a count every 20ms, slow enough that GEM doesn't accelerate them). Then runs for settle_seconds. Use screenshot to see where the pointer is.",
+            inputSchema: schema(["dx": prop("integer", "Counts right (negative: left)"),
+                                 "dy": prop("integer", "Counts down (negative: up)"),
+                                 "buttons": ["type": "array", "items": ["type": "string", "enum": ["left", "middle", "right"]],
+                                             "description": "Buttons to hold down after moving (default: as they were)"] as JSONValue,
+                                 "click": ["type": "string", "enum": ["left", "middle", "right"],
+                                           "description": "Click a button after moving (or double_click)"] as JSONValue,
+                                 "double_click": prop("boolean", "With click, click it twice"),
+                                 "settle_seconds": prop("number", "Time to run afterwards (default 0.3)")])
+        )) { context, args in
+            let dx = args["dx"]?.intValue ?? 0, dy = args["dy"]?.intValue ?? 0
+            func button(_ name: String) throws -> AMXMouse.Buttons {
+                switch name {
+                case "left": .left
+                case "middle": .middle
+                case "right": .right
+                default: throw ToolFailure("buttons are left, middle and right")
+                }
+            }
+            let held = try args["buttons"]?.arrayValue.map { try $0.compactMap(\.stringValue).reduce(into: AMXMouse.Buttons()) { $0.insert(try button($1)) } }
+            let click = try args["click"]?.stringValue.map(button)
+            let clicks = args["double_click"]?.boolValue == true ? 2 : 1
+            let settle = args["settle_seconds"]?.doubleValue ?? 0.3
+            return .text(try context.perform { session in
+                let m = session.machine
+                // A count each 20ms (on each axis), so software that
+                // accelerates (GEM) doesn't take it for a flick.
+                var x = dx, y = dy
+                while x != 0 || y != 0 {
+                    let sx = x.signum(), sy = y.signum()
+                    m.moveMouse(dx: sx, dy: sy)
+                    x -= sx
+                    y -= sy
+                    session.advance(seconds: 0.02)
+                }
+                if dx != 0 || dy != 0 {
+                    session.advance(seconds: 0.1)
+                }
+                if let held {
+                    m.setMouseButtons(held)
+                }
+                if let click {
+                    // Quick enough for GEM's double click.
+                    for _ in 0..<clicks {
+                        m.setMouseButtons(m.mouse.buttons.union(click))
+                        session.advance(seconds: 0.04)
+                        m.setMouseButtons(m.mouse.buttons.subtracting(click))
+                        session.advance(seconds: 0.04)
+                    }
+                }
+                session.advance(seconds: settle)
+                return summary(session, extra: m.mouseInUse ? "" : "(nothing is reading the mouse: its interrupts are off)")
+            })
+        },
+
+        Tool(definition: ToolDefinition(
             name: "press_keys",
             description: "Hold keys down together, then release: e.g. [\"SHIFT\",\"F1\"], [\"CTRL\",\"G\"], [\"ESCAPE\"]. Names: RETURN SPACE SHIFT CTRL ESCAPE TAB DELETE COPY CAPSLOCK SHIFTLOCK UP DOWN LEFT RIGHT F0-F9 BREAK, or a single character.",
             inputSchema: schema(["keys": ["type": "array", "items": ["type": "string"], "description": "Key names"],

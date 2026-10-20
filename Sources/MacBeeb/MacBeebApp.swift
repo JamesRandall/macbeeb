@@ -83,6 +83,22 @@ struct MacBeebApp: App {
                     }
                 }
                 .disabled(machine == nil)
+                Menu("Zoom") {
+                    ForEach(MachineController.zoomLevels, id: \.self) { level in
+                        Toggle("\(Int(level * 100))%", isOn: Binding(get: { machine?.zoom == level },
+                                                                    set: { _ in machine?.setZoom(level) }))
+                    }
+                }
+                .disabled(machine == nil)
+                Button("Actual Size") { machine?.setZoom(1) }
+                    .keyboardShortcut("0")
+                    .disabled(machine == nil)
+                Button("Zoom In") { machine?.zoom(in: true) }
+                    .keyboardShortcut("=")
+                    .disabled(machine == nil)
+                Button("Zoom Out") { machine?.zoom(in: false) }
+                    .keyboardShortcut("-")
+                    .disabled(machine == nil)
                 Divider()
             }
             CommandMenu("Debug") {
@@ -110,6 +126,10 @@ struct MacBeebApp: App {
                     .keyboardShortcut("b", modifiers: [.command, .shift])
                 Button("Power Cycle") { machine?.powerCycle() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
+                Divider()
+                Button("Capture or Release Mouse") { machine?.toggleMouseCapture() }
+                    .keyboardShortcut("m", modifiers: [.command, .control])
+                    .disabled(machine == nil || machine?.model == .masterCompact)
                 Divider()
                 Button("Rewind 5 Seconds") { machine?.rewind(seconds: 5) }
                     .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
@@ -170,7 +190,8 @@ struct MachineWindow: View {
 
     var body: some View {
         EmulatorView(host: machine.host, style: machine.displayStyle, onRenderer: { machine.renderer = $0 },
-                     onHover: { machine.hoveredPixel = $0.map { (x: $0.0, y: $0.1) } })
+                     onHover: { machine.hoveredPixel = $0.map { (x: $0.0, y: $0.1) } },
+                     onZoom: { machine.pictureZoomed($0) })
             .overlay(alignment: .bottomLeading) {
                 if let inspection = machine.inspection {
                     Text(inspection)

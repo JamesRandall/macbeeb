@@ -165,6 +165,8 @@ public final class BBCMicro {
     /// The Compact's digital joystick: bit 4 right, 3 up, 2 down, 1 left,
     /// 0 fire, set when pressed.
     var digitalJoystick: UInt8 = 0
+    /// The AMX mouse on the user port (not on the Compact).
+    public internal(set) var mouse = AMXMouse()
 
     /// The Master's real-time clock and CMOS RAM.
     public var rtc = MC146818()
@@ -905,6 +907,32 @@ public final class BBCMicro {
         rewinder?.keyframe()
     }
 
+    // MARK: Mouse
+
+    /// Moves the AMX mouse by counts: right and down are positive.
+    public func moveMouse(dx: Int, dy: Int) {
+        guard dx != 0 || dy != 0 else { return }
+        rewinder?.record(.mouseMove(dx: dx, dy: dy))
+        mouse.move(dx: dx, dy: dy)
+    }
+
+    /// Whether software is using the mouse: the user VIA's CB1 or CB2
+    /// interrupts (the mouse's clocks) are enabled.
+    public var mouseInUse: Bool {
+        model != .masterCompact && userVIA.ier & (VIA6522.IRQ.cb1 | VIA6522.IRQ.cb2) != 0
+    }
+
+    /// Roughly how far, in TV pixels, a count moves the pointer: measured
+    /// for GEM on the Master 512 (8); for AMX software a guess (2, a pixel
+    /// in Mode 1 or 4).
+    public var mouseTVPixelsPerCount: Double { master512 != nil ? 8 : 2 }
+
+    public func setMouseButtons(_ buttons: AMXMouse.Buttons) {
+        guard buttons != mouse.buttons else { return }
+        rewinder?.record(.mouseButtons(buttons))
+        mouse.buttons = buttons
+    }
+
     // MARK: Joysticks
 
     /// Sets analogue joystick 0 or 1: `x` and `y` from -1 (left/down) to 1
@@ -1260,6 +1288,7 @@ public final class BBCMicro {
         } else {
             // Analogue joysticks' fire buttons.
             systemVIA.b.p = (systemVIA.b.p & ~0x30) | notJoystickButtons
+            mouse.tick(&userVIA, master512: master512 != nil)
         }
 
         // The disc controller's INT is NMI.

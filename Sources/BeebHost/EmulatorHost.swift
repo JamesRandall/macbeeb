@@ -13,6 +13,9 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
         case type(String)
         case releaseAllKeys
         case joystick(Int, x: Double, y: Double, fire: Bool)
+        /// Moves the AMX mouse by counts (right and down positive).
+        case mouseMove(dx: Int, dy: Int)
+        case mouseButtons(AMXMouse.Buttons)
         /// Power off and on again. Discs stay in their drives.
         case powerCycle
         /// Power cycles into a different machine (e.g. another model).
@@ -55,6 +58,7 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
     private let commands = Mutex<[Command]>([])
     let latestFrame = Mutex<Frame?>(nil)
     private let latestLights = Mutex(BBCMicro.Lights())
+    private let latestMouse = Mutex(Mouse())
     private let latestDebugStop = Mutex<(reason: StopReason?, count: Int)>((nil, 0))
     private let inspecting = Atomic<Bool>(false)
 
@@ -166,6 +170,10 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
                     machine.releaseAllKeys()
                 case .joystick(let index, let x, let y, let fire):
                     machine.setJoystick(index, x: x, y: y, fire: fire)
+                case .mouseMove(let dx, let dy):
+                    machine.moveMouse(dx: dx, dy: dy)
+                case .mouseButtons(let buttons):
+                    machine.setMouseButtons(buttons)
                 case .powerCycle:
                     session.powerCycle()
                     resetWallClock()
@@ -258,6 +266,18 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
         emulatedCycles.store(Int(session.machine.cycles), ordering: .relaxed)
         let lights = session.machine.lights
         latestLights.withLock { $0 = lights }
+        let mouse = Mouse(inUse: session.machine.mouseInUse, tvPixelsPerCount: session.machine.mouseTVPixelsPerCount)
+        latestMouse.withLock { $0 = mouse }
+    }
+
+    /// What the software is doing with the AMX mouse, as of the last slice.
+    public struct Mouse: Sendable {
+        public var inUse = false
+        public var tvPixelsPerCount = 2.0
+    }
+
+    public var mouse: Mouse {
+        latestMouse.withLock { $0 }
     }
 
     /// Why the debugger has stopped the machine, if it has.

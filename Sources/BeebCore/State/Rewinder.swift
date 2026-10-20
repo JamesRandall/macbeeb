@@ -25,6 +25,8 @@ public final class Rewinder {
         case key(BeebKey, down: Bool)
         case joystick(Int, x: Double, y: Double, fire: Bool)
         case releaseAllKeys
+        case mouseMove(dx: Int, dy: Int)
+        case mouseButtons(AMXMouse.Buttons)
     }
 
     struct Event: Sendable {
@@ -206,6 +208,8 @@ public final class Rewinder {
         case .key(let key, let down): machine.applyKey(key, down: down)
         case .joystick(let index, let x, let y, let fire): machine.applyJoystick(index, x: x, y: y, fire: fire)
         case .releaseAllKeys: machine.applyReleaseAllKeys()
+        case .mouseMove(let dx, let dy): machine.mouse.move(dx: dx, dy: dy)
+        case .mouseButtons(let buttons): machine.mouse.buttons = buttons
         }
     }
 }

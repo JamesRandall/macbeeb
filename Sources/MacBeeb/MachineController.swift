@@ -283,6 +283,38 @@ final class MachineController {
         try? await Task.sleep(for: .seconds(1))
     }
 
+    // MARK: Zoom
+
+    static let zoomLevels: [Double] = [0.5, 0.75, 1, 1.25, 1.5, 2]
+
+    /// The picture's zoom, as the window's size has it.
+    @ObservationIgnored private var currentZoom = 1.0
+    /// The zoom level the window's at, if it's at one (to within 1%).
+    private(set) var zoom: Double? = 1
+
+    func pictureZoomed(_ zoom: Double) {
+        currentZoom = zoom
+        let level = Self.zoomLevels.first { abs($0 - zoom) < 0.01 * $0 }
+        if level != self.zoom {
+            self.zoom = level
+        }
+    }
+
+    func setZoom(_ zoom: Double) {
+        NotificationCenter.default.post(name: EmulatorNSView.setZoom, object: host, userInfo: ["zoom": zoom])
+    }
+
+    /// The next level up (or down) from the zoom now.
+    func zoom(in zoomIn: Bool) {
+        let next = zoomIn ? Self.zoomLevels.first { $0 > currentZoom * 1.01 } : Self.zoomLevels.last { $0 < currentZoom * 0.99 }
+        if let next { setZoom(next) }
+    }
+
+    /// Hands the Mac's mouse to the BBC's AMX mouse, or takes it back.
+    func toggleMouseCapture() {
+        NotificationCenter.default.post(name: EmulatorNSView.toggleMouseCapture, object: host)
+    }
+
     func powerCycle() {
         // An empty drive 0 gets the system disc back.
         if discNames[0] == nil {

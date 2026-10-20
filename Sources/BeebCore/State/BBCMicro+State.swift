@@ -32,6 +32,7 @@ extension BBCMicro {
         var rtc: MC146818
         var eeprom: PCD8572?
         var digitalJoystick: UInt8?
+        var mouse: AMXMouse?
         var intel8271: Intel8271.State?
         var wd1770: WD1770.State?
         var stretch: Bool
@@ -68,7 +69,7 @@ extension BBCMicro {
                  sidewaysRAM: Dictionary(uniqueKeysWithValues: sidewaysRAMBanks.map { ($0, Data(bytes: sidewaysBanks[$0]!, count: 0x4000)) }),
                  romsel: romsel, acccon: acccon, pageTable: pageTable, lastVideoByte: lastVideoByte,
                  oldAddressableLatch: oldAddressableLatch, rtc: rtc,
-                 eeprom: eeprom, digitalJoystick: digitalJoystick,
+                 eeprom: eeprom, digitalJoystick: digitalJoystick, mouse: mouse,
                  intel8271: intel8271?.state, wd1770: wd1770?.state, stretch: stretch,
                  addressableLatch: addressableLatch, oldSystemVIAPB: oldSystemVIAPB,
                  systemVIAIRQ: systemVIAIRQ, userVIAIRQ: userVIAIRQ,
@@ -118,6 +119,7 @@ extension BBCMicro {
         rtc = s.rtc
         if let saved = s.eeprom { eeprom = saved }
         digitalJoystick = s.digitalJoystick ?? 0
+        mouse = s.mouse ?? AMXMouse()
         if let state = s.intel8271 { intel8271?.restore(state) }
         if let state = s.wd1770 { wd1770?.restore(state) }
         stretch = s.stretch

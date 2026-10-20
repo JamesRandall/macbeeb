@@ -224,8 +224,14 @@ co-processor, the system disc changes with it.
 The Master 512's other discs are bundled too (File > Insert Bundled Disc, or
 `load_disc` with `bundled` for agents), in its 800K DOS format (`.img`, as
 BeebEm has it; 720K PC `.dos` discs work as well). With GEM Applications in
-drive 1, `B:` then `GEM` starts GEM's desktop, though without a mouse
-emulated yet there's little to do there.
+drive 1, `B:` then `GEM` starts GEM's desktop.
+
+An AMX mouse is on the user port of every machine but the Compact (wired
+for the Master 512's mouse when that's fitted, as BeebEm does): its
+quadrature signals go to CB1/CB2 and port B, so the VIA sees real edges. Once
+software is reading it (its interrupts enabled), clicking the screen hands
+the Mac's mouse over; Machine > Capture or Release Mouse (⌃⌘M) takes it
+back. Agents use the `mouse` tool.
 
 Or the Acorn ARM Second Processor, the ARM Evaluation System (`--arm`): an
 8MHz ARM1 with 4MB, supervisor ROM 1.00, wired as BeebEm has it, with an ARM
