@@ -114,9 +114,15 @@ extension BBCMicro {
             reachedWatchAddress = true
             stopRequested = true
         }
-        if watchForIdle && address == osIdleAddress && paste == nil && keyEvents.isEmpty {
-            reachedIdle = true
-            stopRequested = true
+        if watchForIdle {
+            if address == osIdleAddress && paste == nil && keyEvents.isEmpty {
+                reachedIdle = true
+                stopRequested = true
+            }
+            // Looking in the keyboard buffer (REMV and CNPV, buffer 0).
+            if cpu.x == 0 && (address == vector(0x22C) || address == vector(0x22E)) {
+                keyboardPolled()
+            }
         }
         // Capture at WRCHV's target: OSASCI and OSNEWL jump there directly.
         if captureOutput && address == UInt16(ram[0x20F]) << 8 | UInt16(ram[0x20E]) {
@@ -139,12 +145,68 @@ extension BBCMicro {
         }
     }
 
-    /// Watches for the OS waiting for a key (with nothing left to type or
-    /// paste): when it happens `reachedIdle` is set and `run` stops.
+    /// How long the machine must be waiting for input, as seen by
+    /// `checkWaiting`, to count as idle: half a second.
+    static let waitingCycles: UInt64 = 1_000_000
+    /// The longest gap between keyboard polls that's still polling.
+    static let keyboardPollGap: UInt64 = 200_000
+
+    /// Watches for the machine waiting for input, with nothing left to
+    /// type or paste: when it happens `reachedIdle` is set and `run` stops.
+    ///
+    /// That's seen exactly when the host OS is in OSRDCH's loop waiting for
+    /// a key, which is where BASIC, the 6502, Z80 and ARM second processors
+    /// and CP/M all wait. Software that reads the keyboard itself (DOS Plus
+    /// on the Master 512, games) is seen by what it does: polling the
+    /// keyboard continually, with nothing else happening (the picture
+    /// unchanged, no drive or cassette motor running), for `waitingCycles`.
+    /// A program working silently doesn't poll the keyboard, so it isn't
+    /// mistaken for one waiting.
     public func watchForIdle(_ enabled: Bool) {
         watchForIdle = enabled
         reachedIdle = false
+        lastActivity = cycles
+        pollingSince = cycles
+        lastKeyboardPoll = cycles &- Self.keyboardPollGap &- 1
+        screenHash = 0
+        lastScreenHash = 0
         updateOpcodeHooks()
+    }
+
+    /// The vector at `address` (in page 2).
+    func vector(_ address: Int) -> UInt16 {
+        UInt16(ram[address + 1]) << 8 | UInt16(ram[address])
+    }
+
+    /// While watching for idle, a read of the system VIA: with the
+    /// keyboard's autoscan off (IC32 bit 3 low), port A reads a key.
+    func systemVIARead(_ address: UInt16) {
+        if addressableLatch & 0x08 == 0 && (address & 0x0F == 0x01 || address & 0x0F == 0x0F) {
+            keyboardPolled()
+        }
+    }
+
+    func keyboardPolled() {
+        if cycles &- lastKeyboardPoll > Self.keyboardPollGap {
+            pollingSince = cycles
+        }
+        lastKeyboardPoll = cycles
+    }
+
+    /// At each vsync while watching for idle: is the machine still waiting?
+    func checkWaiting() {
+        let busy = screenHash != lastScreenHash || paste != nil || !keyEvents.isEmpty
+            || serial.motorOn || drives.contains(where: \.spinning)
+        lastScreenHash = screenHash
+        screenHash = 0
+        if busy {
+            lastActivity = cycles
+        }
+        let polling = cycles &- lastKeyboardPoll <= Self.keyboardPollGap
+        if polling && cycles &- lastActivity >= Self.waitingCycles && cycles &- pollingSince >= Self.waitingCycles {
+            reachedIdle = true
+            stopRequested = true
+        }
     }
 
     /// Watches for the CPU reaching `address` (nil stops watching): when it

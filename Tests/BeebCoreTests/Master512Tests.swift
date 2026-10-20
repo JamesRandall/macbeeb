@@ -180,22 +180,15 @@ struct Master512Tests {
     func bootsDOSPlus() throws {
         let m = Self.fitted()
         m.insertDisc(try Disc.fromADL([UInt8](Data(contentsOf: Self.bootDiscURL))))
-        var text: [String] = []
-        var seconds = 0.0
-        while seconds < 60 {
-            m.run(seconds: 0.5)
-            seconds += 0.5
-            text = Self.screen(m)
-            if text.last?.hasSuffix("A>") == true { break }
-        }
+        // DOS Plus reads the keyboard itself, so waiting at the prompt is
+        // seen by its polling.
+        #expect(m.runUntilIdle(maxSeconds: 60))
+        var text = Self.screen(m)
         #expect(text.last?.hasSuffix("A>") == true, "\(text)")
         #expect(text.first == "Acorn Master 512, DOS Plus 1.2", "\(text)")
         m.type("DIR\r")
-        for _ in 0..<30 {
-            m.run(seconds: 0.5)
-            text = Self.screen(m)
-            if text.last?.hasSuffix("A>") == true { break }
-        }
+        #expect(m.runUntilIdle(maxSeconds: 30))
+        text = Self.screen(m)
         #expect(text.contains { $0.hasPrefix("COMMAND  COM") || $0.hasPrefix("PIP      CMD") }, "\(text)")
         #expect(text.last?.hasSuffix("A>") == true, "\(text)")
     }

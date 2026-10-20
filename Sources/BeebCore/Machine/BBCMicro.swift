@@ -254,10 +254,20 @@ public final class BBCMicro {
     var opcodeHooks = false
     var paste: Paste?
     var watchForIdle = false
+    /// While watching for idle: a hash of the bytes the video hardware has
+    /// displayed this frame, and last frame's; when anything (the picture,
+    /// a drive or the cassette motor, keys still to type) last changed; and
+    /// when the keyboard was last polled, and since when without a break.
+    var screenHash: UInt64 = 0
+    var lastScreenHash: UInt64 = 0
+    var lastActivity: UInt64 = 0
+    var lastKeyboardPoll: UInt64 = 0
+    var pollingSince: UInt64 = 0
     /// Stop address for `runUntil(address:)`.
     var watchAddress: UInt16?
     public internal(set) var reachedWatchAddress = false
-    /// Set when the CPU fetches from the OS's wait-for-key loop.
+    /// Set when the CPU fetches from the OS's wait-for-key loop, or the
+    /// machine has been waiting for input for `waitingCycles`.
     public internal(set) var reachedIdle = false
     /// Characters written through WRCHV while `captureOutput` is set.
     public var capturedOutput: [UInt8] = []
@@ -589,6 +599,9 @@ public final class BBCMicro {
                 return 0
             }
         case 0xFE40:
+            if watchForIdle {
+                systemVIARead(address)
+            }
             return systemVIA.read(Int(address))
         case 0xFE60 where model.hasUserVIA:
             return userVIA.read(Int(address))
@@ -721,6 +734,9 @@ public final class BBCMicro {
             default: break
             }
         case 0xFE40:
+            if watchForIdle {
+                systemVIARead(address)
+            }
             return systemVIA.read(Int(address))
         case 0xFE60:
             return userVIA.read(Int(address))
@@ -1099,6 +1115,10 @@ public final class BBCMicro {
             address = (address << 3 | UInt16(output.raster & 7)) & 0x7FFF
         }
 
+        // (In the 2MHz modes vsync can start on either edge.)
+        if watchForIdle && output.vsync && !crtcLastOutput.vsync {
+            checkWaiting()
+        }
         if trailingEdge {
             if output.vsync && !crtcLastOutput.vsync {
                 saa5050.vsync()
@@ -1121,6 +1141,9 @@ public final class BBCMicro {
         videoMetadata = Self.videoMetadata(address: address, raster: output.raster, display: output.display,
                                            teletext: videoULA.teletext)
         lastVideoByte = value
+        if watchForIdle && output.display {
+            screenHash = (screenHash ^ UInt64(value)) &* 0x100_0000_01B3
+        }
         if trailingEdge {
             saa5050.byte(ic15Byte, dispen: output.display)
             ic15Byte = output.address & 0x2000 != 0 ? value : 0

@@ -352,7 +352,7 @@ public final class AgentTools: Sendable {
 
         Tool(definition: ToolDefinition(
             name: "run_until_idle",
-            description: "Run until the OS is waiting for a key (e.g. at the BASIC prompt or an INPUT), or max_seconds pass.",
+            description: "Run until the machine is waiting for input (at the BASIC prompt or an INPUT, a co-processor's prompt, or a program polling the keyboard with the screen still for half a second), or max_seconds pass.",
             inputSchema: schema(["max_seconds": prop("number", "Longest to run (default 30)")])
         )) { context, args in
             let maxSeconds = args["max_seconds"]?.doubleValue ?? 30
@@ -508,7 +508,7 @@ public final class AgentTools: Sendable {
     // MARK: Helpers
 
     /// Runs through the session (so recording and the display keep up)
-    /// until the OS waits for a key.
+    /// until the machine waits for input.
     @discardableResult
     static func runUntilIdle(_ session: MachineSession, maxSeconds: Double) -> Bool {
         let m = session.machine
