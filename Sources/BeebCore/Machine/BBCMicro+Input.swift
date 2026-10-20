@@ -66,8 +66,14 @@ extension BBCMicro {
 
     /// OS entry point.
     static let osrdch: UInt16 = 0xFFE0
-    /// In OSRDCH's loop waiting for a key (OS 1.20 or MOS 3.20).
-    var osIdleAddress: UInt16 { model == .master128 ? 0xE7D7 : 0xE581 }
+    /// In OSRDCH's loop waiting for a key (OS 1.20, B+ MOS 2.00, MOS 3.20).
+    var osIdleAddress: UInt16 {
+        switch model {
+        case .modelB: 0xE581
+        case .bPlus: 0xDF70
+        case .master128: 0xE7D7
+        }
+    }
 
     struct Paste: Codable {
         var text: [UInt8]

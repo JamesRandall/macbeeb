@@ -7,6 +7,7 @@ public enum BeebROMs {
         case basic2 = "basic2"
         case dfs12 = "dfs12"
         case dfs226 = "dfs226"
+        case bPlusMOS = "bplus-mos"
         case mos320 = "mos320-mos"
         case mos320Terminal = "mos320-terminal"
         case mos320View = "mos320-view"
@@ -44,12 +45,17 @@ extension BeebROMs {
     /// A standard machine with the bundled ROMs:
     ///
     /// - Model B: OS 1.20, BASIC 2 (bank 15), DFS 1.20 (bank 14).
+    /// - B+ 128K: the B+ MOS, BASIC 2 (bank 15), DFS 2.26 (bank 14), as b2;
+    ///   sideways RAM in 0, 1, 12 and 13.
     /// - Master 128: MOS 3.20 and its ROMs in banks 9-15, as b2; sideways
     ///   RAM in 4-7.
     public static func configuration(for model: BBCMicro.Model) -> BBCMicro.Configuration {
         switch model {
         case .modelB:
             return BBCMicro.Configuration(os: data(.os12), sidewaysROMs: [15: data(.basic2), 14: data(.dfs12)])
+        case .bPlus:
+            return BBCMicro.Configuration(model: .bPlus, os: data(.bPlusMOS),
+                                          sidewaysROMs: [15: data(.basic2), 14: data(.dfs226)])
         case .master128:
             return BBCMicro.Configuration(model: .master128, os: data(.mos320), sidewaysROMs: [
                 15: data(.mos320Terminal),

@@ -101,6 +101,9 @@ Sound is the SN76489 through b2's filter model; discs are an Intel 8271
 (ported from jsbeeb/beebjit) with DFS 1.20. Analogue joysticks come from
 game controllers.
 
+The B+ 128K adds shadow RAM, its 12K of paged RAM, sideways RAM in banks 0,
+1, 12 and 13, and an Acorn 1770 (DFS 2.26).
+
 The Master 128 (Machine > Model) adds the 65C12, MOS 3.20 and its ROMs,
 b2's paging (shadow RAM, ANDY, HAZEL, the VDU driver's view of shadow RAM),
 sideways RAM in banks 4-7, the MC146818 clock and CMOS RAM, the keypad, and

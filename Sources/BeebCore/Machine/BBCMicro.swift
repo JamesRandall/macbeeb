@@ -16,11 +16,13 @@ import Foundation
 public final class BBCMicro {
     public enum Model: String, Codable, Sendable, CaseIterable {
         case modelB
+        case bPlus
         case master128
 
         public var displayName: String {
             switch self {
             case .modelB: "BBC Model B"
+            case .bPlus: "BBC Model B+ 128K"
             case .master128: "BBC Master 128"
             }
         }
@@ -95,6 +97,10 @@ public final class BBCMicro {
     let writePages: UnsafeMutablePointer<UnsafeMutablePointer<UInt8>>
     /// 0 or 16: the table for the current instruction.
     var pageTable = 0
+    /// The table for code fetched from each page: 16 where code sees
+    /// shadow RAM as the VDU drivers do (&C000-&DFFF, and on the B+ its
+    /// private RAM at &A000-&AFFF).
+    var codePageTables = InlineArray<16, Int>(repeating: 0)
     /// ROMSEL (&FE30): the paged ROM bank, and on the Master, bit 7 for
     /// ANDY.
     public internal(set) var romsel: UInt8 = 0
@@ -106,7 +112,7 @@ public final class BBCMicro {
     /// The Master's data bus isn't buffered: unmapped reads see the last
     /// byte the video fetched.
     var lastVideoByte: UInt8 = 0
-    /// Base addresses for Mode 7, by MA11. The Master can show &3C00.
+    /// Base addresses for Mode 7, by MA11. The B and B+ can show &3C00.
     let teletextBases: (UInt16, UInt16)
 
     /// True for each address in &FC00-&FEFF that's a 1MHz device.
@@ -163,7 +169,8 @@ public final class BBCMicro {
         public var os: [UInt8]
         /// Sideways ROMs by bank, 0-15.
         public var sidewaysROMs: [Int: [UInt8]]
-        /// Banks that are RAM. (On the Master, 4-7.)
+        /// Banks that are RAM. (On the B+ 128K, 0, 1, 12 and 13; on the
+        /// Master, 4-7.)
         public var sidewaysRAMBanks: Set<Int>
 
         public init(model: Model = .modelB, os: [UInt8], sidewaysROMs: [Int: [UInt8]],
@@ -171,7 +178,12 @@ public final class BBCMicro {
             self.model = model
             self.os = os
             self.sidewaysROMs = sidewaysROMs
-            self.sidewaysRAMBanks = sidewaysRAMBanks ?? (model == .master128 ? [4, 5, 6, 7] : [])
+            let standardRAMBanks: Set<Int> = switch model {
+            case .modelB: []
+            case .bPlus: [0, 1, 12, 13]
+            case .master128: [4, 5, 6, 7]
+            }
+            self.sidewaysRAMBanks = sidewaysRAMBanks ?? standardRAMBanks
         }
 
         enum CodingKeys: CodingKey {
@@ -237,15 +249,20 @@ public final class BBCMicro {
         }
         self.stretchTable = stretchTable
 
-        if master {
+        switch model {
+        case .modelB:
+            intel8271 = Intel8271(drives: drives)
+            wd1770 = nil
+            teletextBases = (0x3C00, 0x7C00)
+        case .bPlus:
             intel8271 = nil
             wd1770 = WD1770(drives: drives)
             teletextBases = (0x3C00, 0x7C00)
-            rtc.setTime(Date())
-        } else {
-            intel8271 = Intel8271(drives: drives)
-            wd1770 = nil
+        case .master128:
+            intel8271 = nil
+            wd1770 = WD1770(drives: drives)
             teletextBases = (0x7C00, 0x7C00)
+            rtc.setTime(Date())
         }
 
         updatePaging()
@@ -266,15 +283,18 @@ public final class BBCMicro {
 
     /// Rebuilds the page tables from ROMSEL and ACCCON.
     func updatePaging() {
-        let master = model == .master128
+        let master = model == .master128, bPlus = model == .bPlus
         let bank = Int(romsel & 0x0F)
-        let andy = master && romsel & 0x80 != 0
+        // Master: ANDY, 4K at &8000. B+: 12K at &8000-&AFFF.
+        let pagedRAM = (master || bPlus) && romsel & 0x80 != 0
         let shadowAll = master && acccon & 0x04 != 0  // X
-        let shadowVDU = master && acccon & 0x02 != 0  // E
+        let shadowVDU = master ? acccon & 0x02 != 0   // E
+            : bPlus && acccon & 0x80 != 0
         let hazel = master && acccon & 0x08 != 0      // Y
         // Code in &C000-&DFFF only sees shadow RAM through E when it's the
         // MOS there, not HAZEL.
         let shadowMOS = hazel ? shadowAll : shadowVDU
+        let pagedRAMPages = bPlus ? 3 : 1
 
         for table in [0, 16] {
             let shadow = table == 0 ? shadowAll : shadowMOS
@@ -288,8 +308,8 @@ public final class BBCMicro {
                 case 3..<8:
                     read = ram + (shadow ? Self.shadowOffset : 0) + page << 12
                     write = read
-                case 8 where andy:
-                    read = ram + Self.andyOffset
+                case 8..<12 where pagedRAM && page - 8 < pagedRAMPages:
+                    read = ram + Self.andyOffset + (page - 8) << 12
                     write = read
                 case 8..<12:
                     read = sidewaysBanks[bank].map { $0 + (page - 8) << 12 }
@@ -306,7 +326,12 @@ public final class BBCMicro {
                 writePages[table + page] = write ?? discardPage
             }
         }
-        videoRAMOffset = master && acccon & 0x01 != 0 ? Self.shadowOffset : 0
+        for page in 0..<16 {
+            let vdu = page == 0xC || page == 0xD || (bPlus && pagedRAM && page == 0xA)
+            codePageTables[page] = vdu && model != .modelB ? 16 : 0
+        }
+        let displayShadow = master ? acccon & 0x01 != 0 : bPlus && acccon & 0x80 != 0
+        videoRAMOffset = displayShadow ? Self.shadowOffset : 0
     }
 
     /// Reads memory as the CPU would, without side effects. I/O reads return
@@ -371,7 +396,9 @@ public final class BBCMicro {
         switch address & 0xFFE0 {
         case 0xFE40: return systemVIA.peek(Int(address))
         case 0xFE60: return userVIA.peek(Int(address))
-        case 0xFE80: return intel8271!.peek(Int(address))
+        case 0xFE80:
+            if let fdc = intel8271 { return fdc.peek(Int(address)) }
+            return address & 0x1C == 0x04 ? wd1770!.peek(Int(address)) : 0xFF
         case 0xFEC0: return adc.peek(Int(address))
         case 0xFE00 where address & 0x19 == 1: return crtc.readData()
         case 0xFE00 where address & 0x18 == 0x08: return serial.peekACIA(Int(address))
@@ -401,7 +428,13 @@ public final class BBCMicro {
         case 0xFE60:
             return userVIA.read(Int(address))
         case 0xFE80:
-            return intel8271!.read(Int(address))
+            if let fdc = intel8271 {
+                return fdc.read(Int(address))
+            }
+            // Acorn 1770: latch at &FE80 (write only), controller at &FE84.
+            if address & 0x1C == 0x04 {
+                return wd1770!.read(Int(address))
+            }
         case 0xFEC0:
             return adc.read(Int(address))
         default:
@@ -435,6 +468,19 @@ public final class BBCMicro {
                 } else {
                     videoULA.writePalette(value)
                 }
+            } else if model == .bPlus {
+                switch address & 0x0C {
+                case 0x00:
+                    // ROMSEL (&FE30-&FE33): bank, and bit 7 for the 12K.
+                    romsel = value & 0x8F
+                    updatePaging()
+                case 0x04:
+                    // ACCCON (&FE34-&FE37): bit 7 is shadow.
+                    acccon = value & 0x80
+                    updatePaging()
+                default:
+                    break
+                }
             } else {
                 // ROMSEL (&FE30-&FE3F).
                 romsel = value & 0x0F
@@ -445,7 +491,13 @@ public final class BBCMicro {
         case 0xFE60:
             userVIA.write(Int(address), value)
         case 0xFE80:
-            intel8271!.write(Int(address), value)
+            if let fdc = intel8271 {
+                fdc.write(Int(address), value)
+            } else if address & 0x1F == 0x00 {
+                wd1770!.writeControl(value, layout: .acorn1770)
+            } else if address & 0x1C == 0x04 {
+                wd1770!.write(Int(address), value)
+            }
         case 0xFEC0:
             adc.write(Int(address), value)
         default:
@@ -684,8 +736,8 @@ public final class BBCMicro {
                     writePages[pageTable + Int(address >> 12)][Int(address & 0xFFF)] = cpu.dbus
                 }
             } else {
-                if cpu.access == .opcode && model == .master128 {
-                    pageTable = address & 0xE000 == 0xC000 ? 16 : 0
+                if cpu.access == .opcode {
+                    pageTable = codePageTables[Int(address >> 12)]
                 }
                 if io {
                     cpu.dbus = model == .master128 ? readIOMaster(address) : readIO(address)

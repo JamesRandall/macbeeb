@@ -69,11 +69,12 @@ public final class AgentTools: Sendable {
         ])
     }
 
-    static let agentModels: [String: BBCMicro.Model] = ["model_b": .modelB, "master_128": .master128]
+    static let agentModels: [String: BBCMicro.Model] = ["model_b": .modelB, "b_plus": .bPlus, "master_128": .master128]
 
     static func modelDescription(_ model: BBCMicro.Model) -> String {
         switch model {
         case .modelB: "BBC Micro Model B (OS 1.20, BASIC 2, DFS 1.20)"
+        case .bPlus: "BBC Micro Model B+ 128K (MOS 2.00, BASIC 2, DFS 2.26; 1770, shadow RAM)"
         case .master128: "BBC Master 128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS 2.03)"
         }
     }
@@ -120,13 +121,13 @@ public final class AgentTools: Sendable {
 
         Tool(definition: ToolDefinition(
             name: "power_cycle",
-            description: "Switch the BBC off and on again. Discs stay in the drives. Runs until the BASIC prompt. With model, switches to that machine: model_b (OS 1.20, BASIC 2, DFS 1.20) or master_128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS, View, ViewSheet, Edit; 1770 disc controller, shadow RAM, sideways RAM in banks 4-7).",
-            inputSchema: schema(["model": ["type": "string", "enum": ["model_b", "master_128"],
+            description: "Switch the BBC off and on again. Discs stay in the drives. Runs until the BASIC prompt. With model, switches to that machine: model_b (OS 1.20, BASIC 2, DFS 1.20), b_plus (B+ 128K: MOS 2.00, BASIC 2, DFS 2.26, shadow RAM) or master_128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS, View, ViewSheet, Edit; 1770 disc controller, shadow RAM, sideways RAM in banks 4-7).",
+            inputSchema: schema(["model": ["type": "string", "enum": ["model_b", "b_plus", "master_128"],
                                            "description": "Machine to switch to (default: keep the current one)"] as JSONValue])
         )) { context, args in
             var model: BBCMicro.Model?
             if let name = args["model"]?.stringValue {
-                guard let named = agentModels[name] else { throw ToolFailure("model must be model_b or master_128") }
+                guard let named = agentModels[name] else { throw ToolFailure("model must be model_b, b_plus or master_128") }
                 model = named
             }
             let configuration = model.map(BeebROMs.configuration(for:))
