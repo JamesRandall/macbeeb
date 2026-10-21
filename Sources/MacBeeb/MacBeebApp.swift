@@ -145,6 +145,7 @@ struct MacBeebApp: App {
                 Toggle("Disc Drive Sounds", isOn: Binding(get: { machine?.discDriveSounds ?? true },
                                                            set: { machine?.setDiscDriveSounds($0) }))
                     .disabled(machine == nil)
+                DiscKeysButton(machine: machine)
                 Button("Capture or Release Mouse") { machine?.toggleMouseCapture() }
                     .keyboardShortcut("m", modifiers: [.command, .control])
                     .disabled(machine == nil || machine?.model == .masterCompact)
@@ -203,6 +204,21 @@ struct MacBeebApp: App {
     }
 }
 
+/// Machine > Keys for This Disc: the keyboard settings, showing the keys
+/// for the disc image in drive 0.
+struct DiscKeysButton: View {
+    let machine: MachineController?
+    @Environment(\.openSettings) private var openSettings
+
+    var body: some View {
+        Button("Keys for This Disc…") {
+            KeyboardSettings.shared.editingDisc = machine?.bootDiscPath
+            openSettings()
+        }
+        .disabled(machine?.bootDiscPath == nil)
+    }
+}
+
 struct MachineWindow: View {
     @State private var machine = MachineController()
     @Environment(\.openWindow) private var openWindow
@@ -210,7 +226,7 @@ struct MachineWindow: View {
     var body: some View {
         EmulatorView(host: machine.host, style: machine.displayStyle, onRenderer: { machine.renderer = $0 },
                      onHover: { machine.hoveredPixel = $0.map { (x: $0.0, y: $0.1) } },
-                     onZoom: { machine.pictureZoomed($0) })
+                     onZoom: { machine.pictureZoomed($0) }, keyboardDisc: { machine.bootDiscPath })
             .overlay(alignment: .bottomLeading) {
                 if let inspection = machine.inspection {
                     Text(inspection)

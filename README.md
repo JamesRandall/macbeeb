@@ -239,7 +239,9 @@ a WD1770 (ported from jsbeeb/beebjit) with DFS 2.24 and ADFS.
 The keyboard goes by key position (the BBC's layout on the Mac's keys) or,
 in Settings > Keyboard, by the character the Mac's layout types, with the
 BBC's Shift pressed or released per key as needed. Custom mappings put any
-BBC key on any Mac key, in either mode.
+BBC key on any Mac key, in either mode. A disc image can have keys of its
+own, a game's controls say (Machine > Keys for This Disc…), which apply
+while it's in drive 0, on top of the keys for all discs.
 
 The Master Compact is a Master without the Tube, analogue port, keypad,
 cassette or clock: MOS 5.10 with ADFS, BASIC 4 and Utils, a 1772 with

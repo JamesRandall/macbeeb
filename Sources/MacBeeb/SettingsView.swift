@@ -36,12 +36,23 @@ struct KeyboardSettingsView: View {
             }
 
             Section {
-                if settings.mappings.isEmpty {
-                    Text("No custom keys. Add one to put any BBC key on any Mac key (it takes priority in both modes).")
+                Picker("For", selection: $settings.editingDisc) {
+                    Text("All discs").tag(String?.none)
+                    if !discs.isEmpty {
+                        Divider()
+                    }
+                    ForEach(discs, id: \.self) { path in
+                        Text(Self.discName(path)).tag(String?.some(path))
+                    }
+                }
+                if settings.mappings(for: disc).isEmpty {
+                    Text(disc == nil
+                         ? "No custom keys. Add one to put any BBC key on any Mac key (it takes priority in both modes)."
+                         : "No keys for this disc. Keys added here apply while it's in drive 0, on top of the keys for all discs.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
-                ForEach(settings.mappings) { mapping in
+                ForEach(settings.mappings(for: disc)) { mapping in
                     HStack {
                         Text(mapping.macKeyName)
                             .frame(minWidth: 120, alignment: .leading)
@@ -49,7 +60,8 @@ struct KeyboardSettingsView: View {
                             .foregroundStyle(.secondary)
                         Picker("BBC key", selection: Binding(
                             get: { mapping.key },
-                            set: { settings.setMapping(keyCode: mapping.keyCode, macKeyName: mapping.macKeyName, to: $0) }
+                            set: { settings.setMapping(keyCode: mapping.keyCode, macKeyName: mapping.macKeyName, to: $0,
+                                                       disc: disc) }
                         )) {
                             ForEach(BeebKey.catalogue, id: \.key) { entry in
                                 Text(entry.name).tag(entry.key)
@@ -57,7 +69,7 @@ struct KeyboardSettingsView: View {
                         }
                         .labelsHidden()
                         Button {
-                            settings.removeMapping(keyCode: mapping.keyCode)
+                            settings.removeMapping(keyCode: mapping.keyCode, disc: disc)
                         } label: {
                             Image(systemName: "minus.circle")
                         }
@@ -77,8 +89,8 @@ struct KeyboardSettingsView: View {
                         Button("Add Mapping…") { startRecording() }
                     }
                     Spacer()
-                    Button("Remove All") { settings.removeAllMappings() }
-                        .disabled(settings.mappings.isEmpty)
+                    Button("Remove All") { settings.removeAllMappings(disc: disc) }
+                        .disabled(settings.mappings(for: disc).isEmpty)
                 }
             }
         }
@@ -86,13 +98,31 @@ struct KeyboardSettingsView: View {
         .onDisappear { stopRecording() }
     }
 
+    /// The disc whose keys are showing (nil: all discs').
+    private var disc: String? { settings.editingDisc }
+
+    /// Discs to choose from: those in the machines' drive 0, those with
+    /// keys, and the one showing.
+    private var discs: [String] {
+        let all = MachineController.all.values.compactMap(\.bootDiscPath) + settings.discMappings.keys
+            + [settings.editingDisc].compactMap { $0 }
+        return Set(all).sorted { Self.discName($0).localizedStandardCompare(Self.discName($1)) == .orderedAscending }
+    }
+
+    /// "Elite.ssd (Games)": the image's name and its folder's.
+    static func discName(_ path: String) -> String {
+        let url = URL(fileURLWithPath: path)
+        return "\(url.lastPathComponent) (\(url.deletingLastPathComponent().lastPathComponent))"
+    }
+
     private func startRecording() {
+        let disc = disc
         recorder = KeyRecorder { event in
             let name = KeyboardSettings.name(of: event)
             // Start from what the key does now, then let the user pick.
-            let current = settings.translator.translate(keyCode: event.keyCode, characters: event.characters,
-                                                        modifiers: .init(event.modifierFlags))?.key ?? .space
-            settings.setMapping(keyCode: event.keyCode, macKeyName: name, to: current)
+            let current = settings.translator(disc: disc).translate(keyCode: event.keyCode, characters: event.characters,
+                                                                    modifiers: .init(event.modifierFlags))?.key ?? .space
+            settings.setMapping(keyCode: event.keyCode, macKeyName: name, to: current, disc: disc)
             stopRecording()
         }
     }

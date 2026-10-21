@@ -163,7 +163,9 @@ final class MachineController {
         let disc = UserDefaults.standard.string(forKey: "MacBeebSelfTestDisc")
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(2))
-            if let disc {
+            if let disc, UserDefaults.standard.bool(forKey: "MacBeebSelfTestDiscKeys") {
+                await typeThroughWindowWithDiscKeys(disc)
+            } else if let disc {
                 insertDisc(URL(fileURLWithPath: disc))
                 try? await Task.sleep(for: .seconds(25))
             } else if UserDefaults.standard.bool(forKey: "MacBeebSelfTestRewind") {
@@ -242,6 +244,35 @@ final class MachineController {
             }
             NSApp.terminate(nil)
         }
+    }
+
+    /// Presses Q through the window with `disc` in drive 0, which has Q
+    /// mapped to 9, then with it ejected, then Return: "9Q" is typed.
+    private func typeThroughWindowWithDiscKeys(_ disc: String) async {
+        let settings = KeyboardSettings.shared
+        let path = URL(fileURLWithPath: disc).standardizedFileURL.path
+        defer { settings.removeAllMappings(disc: path) }
+        settings.setMapping(keyCode: 0x0C, macKeyName: "Q", to: .digit9, disc: path)
+        insertDisc(URL(fileURLWithPath: disc), boot: false)
+        try? await Task.sleep(for: .milliseconds(200))
+        guard let window = NSApp.windows.first(where: { $0.firstResponder is EmulatorNSView }),
+              let view = window.firstResponder as? EmulatorNSView else { return }
+        func key(_ code: UInt16, _ characters: String) async {
+            for type in [NSEvent.EventType.keyDown, .keyUp] {
+                guard let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [], timestamp: 0,
+                                                   windowNumber: window.windowNumber, context: nil,
+                                                   characters: characters, charactersIgnoringModifiers: characters,
+                                                   isARepeat: false, keyCode: code) else { continue }
+                if type == .keyDown { view.keyDown(with: event) } else { view.keyUp(with: event) }
+                try? await Task.sleep(for: .milliseconds(60))
+            }
+        }
+        await key(0x0C, "q")
+        ejectDisc(drive: 0)
+        try? await Task.sleep(for: .milliseconds(200))
+        await key(0x0C, "q")
+        await key(0x24, "\r")
+        try? await Task.sleep(for: .seconds(1))
     }
 
     /// Types PRINT 6*7 as Mac key events through the window, with "*" as
@@ -509,6 +540,9 @@ final class MachineController {
 
     /// Disc images the BBC has in its drives, by drive.
     private(set) var discNames: [Int: String] = [:]
+    /// The path of the disc image file in drive 0 (not a bundled disc's),
+    /// whose own keys apply.
+    private(set) var bootDiscPath: String?
     /// The bundled system disc the machine starts with (the Z80's CP/M,
     /// the Master 512's DOS Plus), if any.
     @ObservationIgnored private var startupDiscName: String?
@@ -603,6 +637,9 @@ final class MachineController {
         } : nil
         host.send(.insertDisc(image: [UInt8](data), format: format, drive: drive, onWrite: onWrite))
         discNames[drive] = url.lastPathComponent
+        if drive == 0 {
+            bootDiscPath = url.standardizedFileURL.path
+        }
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
         RecentDiscs.shared.add(url)
         if boot && drive == 0 {
@@ -614,11 +651,17 @@ final class MachineController {
     func insertBundledDisc(_ disc: BeebROMs.BundledDisc, drive: Int) {
         host.send(.insertDisc(image: disc.data, format: disc.format, drive: drive, onWrite: nil))
         discNames[drive] = disc.rawValue
+        if drive == 0 {
+            bootDiscPath = nil
+        }
     }
 
     func ejectDisc(drive: Int) {
         host.send(.insertDisc(image: nil, format: .ssd, drive: drive, onWrite: nil))
         discNames[drive] = nil
+        if drive == 0 {
+            bootDiscPath = nil
+        }
     }
 
     func shiftBreak() {
@@ -682,6 +725,7 @@ final class MachineController {
             coprocessor = file.configuration.coprocessor
             discInterface = file.configuration.discInterface
             discNames = [:]
+            bootDiscPath = nil
             startupDiscName = nil
             tapeName = file.snapshot.hasTape ? "Tape" : nil
             NSDocumentController.shared.noteNewRecentDocumentURL(url)

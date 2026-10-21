@@ -8,6 +8,8 @@ import SwiftUI
 final class EmulatorNSView: MTKView {
     var host: EmulatorHost?
     var renderer: Renderer?
+    /// The path of the disc image in drive 0, whose own keys apply.
+    var keyboardDisc: () -> String? = { nil }
     /// Called with the TV pixel under the mouse (nil when it leaves).
     var onHover: ((Int, Int)?) -> Void = { _ in }
 
@@ -216,15 +218,15 @@ final class EmulatorNSView: MTKView {
     }
 
     /// Rebuilt when the settings change (see `updateTranslator`).
-    private var translator = KeyboardSettings.shared.translator
+    private var translator = KeyboardSettings.shared.translator()
 
-    /// Picks up keyboard settings changes; keys held across a change
-    /// still release properly.
+    /// Picks up keyboard settings changes, and a change of disc; keys held
+    /// across a change still release properly.
     func updateTranslator() {
         let settings = KeyboardSettings.shared
         withObservationTracking {
             translator.mode = settings.mode
-            translator.customKeys = settings.translator.customKeys
+            translator.customKeys = settings.translator(disc: keyboardDisc()).customKeys
         } onChange: { [weak self] in
             DispatchQueue.main.async { self?.updateTranslator() }
         }
@@ -271,6 +273,7 @@ struct EmulatorView: NSViewRepresentable {
     var onRenderer: (Renderer) -> Void = { _ in }
     var onHover: ((Int, Int)?) -> Void = { _ in }
     var onZoom: (Double) -> Void = { _ in }
+    var keyboardDisc: () -> String? = { nil }
 
     func makeNSView(context: Context) -> EmulatorNSView {
         let device = MTLCreateSystemDefaultDevice()
@@ -278,6 +281,7 @@ struct EmulatorView: NSViewRepresentable {
         view.host = host
         view.onHover = onHover
         view.onZoom = onZoom
+        view.keyboardDisc = keyboardDisc
         view.colorPixelFormat = .bgra8Unorm
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
         view.preferredFramesPerSecond = 120
