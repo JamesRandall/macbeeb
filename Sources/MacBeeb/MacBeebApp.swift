@@ -129,8 +129,11 @@ struct MacBeebApp: App {
                 .keyboardShortcut("y", modifiers: [.command, .control])
                 .disabled(machine == nil)
             }
+            CommandMenu("MCP") {
+                MCPMenu()
+            }
             CommandMenu("Machine") {
-                Button(machine?.paused == true ? "Resume" : "Pause") { machine?.togglePause() }
+                Button(machine?.isStill == true ? "Resume" : "Pause") { machine?.togglePause() }
                     .keyboardShortcut("p")
                 Button(machine?.speedLimited == false ? "Normal Speed" : "Full Speed") { machine?.toggleSpeedLimit() }
                     .keyboardShortcut("f", modifiers: [.command, .option])
@@ -197,6 +200,16 @@ struct MacBeebApp: App {
             }
         }
         .defaultSize(width: 1100, height: 760)
+
+        Window("Connect an AI Agent", id: MCPSetupView.windowID) {
+            MCPSetupView()
+        }
+        .windowResizability(.contentSize)
+
+        Window("MCP Activity", id: AgentLogView.windowID) {
+            AgentLogView()
+        }
+        .defaultSize(width: 900, height: 560)
 
         Settings {
             SettingsView()
@@ -284,6 +297,8 @@ struct MachineWindow: View {
         var title = machine.discNames[0].map { "\(name) — \($0)" } ?? name
         if machine.paused {
             title += " (Paused)"
+        } else if machine.heldForAgent {
+            title += " (Held by AI Agent)"
         }
         if machine.recordingURL != nil {
             title += " ● Recording"

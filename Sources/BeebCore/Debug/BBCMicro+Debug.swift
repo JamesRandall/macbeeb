@@ -163,12 +163,13 @@ extension BBCMicro {
     public func callStack(_ which: DebugCPU, limit: Int = 16) -> [UInt16] {
         guard let sp = stackPointer(which) else { return [] }
         let read = { (a: Int) in Int(self.debugRead(.cpu(which), a & 0xFFFF) ?? 0) }
+        let code = { (a: Int) in Int(self.codeRead(which, a & 0xFFFF) ?? 0) }
         var addresses = [instructionAddress(which)]
         if debugCPUKind(which) == .z80 {
             var a = sp
             while a < 0xFFFF && addresses.count < limit && a < sp + 64 {
                 let pushed = read(a) | read(a + 1) << 8
-                if pushed >= 3, read(pushed - 3) == 0xCD || read(pushed - 3) & 0xC7 == 0xC4 {
+                if pushed >= 3, code(pushed - 3) == 0xCD || code(pushed - 3) & 0xC7 == 0xC4 {
                     addresses.append(UInt16(pushed - 3))
                     a += 2
                 } else {
@@ -180,7 +181,7 @@ extension BBCMicro {
         var s = sp + 1
         while s < 0xFF && addresses.count < limit {
             let pushed = read(0x100 + s) | read(0x100 + s + 1) << 8
-            if pushed >= 2 && read(pushed - 2) == 0x20 {
+            if pushed >= 2 && code(pushed - 2) == 0x20 {
                 addresses.append(UInt16(truncatingIfNeeded: pushed - 2))
                 s += 2
             } else {
@@ -194,7 +195,7 @@ extension BBCMicro {
     /// repeating block instruction), its length: stepping over it runs to
     /// the instruction after.
     func callLength(_ which: DebugCPU, at pc: UInt16) -> Int? {
-        let read = { (a: UInt16) in self.debugRead(.cpu(which), Int(a)) ?? 0 }
+        let read = { (a: UInt16) in self.codeRead(which, Int(a)) ?? 0 }
         let op = read(pc)
         if debugCPUKind(which) == .z80 {
             if op == 0xCD || op & 0xC7 == 0xC4 { return 3 }
@@ -282,6 +283,18 @@ extension BBCMicro {
         default:
             return storage(space, address)?.pointee
         }
+    }
+
+    /// Memory as code at `address` sees it: on the B+ and Masters, code in
+    /// the VDU drivers' pages (&C000-&DFFF, and the B+'s &A000-&AFFF) sees
+    /// shadow RAM where other code sees main RAM, so `debugRead(.cpu)`,
+    /// the current instruction's view, can show other code the wrong RAM.
+    /// For disassembling.
+    public func codeRead(_ which: DebugCPU, _ address: Int) -> UInt8? {
+        guard which == .host, (0..<0x10000).contains(address), address < 0xFC00 || address >= 0xFF00 else {
+            return debugRead(.cpu(which), address)
+        }
+        return readPages[codePageTables[address >> 12] + address >> 12]?[address & 0xFFF]
     }
 
     /// Writes memory, ROM included, without side effects; I/O isn't
@@ -426,7 +439,7 @@ extension BBCMicro {
             guard c.isAboutToExecute else { throw .notAtInstruction }
             c.jump(to: UInt16(truncatingIfNeeded: value))
             // The fetch already happened this cycle: do it again.
-            c.dbus = debugRead(.cpu(which), Int(c.abus)) ?? 0xFF
+            c.dbus = codeRead(which, Int(c.abus)) ?? 0xFF
         default:
             throw .unknown(name)
         }

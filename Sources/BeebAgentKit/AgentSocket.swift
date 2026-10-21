@@ -65,6 +65,9 @@ public final class AgentSocketServer: @unchecked Sendable {
     let tools: ToolProvider
     let path: String
     private var listener: Int32 = -1
+    /// Called (on the connection's thread) when an agent connects (true) or
+    /// goes (false). Set before `start`.
+    public var onConnection: (@Sendable (Bool) -> Void)?
 
     public init(tools: ToolProvider, path: String = AgentSocket.defaultPath) {
         self.tools = tools
@@ -119,7 +122,11 @@ public final class AgentSocketServer: @unchecked Sendable {
     }
 
     private func serve(_ fd: Int32) {
-        defer { close(fd) }
+        onConnection?(true)
+        defer {
+            close(fd)
+            onConnection?(false)
+        }
         let reader = AgentSocket.LineReader(fd: fd)
         while let line = reader.readLine() {
             guard let request = try? JSONDecoder().decode(JSONValue.self, from: Data(line.utf8)),

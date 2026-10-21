@@ -748,7 +748,7 @@ public actor DAPSession {
             let m = s.machine
             let disassembler = m.disassembler(cpu)
             let symbols = m.debugger.symbols(cpu)
-            let read = { (a: UInt16) in m.debugRead(.cpu(cpu), Int(a)) ?? 0xFF }
+            let read = { (a: UInt16) in m.codeRead(cpu, Int(a)) ?? 0xFF }
             func length(at a: UInt16) -> Int { disassembler.disassemble(at: a, read: read).length }
             // Before the reference: walk forward from a little way back and
             // keep the instructions that land on it.

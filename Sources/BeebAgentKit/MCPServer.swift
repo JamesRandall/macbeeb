@@ -134,7 +134,10 @@ peek, poke and disassemble for memory and code; start_recording/stop_recording t
 Debugging: set_breakpoint (execute, or read/write watchpoints, with conditions and log points), then continue; \
 step (instruction, over, out, cycle, scanline, frame, interrupt); registers and set_register; trace for the last N instructions; \
 peek/poke take a space (main, shadow, bank0-F, os, parasite_ram...; see memory_regions) and addresses can be expressions \
-such as "{&FFFE}" or "PC+3". When the debugger stops the machine it stays stopped (other tools say so) until continue or step. \
+such as "{&FFFE}" or "PC+3". When the debugger stops the machine it stays stopped (other tools say so) until continue or step, \
+or a tool that runs the machine (press_keys, run, profile...) carries on from the stop; pass resume: false to leave it stopped. \
+Breakpoints and symbols survive restore_snapshot, load_state and power_cycle. \
+In the app, the machine runs in real time between tool calls; set_real_time on: false holds it still, so replays are exact. \
 Each tool takes cpu: parasite for the second processor. \
 Writing BBC code: assemble builds a BeebAsm source (SAVE what it makes), puts the disc in drive 0 and *RUNs it, with \
 symbols and source lines for breakpoints like "game.asm:42". \

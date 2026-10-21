@@ -17,8 +17,11 @@ silicon and Intel, is notarised, and updates itself (MacBeeb > Check for
 Updates…). The ROMs it needs, and the Z80's and Master 512's system discs,
 are built in.
 
-For AI agents, the app includes an MCP server, which runs a machine of its
-own, or with `--attach` drives the one in the running app:
+For AI agents, the app includes an MCP server that attaches to the running
+app and drives its BBC Micro as you watch. MCP > Connect an AI Agent… gives
+the command to add it to Claude Code or Codex, for wherever the app is, and
+MCP > Activity Log shows every tool call agents make. For an app in
+Applications:
 `claude mcp add macbeeb -- /Applications/MacBeeb.app/Contents/MacOS/macbeeb-mcp --attach`.
 
 ## Built on the work of others
@@ -129,7 +132,17 @@ Tools: `run_command`, `type_text`, `press_keys`, `load_disc`, `eject_disc`,
 back), `reverse_continue`, `rewind`, `registers`,
 `set_register`, `memory_regions`, `trace`, `debug_log`, `load_symbols`,
 `lookup_symbol`, `assemble`, `profile` (with `peek`,
-`poke` and `disassemble` taking a CPU and address space).
+`poke` and `disassemble` taking a CPU and address space), and
+`set_real_time`.
+
+Agents can set up what they need and rely on it. Breakpoints and symbols
+survive `restore_snapshot`, `load_state` and `power_cycle`
+(`keep_debugger: false` to start afresh). Tools that run the machine carry on
+from a debugger stop (`resume: false` leaves it stopped). In the app the
+machine runs in real time between tool calls, so you can watch and play;
+`set_real_time` with `on: false` holds it still between calls, for exact
+replays, and the window says so until the agent lets go or disconnects (or
+you press Resume).
 
 ## Assembling with BeebAsm
 

@@ -19,6 +19,12 @@ public protocol MachineSession: AnyObject {
     var isRecording: Bool { get }
     /// Swaps in a different machine (e.g. one restored from a save state).
     func replace(with machine: BBCMicro)
+    /// Whether the machine is held still between tool calls, rather than
+    /// running in real time (in the app). A headless machine only ever
+    /// runs in tool calls.
+    var heldBetweenCalls: Bool { get set }
+    /// Whether `heldBetweenCalls` can be turned off.
+    var runsBetweenCalls: Bool { get }
 }
 
 extension MachineSession {
@@ -98,6 +104,9 @@ public final class HeadlessSession: MachineSession, MachineContext, @unchecked S
         machine.tv = tv
         machine.enableRewind()
         machine.insertDiscs(from: old)
+        if let debugger = old.debuggerIfCreated {
+            machine.debugger.adopt(debugger)
+        }
     }
 
     public func startRecording(to url: URL, codec: VideoRecorder.Codec) throws {
@@ -113,6 +122,13 @@ public final class HeadlessSession: MachineSession, MachineContext, @unchecked S
     }
 
     public var isRecording: Bool { recorder != nil }
+
+    public var heldBetweenCalls: Bool {
+        get { true }
+        set {}
+    }
+
+    public var runsBetweenCalls: Bool { false }
 
     public func replace(with newMachine: BBCMicro) {
         try? recorder?.finish()

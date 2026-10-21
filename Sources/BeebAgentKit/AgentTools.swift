@@ -86,6 +86,26 @@ public final class AgentTools: Sendable {
         ["type": .string(type), "description": .string(description)]
     }
 
+    static let resumeProperty = prop("boolean", "If the debugger has stopped the machine, carry on from the stop first (default true; breakpoints can stop it again). false leaves it stopped, so time doesn't pass")
+
+    /// Clears a debugger stop, unless the tool's `resume` argument is false.
+    static func resumeIfStopped(_ session: MachineSession, _ resume: Bool) {
+        if resume {
+            session.machine.debuggerIfCreated?.resume()
+        }
+    }
+
+    static let keepDebuggerProperty = prop("boolean", "Keep the breakpoints, symbols, trace setting and log (default true)")
+
+    /// Swaps in a restored machine, with the old one's debugger set-up if
+    /// `keepDebugger`.
+    static func replace(_ session: MachineSession, with machine: BBCMicro, keepDebugger: Bool) {
+        if keepDebugger, let debugger = session.machine.debuggerIfCreated {
+            machine.debugger.adopt(debugger)
+        }
+        session.replace(with: machine)
+    }
+
     /// Screen text plus the state an agent needs to know what happened.
     static func summary(_ session: MachineSession, extra: String = "") -> String {
         let text = session.machine.screenText()
@@ -127,13 +147,29 @@ public final class AgentTools: Sendable {
                 screen mode: \(m.peek(0x355))
                 \(discs.joined(separator: "\n"))
                 recording: \(session.isRecording)
+                between tool calls: \(session.heldBetweenCalls ? "held still" : "runs in real time")
                 """
             })
         },
 
         Tool(definition: ToolDefinition(
+            name: "set_real_time",
+            description: "Whether the machine runs in real time between tool calls (in the app, it does to begin with, so people can watch and play). Turn it off to make experiments exact: the machine then moves only during tool calls, so e.g. restore_snapshot then press_keys replays cycle for cycle. The app's window shows the machine is held; it's let go when you disconnect. A headless machine only ever runs during tool calls.",
+            inputSchema: schema(["on": prop("boolean", "true: run in real time between calls; false: hold still")], required: ["on"])
+        )) { context, args in
+            guard let on = args["on"]?.boolValue else { throw ToolFailure("on is required") }
+            return .text(try context.perform { session in
+                guard session.runsBetweenCalls else {
+                    return "this machine is headless: it only runs during tool calls anyway"
+                }
+                session.heldBetweenCalls = !on
+                return on ? "running in real time between tool calls" : "held still between tool calls"
+            })
+        },
+
+        Tool(definition: ToolDefinition(
             name: "power_cycle",
-            description: "Switch the BBC off and on again. Discs stay in the drives (a bundled system disc changes with the co-processor). Runs until the BASIC prompt. With model, switches to that machine: model_b (OS 1.20, BASIC 2, DFS 1.20), b_plus (B+ 128K: MOS 2.00, BASIC 2, DFS 2.26, shadow RAM) master_128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS, View, ViewSheet, Edit; 1770 disc controller, shadow RAM, sideways RAM in banks 4-7), or master_compact (MOS 5.10, ADFS only, so it needs .adf/.adl discs; no Tube). With second_processor, fits or removes a 6502 Second Processor (3MHz 65C02, 64K, on the Tube): BASIC is copied across and runs in the second processor (PAGE &800, HIMEM &8000), and the host just does the I/O.",
+            description: "Switch the BBC off and on again. Discs stay in the drives (a bundled system disc changes with the co-processor). Runs until the BASIC prompt. With model, switches to that machine (breakpoints and symbols are kept): model_b (OS 1.20, BASIC 2, DFS 1.20), b_plus (B+ 128K: MOS 2.00, BASIC 2, DFS 2.26, shadow RAM) master_128 (MOS 3.20, BASIC 4, DFS 2.24, ADFS, View, ViewSheet, Edit; 1770 disc controller, shadow RAM, sideways RAM in banks 4-7), or master_compact (MOS 5.10, ADFS only, so it needs .adf/.adl discs; no Tube). With second_processor, fits or removes a 6502 Second Processor (3MHz 65C02, 64K, on the Tube): BASIC is copied across and runs in the second processor (PAGE &800, HIMEM &8000), and the host just does the I/O.",
             inputSchema: schema(["model": ["type": "string", "enum": ["model_a", "model_b", "b_plus", "master_128", "master_compact"],
                                            "description": "Machine to switch to (default: keep the current one)"] as JSONValue,
                                  "second_processor": prop("boolean", "Fit a second processor (default: keep as is)"),
@@ -192,11 +228,14 @@ public final class AgentTools: Sendable {
             name: "press_break",
             description: "Press Break (soft reset; BASIC programs survive with OLD). With shift=true, Shift-Break boots the disc in drive 0. Then runs until the machine waits for input (up to max_seconds).",
             inputSchema: schema(["shift": prop("boolean", "Hold Shift to boot the disc"),
-                                 "max_seconds": prop("number", "Longest to wait for input (default 30)")])
+                                 "max_seconds": prop("number", "Longest to wait for input (default 30)"),
+                                 "resume": resumeProperty])
         )) { context, args in
             let shift = args["shift"]?.boolValue ?? false
             let maxSeconds = args["max_seconds"]?.doubleValue ?? 30
+            let resume = args["resume"]?.boolValue ?? true
             return .text(try context.perform { session in
+                resumeIfStopped(session, resume)
                 if shift { session.machine.shiftBreak() } else { session.machine.pressBreak() }
                 session.advance(seconds: 0.5)
                 let idle = runUntilIdle(session, maxSeconds: maxSeconds)
@@ -307,12 +346,15 @@ public final class AgentTools: Sendable {
             name: "run_command",
             description: "Enter a line (BASIC or a * command) as if typed, fast, then run until the machine waits for input again. Returns the text the OS printed, and the screen. Use \\n in text for several lines; a final Return is added.",
             inputSchema: schema(["text": prop("string", "e.g. PRINT 6*7, CHAIN \"GAME\", *CAT"),
-                                 "max_seconds": prop("number", "Longest to wait (default 30)")],
+                                 "max_seconds": prop("number", "Longest to wait (default 30)"),
+                                 "resume": resumeProperty],
                                 required: ["text"])
         )) { context, args in
             guard let text = args["text"]?.stringValue else { throw ToolFailure("text is required") }
             let maxSeconds = args["max_seconds"]?.doubleValue ?? 30
+            let resume = args["resume"]?.boolValue ?? true
             return .text(try context.perform { session in
+                resumeIfStopped(session, resume)
                 let m = session.machine
                 m.capturedOutput = []
                 m.captureOutput = true
@@ -328,12 +370,15 @@ public final class AgentTools: Sendable {
             name: "type_text",
             description: "Type text through the keyboard, key by key at a realistic speed (40ms per key, Shift as needed). Use for programs that read the keyboard directly; for commands, run_command is faster. \\n is Return. Then runs for settle_seconds.",
             inputSchema: schema(["text": prop("string", "Text to type"),
-                                 "settle_seconds": prop("number", "Time to run after typing (default 0.5)")],
+                                 "settle_seconds": prop("number", "Time to run after typing (default 0.5)"),
+                                 "resume": resumeProperty],
                                 required: ["text"])
         )) { context, args in
             guard let text = args["text"]?.stringValue else { throw ToolFailure("text is required") }
             let settle = args["settle_seconds"]?.doubleValue ?? 0.5
+            let resume = args["resume"]?.boolValue ?? true
             return .text(try context.perform { session in
+                resumeIfStopped(session, resume)
                 session.machine.type(text)
                 _ = session.advance(until: { !session.machine.isTyping }, maxSeconds: 600)
                 session.advance(seconds: settle)
@@ -351,8 +396,10 @@ public final class AgentTools: Sendable {
                                  "click": ["type": "string", "enum": ["left", "middle", "right"],
                                            "description": "Click a button after moving (or double_click)"] as JSONValue,
                                  "double_click": prop("boolean", "With click, click it twice"),
-                                 "settle_seconds": prop("number", "Time to run afterwards (default 0.3)")])
+                                 "settle_seconds": prop("number", "Time to run afterwards (default 0.3)"),
+                                 "resume": resumeProperty])
         )) { context, args in
+            let resume = args["resume"]?.boolValue ?? true
             let dx = args["dx"]?.intValue ?? 0, dy = args["dy"]?.intValue ?? 0
             func button(_ name: String) throws -> AMXMouse.Buttons {
                 switch name {
@@ -367,6 +414,7 @@ public final class AgentTools: Sendable {
             let clicks = args["double_click"]?.boolValue == true ? 2 : 1
             let settle = args["settle_seconds"]?.doubleValue ?? 0.3
             return .text(try context.perform { session in
+                resumeIfStopped(session, resume)
                 let m = session.machine
                 // A count each 20ms (on each axis), so software that
                 // accelerates (GEM) doesn't take it for a flick.
@@ -403,7 +451,8 @@ public final class AgentTools: Sendable {
             description: "Hold keys down together, then release: e.g. [\"SHIFT\",\"F1\"], [\"CTRL\",\"G\"], [\"ESCAPE\"]. Names: RETURN SPACE SHIFT CTRL ESCAPE TAB DELETE COPY CAPSLOCK SHIFTLOCK UP DOWN LEFT RIGHT F0-F9 BREAK, or a single character.",
             inputSchema: schema(["keys": ["type": "array", "items": ["type": "string"], "description": "Key names"],
                                  "hold_seconds": prop("number", "How long to hold them (default 0.1)"),
-                                 "settle_seconds": prop("number", "Time to run after release (default 0.2)")],
+                                 "settle_seconds": prop("number", "Time to run after release (default 0.2)"),
+                                 "resume": resumeProperty],
                                 required: ["keys"])
         )) { context, args in
             guard let names = args["keys"]?.arrayValue?.compactMap(\.stringValue), !names.isEmpty else {
@@ -415,7 +464,9 @@ public final class AgentTools: Sendable {
             }
             let hold = args["hold_seconds"]?.doubleValue ?? 0.1
             let settle = args["settle_seconds"]?.doubleValue ?? 0.2
+            let resume = args["resume"]?.boolValue ?? true
             return .text(try context.perform { session in
+                resumeIfStopped(session, resume)
                 for key in keys { session.machine.setKey(key, down: true) }
                 session.advance(seconds: hold)
                 for key in keys.reversed() { session.machine.setKey(key, down: false) }
@@ -428,11 +479,14 @@ public final class AgentTools: Sendable {
             name: "run",
             description: "Run the machine for some emulated time (seconds, or frames at 50 per second). Runs faster than real time.",
             inputSchema: schema(["seconds": prop("number", "Emulated seconds"),
-                                 "frames": prop("integer", "Frames (1/50s each)")])
+                                 "frames": prop("integer", "Frames (1/50s each)"),
+                                 "resume": resumeProperty])
         )) { context, args in
             let seconds = args["seconds"]?.doubleValue ?? (args["frames"]?.doubleValue).map { $0 / 50 } ?? 1
             guard seconds >= 0 && seconds <= 3600 else { throw ToolFailure("seconds must be 0-3600") }
+            let resume = args["resume"]?.boolValue ?? true
             return .text(try context.perform { session in
+                resumeIfStopped(session, resume)
                 session.advance(seconds: seconds)
                 return summary(session)
             })
@@ -441,10 +495,12 @@ public final class AgentTools: Sendable {
         Tool(definition: ToolDefinition(
             name: "run_until_idle",
             description: "Run until the machine is waiting for input (at the BASIC prompt or an INPUT, a co-processor's prompt, or a program polling the keyboard with the screen still for half a second), or max_seconds pass.",
-            inputSchema: schema(["max_seconds": prop("number", "Longest to run (default 30)")])
+            inputSchema: schema(["max_seconds": prop("number", "Longest to run (default 30)"), "resume": resumeProperty])
         )) { context, args in
             let maxSeconds = args["max_seconds"]?.doubleValue ?? 30
+            let resume = args["resume"]?.boolValue ?? true
             return .text(try context.perform { session in
+                resumeIfStopped(session, resume)
                 let idle = runUntilIdle(session, maxSeconds: maxSeconds)
                 return summary(session, extra: idle ? "waiting for input" : "still running after \(maxSeconds)s")
             })
@@ -454,14 +510,17 @@ public final class AgentTools: Sendable {
             name: "run_until_address",
             description: "Run until the CPU is about to execute the instruction at an address (e.g. \"&0E00\"), or max_seconds pass.",
             inputSchema: schema(["address": prop("string", "Address: &1900, $1900, 0x1900 or decimal"),
-                                 "max_seconds": prop("number", "Longest to run (default 30)")],
+                                 "max_seconds": prop("number", "Longest to run (default 30)"),
+                                 "resume": resumeProperty],
                                 required: ["address"])
         )) { context, args in
             guard let address = args["address"]?.intValue, (0...0xFFFF).contains(address) else {
                 throw ToolFailure("address must be 0-&FFFF")
             }
             let maxSeconds = args["max_seconds"]?.doubleValue ?? 30
+            let resume = args["resume"]?.boolValue ?? true
             return .text(try context.perform { session in
+                resumeIfStopped(session, resume)
                 let m = session.machine
                 m.watch(address: UInt16(address))
                 defer { m.watch(address: nil) }
@@ -528,13 +587,15 @@ public final class AgentTools: Sendable {
 
         Tool(definition: ToolDefinition(
             name: "restore_snapshot",
-            description: "Go back to a snapshot taken with save_snapshot (machine, memory and discs).",
-            inputSchema: schema(["name": prop("string", "Snapshot name (default \"default\")")])
+            description: "Go back to a snapshot taken with save_snapshot (machine, memory and discs). The debugger's breakpoints and symbols stay as they are. In the app, the machine runs on in real time between tool calls unless set_real_time has turned that off: do so for an exact replay.",
+            inputSchema: schema(["name": prop("string", "Snapshot name (default \"default\")"),
+                                 "keep_debugger": keepDebuggerProperty])
         )) { context, args in
             let name = args["name"]?.stringValue ?? "default"
             guard let file = slots.withLock({ $0[name] }) else { throw ToolFailure("no snapshot named \(name)") }
+            let keep = args["keep_debugger"]?.boolValue ?? true
             return .text(try context.perform { session in
-                session.replace(with: try file.makeMachine())
+                replace(session, with: try file.makeMachine(), keepDebugger: keep)
                 session.advance(cycles: 0)
                 return summary(session, extra: "restored \"\(name)\"")
             })
@@ -554,13 +615,15 @@ public final class AgentTools: Sendable {
 
         Tool(definition: ToolDefinition(
             name: "load_state",
-            description: "Load a .beebstate file, replacing the machine.",
-            inputSchema: schema(["path": prop("string", "Path to the .beebstate file")], required: ["path"])
+            description: "Load a .beebstate file, replacing the machine. The debugger's breakpoints and symbols stay as they are.",
+            inputSchema: schema(["path": prop("string", "Path to the .beebstate file"),
+                                 "keep_debugger": keepDebuggerProperty], required: ["path"])
         )) { context, args in
             guard let path = args["path"]?.stringValue else { throw ToolFailure("path is required") }
             let file = try SaveStateFile(data: Data(contentsOf: URL(fileURLWithPath: (path as NSString).expandingTildeInPath)))
+            let keep = args["keep_debugger"]?.boolValue ?? true
             return .text(try context.perform { session in
-                session.replace(with: try file.makeMachine())
+                replace(session, with: try file.makeMachine(), keepDebugger: keep)
                 session.advance(cycles: 0)
                 return summary(session, extra: "loaded state from \(file.created)")
             })

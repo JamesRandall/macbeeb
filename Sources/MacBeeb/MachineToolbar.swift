@@ -106,9 +106,10 @@ struct MachineToolbar: CustomizableToolbarContent {
 
         ToolbarItem(id: "pause") {
             Button { machine.togglePause() } label: {
-                Label(machine.paused ? "Resume" : "Pause", systemImage: machine.paused ? "play.fill" : "pause.fill")
+                Label(machine.isStill ? "Resume" : "Pause", systemImage: machine.isStill ? "play.fill" : "pause.fill")
             }
-            .help(machine.paused ? "Resume" : "Pause")
+            .help(machine.heldForAgent && !machine.paused ? "Resume (an AI agent is holding the machine between its tool calls)"
+                  : machine.paused ? "Resume" : "Pause")
         }
 
         ToolbarItem(id: "speed") {
@@ -178,8 +179,54 @@ struct MachineToolbar: CustomizableToolbarContent {
         }
 
         ToolbarItem(id: "lights", placement: .primaryAction) {
-            MachineLights(lights: machine.lights)
+            HStack(spacing: 0) {
+                if machine.servesAgents {
+                    AgentLight()
+                }
+                MachineLights(lights: machine.lights)
+            }
         }
+    }
+}
+
+/// Lit while an agent's attached to this machine (with macbeeb-mcp
+/// --attach), and brighter while it's running a tool. Opens MCP > Activity
+/// Log.
+struct AgentLight: View {
+    private let log = AgentLog.shared
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        if log.connections > 0 {
+            let busy = log.callsRunning > 0
+            Button { openWindow(id: AgentLogView.windowID) } label: {
+                VStack(spacing: 2) {
+                    if busy {
+                        // Pulses while a tool runs.
+                        dot(busy: true)
+                            .phaseAnimator([false, true]) { dot, dim in dot.opacity(dim ? 0.45 : 1) }
+                    } else {
+                        dot(busy: false)
+                    }
+                    Text("MCP")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.leading, 6)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(log.connections == 1 ? "An AI agent is attached (click for the activity log)"
+                                       : "\(log.connections) AI agents are attached (click for the activity log)")
+            .accessibilityLabel(busy ? "AI agent attached, working" : "AI agent attached")
+        }
+    }
+
+    private func dot(busy: Bool) -> some View {
+        Circle()
+            .fill(Color.green.opacity(busy ? 1 : 0.6))
+            .shadow(color: busy ? Color.green.opacity(0.9) : .clear, radius: 4)
+            .frame(width: 7, height: 7)
     }
 }
 

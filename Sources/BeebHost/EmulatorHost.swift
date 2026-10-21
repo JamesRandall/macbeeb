@@ -71,6 +71,15 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
 
     var isInspecting: Bool { inspecting.load(ordering: .relaxed) }
     private let running = Atomic<Bool>(true)
+    private let heldForAgent = Atomic<Bool>(false)
+
+    /// Whether an agent is holding the machine still between its tool calls
+    /// (it runs only while they do).
+    public var isHeldForAgent: Bool { heldForAgent.load(ordering: .acquiring) }
+
+    public func setHeldForAgent(_ held: Bool) {
+        heldForAgent.store(held, ordering: .releasing)
+    }
     private let audioActive = Atomic<Bool>(false)
     private let emulatedCycles = Atomic<Int>(0)
     private var thread: Thread?
@@ -229,7 +238,11 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
                     }
                 case .loadState(let file):
                     do {
-                        session.replace(with: try file.makeMachine())
+                        let restored = try file.makeMachine()
+                        if let debugger = session.machine.debuggerIfCreated {
+                            restored.debugger.adopt(debugger)
+                        }
+                        session.replace(with: restored)
                         resetWallClock()
                     } catch {
                         NSLog("MacBeeb: can't load state: \(error)")
@@ -244,7 +257,7 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
             let stop = debugger?.stopReason
             let stopCount = debugger?.stopCount ?? 0
             latestDebugStop.withLock { $0 = (stop, stopCount) }
-            if paused || stop != nil {
+            if paused || stop != nil || isHeldForAgent {
                 Thread.sleep(forTimeInterval: 0.005)
                 resetWallClock()
                 continue
@@ -391,6 +404,9 @@ final class HostSession: MachineSession {
         tv = TVOutput()
         attach()
         machine.insertDiscs(from: old)
+        if let debugger = old.debuggerIfCreated {
+            machine.debugger.adopt(debugger)
+        }
     }
 
     func insertDisc(image: [UInt8]?, format: Disc.ImageFormat, drive: Int, onWrite: (@Sendable ([UInt8]) -> Void)?) {
@@ -424,6 +440,13 @@ final class HostSession: MachineSession {
     }
 
     var isRecording: Bool { recorder != nil }
+
+    var heldBetweenCalls: Bool {
+        get { host.isHeldForAgent }
+        set { host.setHeldForAgent(newValue) }
+    }
+
+    var runsBetweenCalls: Bool { true }
 
     func replace(with newMachine: BBCMicro) {
         try? recorder?.finish()

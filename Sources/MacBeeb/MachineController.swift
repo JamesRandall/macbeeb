@@ -15,6 +15,11 @@ final class MachineController {
     let host: EmulatorHost
     private let audio: AudioOutput
     private(set) var paused = false
+    /// An agent's holding the machine still between its tool calls
+    /// (set_real_time). Resume lets it go.
+    private(set) var heldForAgent = false
+    /// Paused, by the user or for an agent.
+    var isStill: Bool { paused || heldForAgent }
     private(set) var speedLimited = true
     /// The emulated model. New windows start with the last one chosen.
     private(set) var model: BBCMicro.Model
@@ -104,6 +109,10 @@ final class MachineController {
                 if lights != self.lights {
                     self.lights = lights
                 }
+                let held = self.host.isHeldForAgent
+                if held != self.heldForAgent {
+                    self.heldForAgent = held
+                }
                 let stop = self.host.debugStop
                 if stop != self.debugStop {
                     self.debugStop = stop
@@ -122,16 +131,35 @@ final class MachineController {
 
     /// The first window's machine is the one `macbeeb-mcp --attach` drives.
     private static var agentServer: AgentSocketServer?
+    /// Whether this is that machine.
+    private(set) var servesAgents = false
 
     private func startAgentServer() {
         // Self-tests leave a running copy's servers alone.
         guard Self.agentServer == nil, UserDefaults.standard.string(forKey: "MacBeebSelfTest") == nil else { return }
-        let server = AgentSocketServer(tools: AgentTools(context: host))
+        let server = AgentSocketServer(tools: LoggedTools(tools: AgentTools(context: host)))
+        let host = host
+        server.onConnection = { connected in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    AgentLog.shared.add(connected ? .connected : .disconnected)
+                    // The last agent's gone: don't leave the machine held.
+                    if !connected && AgentLog.shared.connections == 0 {
+                        host.setHeldForAgent(false)
+                    }
+                }
+            }
+        }
         do {
             try server.start()
             Self.agentServer = server
+            servesAgents = true
+            AgentLog.shared.serverState = .serving
+        } catch AgentSocketServer.StartError.inUse {
+            AgentLog.shared.serverState = .inUse
         } catch {
             NSLog("MacBeeb: no agent socket: \(error)")
+            AgentLog.shared.serverState = .failed(error.localizedDescription)
         }
         startDebugAdapter()
     }
@@ -496,6 +524,11 @@ final class MachineController {
     }
 
     func togglePause() {
+        if heldForAgent && !paused {
+            host.setHeldForAgent(false)
+            heldForAgent = false
+            return
+        }
         paused.toggle()
         host.send(.setPaused(paused))
     }

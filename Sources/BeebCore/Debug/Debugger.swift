@@ -349,6 +349,25 @@ public final class Debugger {
         machine.z80Processor?.debugger = any ? self : nil
     }
 
+    /// Takes on `other`'s breakpoints (with their hit counts), symbols,
+    /// tracing and log: the old machine's, when a snapshot, save state or
+    /// power cycle replaces it. Not its stop. Symbols carry over only to
+    /// the same model, whose built-in ones they include.
+    public func adopt(_ other: Debugger) {
+        breakpoints = other.breakpoints
+        nextBreakpointID = other.nextBreakpointID
+        conditions = other.conditions
+        if other.machine.model == machine.model {
+            hostSymbols = other.hostSymbols
+            parasiteSymbols = other.parasiteSymbols
+        }
+        log = other.log
+        if other.tracing {
+            setTracing(capacity: other.hostTrace.capacity)
+        }
+        updateFlags()
+    }
+
     // MARK: Running
 
     /// Clears the stop, so the machine can run.
@@ -689,7 +708,7 @@ public final class Debugger {
     }
 
     private func record(_ cpu: DebugCPU, _ address: UInt16, interrupt: Bool) {
-        let read = { (a: UInt16) in self.machine.debugRead(.cpu(cpu), Int(a)) ?? 0xFF }
+        let read = { (a: UInt16) in self.machine.codeRead(cpu, Int(a)) ?? 0xFF }
         let bytes = (read(address), read(address &+ 1), read(address &+ 2), read(address &+ 3))
         let entry: TraceEntry
         if cpu == .parasite, let z = machine.z80Processor?.cpu {

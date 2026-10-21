@@ -66,7 +66,7 @@ extension AgentTools {
     /// Disassembly from `start`, marking `pc`.
     static func disassembly(_ m: BBCMicro, _ cpu: DebugCPU, from start: UInt16, count: Int, mark pc: UInt16?) -> String {
         let disassembler = m.disassembler(cpu)
-        let read = { (a: UInt16) in m.debugRead(.cpu(cpu), Int(a)) ?? 0xFF }
+        let read = { (a: UInt16) in m.codeRead(cpu, Int(a)) ?? 0xFF }
         var address = start
         var lines: [String] = []
         for _ in 0..<count {
@@ -534,14 +534,16 @@ extension AgentTools {
             description: "Profile: run for some seconds (of emulated time) counting the cycles spent at every address, then report the busiest routines (by symbol) and instructions, time in interrupt handlers, and cycles per frame (a frame is 40,000 cycles, 1/50s).",
             inputSchema: schema(["seconds": prop("number", "How long to run (default 1)"),
                                  "top": prop("integer", "How many instructions to list (default 15)"),
-                                 "cpu": cpuProperty])
+                                 "cpu": cpuProperty, "resume": resumeProperty])
         )) { context, args in
             let cpu = try cpu(args)
             let seconds = min(max(args["seconds"]?.doubleValue ?? 1, 0.01), 120)
             let top = min(max(args["top"]?.intValue ?? 15, 1), 200)
+            let resume = args["resume"]?.boolValue ?? true
             return .text(try context.perform { session in
                 let m = session.machine
                 guard m.hasDebugCPU(cpu) else { throw ToolFailure("there's no second processor") }
+                resumeIfStopped(session, resume)
                 m.debugger.startProfiling()
                 session.advance(seconds: seconds)
                 m.debugger.stopProfiling()
@@ -577,7 +579,7 @@ extension AgentTools {
         let disassembler = m.disassembler(r.cpu)
         let symbols = m.debugger.symbols(r.cpu)
         for e in r.hottest {
-            let text = symbols.annotate(disassembler.disassemble(at: e.address) { m.debugRead(.cpu(r.cpu), Int($0)) ?? 0xFF }.text)
+            let text = symbols.annotate(disassembler.disassemble(at: e.address) { m.codeRead(r.cpu, Int($0)) ?? 0xFF }.text)
             lines.append("  \(percent(e.cycles))  &\(hex(e.address, 4))  \(text.padding(toLength: 16, withPad: " ", startingAt: 0)) \(e.executions) runs")
         }
         return lines.joined(separator: "\n")

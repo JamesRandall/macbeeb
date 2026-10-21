@@ -97,7 +97,7 @@ public struct DebugSnapshot: Sendable {
 
         let cpu = view.cpu
         let pc = m.instructionAddress(cpu)
-        let read = { (a: UInt16) in m.debugRead(.cpu(cpu), Int(a)) ?? 0xFF }
+        let read = { (a: UInt16) in m.codeRead(cpu, Int(a)) ?? 0xFF }
         let disassembler = m.disassembler(cpu)
         // Instructions known to have run are reliable places to start.
         let known = Set(debugger.tracing ? debugger.trace(view.cpu).last(256).filter { !$0.interrupt }.map(\.pc) : [])
