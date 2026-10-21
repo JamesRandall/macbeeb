@@ -552,6 +552,20 @@ final class MachineController {
         insertDisc(url, drive: drive, boot: boot)
     }
 
+    /// Opens and boots a disc from File > Open Recent Disc, or says it's
+    /// gone (and forgets it).
+    func openRecentDisc(_ url: URL) {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            RecentDiscs.shared.remove(url)
+            let alert = NSAlert()
+            alert.messageText = "“\(url.lastPathComponent)” can’t be found"
+            alert.informativeText = "It may have been moved, renamed or deleted, so it’s been taken off the list."
+            alert.runModal()
+            return
+        }
+        insertDisc(url)
+    }
+
     /// Puts the disc image at `url` in `drive`. Writes go back to the file.
     func insertDisc(_ url: URL, drive: Int = 0, boot: Bool = true) {
         guard let data = try? Data(contentsOf: url) else {
@@ -568,6 +582,7 @@ final class MachineController {
         host.send(.insertDisc(image: [UInt8](data), format: format, drive: drive, onWrite: onWrite))
         discNames[drive] = url.lastPathComponent
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
+        RecentDiscs.shared.add(url)
         if boot && drive == 0 {
             host.send(.shiftBreak)
         }

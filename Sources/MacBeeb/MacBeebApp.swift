@@ -14,6 +14,9 @@ struct MacBeebApp: App {
         }
         .defaultSize(width: 960, height: 768)
         .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("About MacBeeb") { AboutPanel.show() }
+            }
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") { Updates.shared.checkForUpdates() }
                     .disabled(!Updates.shared.isAvailable)
@@ -22,6 +25,18 @@ struct MacBeebApp: App {
                 Button("Open Disc…") { machine?.openDisc() }
                     .keyboardShortcut("o")
                     .disabled(!(machine?.model.hasDiscInterface ?? false))
+                Menu("Open Recent Disc") {
+                    ForEach(RecentDiscs.shared.urls, id: \.self) { url in
+                        Button(url.lastPathComponent) { machine?.openRecentDisc(url) }
+                            .help(url.path)
+                    }
+                    if !RecentDiscs.shared.urls.isEmpty {
+                        Divider()
+                    }
+                    Button("Clear Menu") { RecentDiscs.shared.clear() }
+                        .disabled(RecentDiscs.shared.urls.isEmpty)
+                }
+                .disabled(!(machine?.model.hasDiscInterface ?? false))
                 Button("Insert Disc in Drive 0…") { machine?.openDisc(drive: 0, boot: false) }
                     .keyboardShortcut("o", modifiers: [.command, .option])
                     .disabled(machine == nil)
