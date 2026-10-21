@@ -10,6 +10,8 @@ final class EmulatorNSView: MTKView {
     var renderer: Renderer?
     /// The path of the disc image in drive 0, whose own keys apply.
     var keyboardDisc: () -> String? = { nil }
+    /// Called when the window becomes key.
+    var onBecomeKey: () -> Void = {}
     /// Called with the TV pixel under the mouse (nil when it leaves).
     var onHover: ((Int, Int)?) -> Void = { _ in }
 
@@ -205,10 +207,19 @@ final class EmulatorNSView: MTKView {
         updateTranslator()
         NotificationCenter.default.addObserver(self, selector: #selector(windowDidResignKey),
                                                name: NSWindow.didResignKeyNotification, object: window)
+        NotificationCenter.default.addObserver(self, selector: #selector(windowDidBecomeKey),
+                                               name: NSWindow.didBecomeKeyNotification, object: window)
+        if window?.isKeyWindow == true {
+            onBecomeKey()
+        }
         NotificationCenter.default.addObserver(self, selector: #selector(toggleMouseCapture),
                                                name: Self.toggleMouseCapture, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(applyZoom),
                                                name: Self.setZoom, object: nil)
+    }
+
+    @objc private func windowDidBecomeKey(_ notification: Notification) {
+        onBecomeKey()
     }
 
     @objc private func windowDidResignKey(_ notification: Notification) {
@@ -274,6 +285,7 @@ struct EmulatorView: NSViewRepresentable {
     var onHover: ((Int, Int)?) -> Void = { _ in }
     var onZoom: (Double) -> Void = { _ in }
     var keyboardDisc: () -> String? = { nil }
+    var onBecomeKey: () -> Void = {}
 
     func makeNSView(context: Context) -> EmulatorNSView {
         let device = MTLCreateSystemDefaultDevice()
@@ -282,6 +294,7 @@ struct EmulatorView: NSViewRepresentable {
         view.onHover = onHover
         view.onZoom = onZoom
         view.keyboardDisc = keyboardDisc
+        view.onBecomeKey = onBecomeKey
         view.colorPixelFormat = .bgra8Unorm
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
         view.preferredFramesPerSecond = 120

@@ -2,22 +2,39 @@ import BeebHost
 import GameController
 import Observation
 
-/// Connects game controllers to the BBC: the first controller is joystick 0
-/// (left stick or d-pad, A to fire), the second is joystick 1, or they press
-/// keys, as `GamepadSettings` says for the disc in drive 0.
+/// Connects game controllers to the BBC in the window in front: the first
+/// controller is joystick 0 (left stick or d-pad, A to fire), the second is
+/// joystick 1, or they press keys, as `GamepadSettings` says for the disc in
+/// its drive 0.
 @MainActor
 final class Joysticks {
-    private let host: EmulatorHost
-    /// The path of the disc image in drive 0, whose own settings apply.
-    private let disc: () -> String?
+    static let shared = Joysticks()
+
+    /// The machine the controllers drive: the last one whose window was
+    /// key. Changing it lets go of everything held on the old one.
+    weak var machine: MachineController? {
+        willSet {
+            guard newValue !== machine else { return }
+            for index in mappers.indices {
+                send(mappers[index].reset(), index)
+            }
+        }
+        didSet {
+            if oldValue !== machine {
+                updateMapping()
+            }
+        }
+    }
+
     private var observers: [NSObjectProtocol] = []
     /// By controller.
     private var mappers: [GamepadMapper] = [GamepadMapper(), GamepadMapper()]
     private var states: [GamepadState] = [GamepadState(), GamepadState()]
+    /// Counts `updateMapping` calls, so only the latest one's observation
+    /// carries on.
+    private var mappingGeneration = 0
 
-    init(host: EmulatorHost, disc: @escaping () -> String?) {
-        self.host = host
-        self.disc = disc
+    private init() {
         GCController.shouldMonitorBackgroundEvents = false
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { [weak self] _ in
@@ -73,7 +90,12 @@ final class Joysticks {
     }
 
     private func apply(_ index: Int) {
-        for action in mappers[index].update(states[index]) {
+        send(mappers[index].update(states[index]), index)
+    }
+
+    private func send(_ actions: [GamepadMapper.Action], _ index: Int) {
+        guard let host = machine?.host else { return }
+        for action in actions {
             switch action {
             case .key(let key, let down):
                 host.send(.key(key, down: down))
@@ -86,14 +108,19 @@ final class Joysticks {
     /// Picks up settings changes, and a change of disc, releasing or
     /// pressing keys for buttons already held.
     private func updateMapping() {
+        mappingGeneration += 1
+        let generation = mappingGeneration
         withObservationTracking {
-            let (mode, keys) = GamepadSettings.shared.mapping(disc: disc())
+            let (mode, keys) = GamepadSettings.shared.mapping(disc: machine?.bootDiscPath)
             for index in mappers.indices {
                 mappers[index].mode = mode
                 mappers[index].keys = keys
             }
         } onChange: { [weak self] in
-            DispatchQueue.main.async { self?.updateMapping() }
+            DispatchQueue.main.async {
+                guard let self, generation == self.mappingGeneration else { return }
+                self.updateMapping()
+            }
         }
         for index in mappers.indices {
             apply(index)

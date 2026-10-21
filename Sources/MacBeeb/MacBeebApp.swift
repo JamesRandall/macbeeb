@@ -226,7 +226,8 @@ struct MachineWindow: View {
     var body: some View {
         EmulatorView(host: machine.host, style: machine.displayStyle, onRenderer: { machine.renderer = $0 },
                      onHover: { machine.hoveredPixel = $0.map { (x: $0.0, y: $0.1) } },
-                     onZoom: { machine.pictureZoomed($0) }, keyboardDisc: { machine.bootDiscPath })
+                     onZoom: { machine.pictureZoomed($0) }, keyboardDisc: { machine.bootDiscPath },
+                     onBecomeKey: { Joysticks.shared.machine = machine })
             .overlay(alignment: .bottomLeading) {
                 if let inspection = machine.inspection {
                     Text(inspection)
