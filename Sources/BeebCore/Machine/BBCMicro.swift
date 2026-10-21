@@ -200,6 +200,11 @@ public final class BBCMicro {
         }
     }
     var discNoises = [DiscDriveNoise(), DiscDriveNoise()]
+    /// MAME's recordings are quiet (the motor's 46dB down, a step's click
+    /// about 20dB): mixed at full scale, as b2 does, the motor's lost under
+    /// the BBC's own sound. 12dB up puts a click about level with one of
+    /// the sound chip's channels at full volume.
+    static let discNoiseGain: Float = 4
     /// Frames of the samples to each chip tick.
     var discNoiseStep = 0.0
     /// A second copy of the audio, for recording.
@@ -1188,7 +1193,8 @@ public final class BBCMicro {
             let output = soundChip.update(write: addressableLatch & 1 == 0, value: systemVIA.a.p)
             var noise: Float = 0
             if mixer != nil, let sounds = discDriveSounds {
-                noise = discNoises[0].next(sounds, step: discNoiseStep) + discNoises[1].next(sounds, step: discNoiseStep)
+                noise = (discNoises[0].next(sounds, step: discNoiseStep) + discNoises[1].next(sounds, step: discNoiseStep))
+                    * Self.discNoiseGain
             }
             if mixer != nil, let sample = mixer!.mix(output, extra: noise) {
                 sampleRing?.write(sample)
