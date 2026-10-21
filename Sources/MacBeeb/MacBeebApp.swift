@@ -204,14 +204,14 @@ struct MacBeebApp: App {
     }
 }
 
-/// Machine > Keys for This Disc: the keyboard settings, showing the keys
-/// for the disc image in drive 0.
+/// Machine > Controls for This Disc: the keyboard and gamepad settings,
+/// showing those for the disc image in drive 0.
 struct DiscKeysButton: View {
     let machine: MachineController?
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        Button("Keys for This Disc…") {
+        Button("Controls for This Disc…") {
             KeyboardSettings.shared.editingDisc = machine?.bootDiscPath
             openSettings()
         }

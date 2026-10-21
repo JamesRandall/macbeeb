@@ -240,8 +240,14 @@ The keyboard goes by key position (the BBC's layout on the Mac's keys) or,
 in Settings > Keyboard, by the character the Mac's layout types, with the
 BBC's Shift pressed or released per key as needed. Custom mappings put any
 BBC key on any Mac key, in either mode. A disc image can have keys of its
-own, a game's controls say (Machine > Keys for This Disc…), which apply
+own, a game's controls say (Machine > Controls for This Disc…), which apply
 while it's in drive 0, on top of the keys for all discs.
+
+Game controllers are the BBC's analogue joysticks (the d-pad or left stick,
+with A or the right trigger to fire), with their other buttons on keys, or,
+in Settings > Gamepad, keys altogether: each button and direction presses
+the key you give it. As with the keyboard, a disc image can have settings of
+its own.
 
 The Master Compact is a Master without the Tube, analogue port, keypad,
 cassette or clock: MOS 5.10 with ADFS, BASIC 4 and Utils, a 1772 with

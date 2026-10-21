@@ -46,8 +46,8 @@ final class KeyboardSettings {
         }
     }
 
-    /// The disc whose keys the settings are showing (nil: all discs'). Set
-    /// by Machine > Keys for This Disc.
+    /// The disc whose keys (and gamepad settings) the settings are showing
+    /// (nil: all discs'). Set by Machine > Controls for This Disc.
     var editingDisc: String?
 
     private static let modeKey = "MacBeebKeyboardMode"

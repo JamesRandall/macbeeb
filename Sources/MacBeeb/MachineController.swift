@@ -93,7 +93,7 @@ final class MachineController {
         audio = AudioOutput(host: host)
         host.start()
         audio.start()
-        joysticks = Joysticks(host: host)
+        joysticks = Joysticks(host: host, disc: { [weak self] in self?.bootDiscPath })
         startupDiscName = configuration.startupDisc?.name
         discNames[0] = startupDiscName
         lightsTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15, repeats: true) { [weak self] _ in

@@ -8,6 +8,8 @@ struct SettingsView: View {
         TabView {
             KeyboardSettingsView()
                 .tabItem { Label("Keyboard", systemImage: "keyboard") }
+            GamepadSettingsView()
+                .tabItem { Label("Gamepad", systemImage: "gamecontroller") }
             DebuggingSettingsView()
                 .tabItem { Label("Debugging", systemImage: "ladybug") }
         }
@@ -36,15 +38,7 @@ struct KeyboardSettingsView: View {
             }
 
             Section {
-                Picker("For", selection: $settings.editingDisc) {
-                    Text("All discs").tag(String?.none)
-                    if !discs.isEmpty {
-                        Divider()
-                    }
-                    ForEach(discs, id: \.self) { path in
-                        Text(Self.discName(path)).tag(String?.some(path))
-                    }
-                }
+                DiscPicker()
                 if settings.mappings(for: disc).isEmpty {
                     Text(disc == nil
                          ? "No custom keys. Add one to put any BBC key on any Mac key (it takes priority in both modes)."
@@ -101,20 +95,6 @@ struct KeyboardSettingsView: View {
     /// The disc whose keys are showing (nil: all discs').
     private var disc: String? { settings.editingDisc }
 
-    /// Discs to choose from: those in the machines' drive 0, those with
-    /// keys, and the one showing.
-    private var discs: [String] {
-        let all = MachineController.all.values.compactMap(\.bootDiscPath) + settings.discMappings.keys
-            + [settings.editingDisc].compactMap { $0 }
-        return Set(all).sorted { Self.discName($0).localizedStandardCompare(Self.discName($1)) == .orderedAscending }
-    }
-
-    /// "Elite.ssd (Games)": the image's name and its folder's.
-    static func discName(_ path: String) -> String {
-        let url = URL(fileURLWithPath: path)
-        return "\(url.lastPathComponent) (\(url.deletingLastPathComponent().lastPathComponent))"
-    }
-
     private func startRecording() {
         let disc = disc
         recorder = KeyRecorder { event in
@@ -130,6 +110,109 @@ struct KeyboardSettingsView: View {
     private func stopRecording() {
         recorder?.stop()
         recorder = nil
+    }
+}
+
+/// Which settings the keyboard and gamepad tabs show: all discs', or a disc
+/// image's own (`KeyboardSettings.editingDisc`, shared by both).
+struct DiscPicker: View {
+    @State private var settings = KeyboardSettings.shared
+
+    var body: some View {
+        Picker("For", selection: $settings.editingDisc) {
+            Text("All discs").tag(String?.none)
+            if !discs.isEmpty {
+                Divider()
+            }
+            ForEach(discs, id: \.self) { path in
+                Text(Self.discName(path)).tag(String?.some(path))
+            }
+        }
+    }
+
+    /// Discs to choose from: those in the machines' drive 0, those with
+    /// settings of their own, and the one showing.
+    private var discs: [String] {
+        let all = MachineController.all.values.compactMap(\.bootDiscPath) + settings.discMappings.keys
+            + GamepadSettings.shared.discConfigs.keys + [settings.editingDisc].compactMap { $0 }
+        return Set(all).sorted { Self.discName($0).localizedStandardCompare(Self.discName($1)) == .orderedAscending }
+    }
+
+    /// "Elite.ssd (Games)": the image's name and its folder's.
+    static func discName(_ path: String) -> String {
+        let url = URL(fileURLWithPath: path)
+        return "\(url.lastPathComponent) (\(url.deletingLastPathComponent().lastPathComponent))"
+    }
+}
+
+struct GamepadSettingsView: View {
+    @State private var settings = GamepadSettings.shared
+    @State private var keyboard = KeyboardSettings.shared
+
+    /// The disc whose settings are showing (nil: all discs').
+    private var disc: String? { keyboard.editingDisc }
+
+    var body: some View {
+        let config = settings.config(for: disc)
+        let mode = settings.mapping(disc: disc).mode
+        Form {
+            Section {
+                DiscPicker()
+                Picker("Controller is", selection: Binding(get: { config.mode }, set: { settings.setMode($0, disc: disc) })) {
+                    if disc != nil {
+                        Text("As for all discs (\(settings.config.mode?.name ?? "Joystick"))").tag(GamepadMode?.none)
+                    }
+                    ForEach(GamepadMode.allCases) { mode in
+                        Text(mode.name).tag(GamepadMode?.some(mode))
+                    }
+                }
+                Text(mode == .joystick
+                     ? "The first controller is joystick 0 and the second joystick 1: the d-pad or left stick moves it, and A or the right trigger fires. Other buttons press the keys below."
+                     : "Each button, and each direction of the d-pad and left stick, presses the key below.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                ForEach(GamepadButton.allCases) { button in
+                    HStack {
+                        Text(button.name)
+                            .fontWeight(settings.held.contains(button) ? .bold : .regular)
+                            .frame(minWidth: 140, alignment: .leading)
+                        Image(systemName: "arrow.right")
+                            .foregroundStyle(.secondary)
+                        if mode == .joystick && button.isJoystick {
+                            Text("Joystick")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        } else {
+                            Picker("BBC key", selection: Binding(
+                                get: { config.key(for: button) },
+                                set: { settings.setKey($0, for: button, disc: disc) }
+                            )) {
+                                Text(disc == nil ? "None" : "As for all discs (\(settings.config.key(for: button)?.name ?? "none"))")
+                                    .tag(BeebKey?.none)
+                                ForEach(BeebKey.catalogue, id: \.key) { entry in
+                                    Text(entry.name).tag(BeebKey?.some(entry.key))
+                                }
+                            }
+                            .labelsHidden()
+                        }
+                    }
+                }
+            } header: {
+                Text("Buttons")
+            } footer: {
+                HStack {
+                    Text("Press a button to see which it is.")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(disc == nil ? "Reset" : "Remove This Disc's Settings") { settings.reset(disc: disc) }
+                        .disabled(disc == nil ? config == GamepadSettings.Config(mode: .joystick) : config.isEmpty)
+                }
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 
