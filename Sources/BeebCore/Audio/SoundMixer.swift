@@ -30,11 +30,12 @@ public struct SoundMixer {
         alpha = Float(dt / (rc + dt))
     }
 
-    /// Feeds one chip tick. Returns a sample when one is due.
+    /// Feeds one chip tick, with `extra` (the disc drives' noises, at full
+    /// scale as b2 mixes them) added. Returns a sample when one is due.
     @inline(__always)
-    public mutating func mix(_ output: SN76489.Output) -> Float? {
+    public mutating func mix(_ output: SN76489.Output, extra: Float = 0) -> Float? {
         let level = (Self.volumes[Int(output[0])] + Self.volumes[Int(output[1])]
-            + Self.volumes[Int(output[2])] + Self.volumes[Int(output[3])]) * 0.25
+            + Self.volumes[Int(output[2])] + Self.volumes[Int(output[3])]) * 0.25 + extra
         f0 += alpha * (level - f0)
         f1 += alpha * (f0 - f1)
         f2 += alpha * (f1 - f2)

@@ -142,6 +142,9 @@ struct MacBeebApp: App {
                 Button("Power Cycle") { machine?.powerCycle() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
                 Divider()
+                Toggle("Disc Drive Sounds", isOn: Binding(get: { machine?.discDriveSounds ?? true },
+                                                           set: { machine?.setDiscDriveSounds($0) }))
+                    .disabled(machine == nil)
                 Button("Capture or Release Mouse") { machine?.toggleMouseCapture() }
                     .keyboardShortcut("m", modifiers: [.command, .control])
                     .disabled(machine == nil || machine?.model == .masterCompact)

@@ -85,7 +85,9 @@ final class MachineController {
         self.discInterface = discInterface
         let configuration = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
                                                    discInterface: discInterface)
-        host = EmulatorHost {
+        let discDriveSounds = UserDefaults.standard.object(forKey: Self.discDriveSoundsDefaultsKey) as? Bool ?? true
+        self.discDriveSounds = discDriveSounds
+        host = EmulatorHost(discDriveSounds: Self.discDriveSounds(for:), discDriveSoundsOn: discDriveSounds) {
             BBCMicro(configuration: configuration)
         }
         audio = AudioOutput(host: host)
@@ -282,6 +284,26 @@ final class MachineController {
         await key(0x1A, "7")
         await key(0x24, "\r")
         try? await Task.sleep(for: .seconds(1))
+    }
+
+    // MARK: Disc drive sounds
+
+    private static let discDriveSoundsDefaultsKey = "MacBeebDiscDriveSounds"
+    /// Whether the drives are heard (on unless turned off).
+    private(set) var discDriveSounds: Bool
+
+    func setDiscDriveSounds(_ on: Bool) {
+        discDriveSounds = on
+        UserDefaults.standard.set(on, forKey: Self.discDriveSoundsDefaultsKey)
+        host.send(.setDiscDriveSounds(on))
+    }
+
+    /// Read once for each drive type, for every machine.
+    nonisolated private static let sounds525 = BeebROMs.discDriveSounds(for: .modelB)
+    nonisolated private static let sounds35 = BeebROMs.discDriveSounds(for: .masterCompact)
+
+    nonisolated static func discDriveSounds(for model: BBCMicro.Model) -> DiscDriveSounds? {
+        model == .masterCompact ? sounds35 : sounds525
     }
 
     // MARK: Zoom

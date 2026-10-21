@@ -191,6 +191,17 @@ public final class BBCMicro {
     public var rtc = MC146818()
     var mixer: SoundMixer?
     var sampleRing: SampleRing?
+    /// The disc drives' noises (nil: silent), mixed in while audio is
+    /// attached. Not saved: they don't change what the machine does.
+    public var discDriveSounds: DiscDriveSounds? {
+        didSet {
+            discNoises = [DiscDriveNoise(), DiscDriveNoise()]
+            discNoiseStep = (discDriveSounds?.rate ?? 0) / Double(SoundMixer.chipRate)
+        }
+    }
+    var discNoises = [DiscDriveNoise(), DiscDriveNoise()]
+    /// Frames of the samples to each chip tick.
+    var discNoiseStep = 0.0
     /// A second copy of the audio, for recording.
     public var recordingAudio: SampleRing?
 
@@ -475,6 +486,12 @@ public final class BBCMicro {
         }
         if configuration.coprocessor == .arm, let rom = tubeROM {
             armProcessor = ARMSecondProcessor(rom: rom, machine: self)
+        }
+        for drive in drives {
+            drive.onEvent = { [unowned(unsafe) self, unowned(unsafe) drive] event in
+                guard let sounds = self.discDriveSounds else { return }
+                self.discNoises[drive.id].event(event, hasDisc: drive.disc != nil, sounds: sounds)
+            }
         }
         if let startup = configuration.startupDisc {
             startupDisc = try? Disc.fromImage(startup.image, format: startup.format)
@@ -1169,7 +1186,11 @@ public final class BBCMicro {
         // Sound: 250kHz. The chip takes port A while IC32 bit 0 is low.
         if cycles & 7 == 0 {
             let output = soundChip.update(write: addressableLatch & 1 == 0, value: systemVIA.a.p)
-            if mixer != nil, let sample = mixer!.mix(output) {
+            var noise: Float = 0
+            if mixer != nil, let sounds = discDriveSounds {
+                noise = discNoises[0].next(sounds, step: discNoiseStep) + discNoises[1].next(sounds, step: discNoiseStep)
+            }
+            if mixer != nil, let sample = mixer!.mix(output, extra: noise) {
                 sampleRing?.write(sample)
                 recordingAudio?.write(sample)
             }

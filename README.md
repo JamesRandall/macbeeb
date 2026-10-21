@@ -19,6 +19,29 @@ For AI agents, the app includes an MCP server, which runs a machine of its
 own, or with `--attach` drives the one in the running app:
 `claude mcp add macbeeb -- /Applications/MacBeeb.app/Contents/MacOS/macbeeb-mcp --attach`.
 
+## Built on the work of others
+
+MacBeeb wouldn't exist without three emulators, and the people who wrote
+them did the hard work. Their source, their research into how the real
+hardware behaves, and their test results are what this is made from. Thank
+you.
+
+- **[b2](https://github.com/tom-seddon/b2)**, by Tom Seddon: the
+  cycle-by-cycle 6502 and the machine built around it, the video, the
+  VIAs, the sound, paging on the B+ and the Master, the 6502 Second
+  Processor and the Master Turbo, and the disc drive noises. Much of
+  MacBeeb is a port of b2.
+- **[BeebEm](https://github.com/stardot/beebem-windows)**, by Dave Gilbert,
+  Mike Wyatt, Chris Needham and many others over the years: the Z80, Master
+  512 and ARM co-processors and their system discs, the AMX mouse, and a
+  great deal of what's known about the more unusual hardware.
+- **[jsbeeb](https://github.com/mattgodbolt/jsbeeb)**, by Matt Godbolt and
+  its contributors: the disc drives and the 8271 and 1770 disc controllers
+  (themselves from Chris Evans's [beebjit](https://github.com/scarybeasts/beebjit)),
+  and timing results to test against.
+
+The drive noises are [MAME](https://github.com/mamedev/mame)'s recordings.
+
 ## Layout
 
 | Path | What |
@@ -258,6 +281,12 @@ a 3MHz 65C02 with 64K on the Tube, booting Tube OS 1.10, following b2.
 Or the Master Turbo (`--turbo`): a Master 128 with the 65C102 Co-Processor,
 the same 65C02 and 64K at 4MHz on the Master's internal Tube (seen while
 ACCCON's ITU bit is set), booting its Tube OS 1.20, as b2 has it.
+
+The drives sound as they work: the motor spinning up, running and down,
+the head stepping and seeking, from MAME's recordings of 5.25" drives (3.5"
+on the Compact), mixed in at the sound chip's rate as b2 does. Machine >
+Disc Drive Sounds turns them off; `beeb --drive-sounds` puts them in a
+recording.
 
 Save states (`.beebstate`) and snapshots capture everything, discs and disc
 controllers included, so a restored machine carries on cycle for cycle.

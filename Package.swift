@@ -32,7 +32,7 @@ let package = Package(
 
         // The standard ROM images and the co-processors' system discs
         // (Acorn and Digital Research copyright, not GPL).
-        .target(name: "BeebROMs", dependencies: ["BeebCore"], resources: [.copy("ROMs"), .copy("Discs")]),
+        .target(name: "BeebROMs", dependencies: ["BeebCore"], resources: [.copy("ROMs"), .copy("Discs"), .copy("Sounds")]),
 
         // Screenshots (and later, video recording).
         .target(name: "BeebCapture", dependencies: ["BeebCore"]),

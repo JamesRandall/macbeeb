@@ -88,6 +88,28 @@ public enum BeebROMs {
         }
     }
 
+    /// The disc drives' noises for `model`: 3.5" drives on the Compact,
+    /// 5.25" on the others. Nil if the samples can't be read.
+    public static func discDriveSounds(for model: BBCMicro.Model) -> DiscDriveSounds? {
+        let drive = model == .masterCompact ? "35" : "525"
+        let names: [DiscDriveSounds.Sound: String] = [
+            .spinStartLoaded: "spin_start_loaded", .spinStartEmpty: "spin_start_empty",
+            .spinLoaded: "spin_loaded", .spinEmpty: "spin_empty", .spinEnd: "spin_end",
+            .step: "step_1_1", .seek2ms: "seek_2ms", .seek6ms: "seek_6ms", .seek12ms: "seek_12ms", .seek20ms: "seek_20ms",
+        ]
+        var rate = 0.0
+        var samples: [[Float]] = []
+        for sound in DiscDriveSounds.Sound.allCases {
+            guard let url = bundle.url(forResource: "\(drive)_\(names[sound]!)", withExtension: "wav", subdirectory: "Sounds"),
+                  let data = try? Data(contentsOf: url),
+                  let wav = DiscDriveSounds.decodeWAV([UInt8](data)),
+                  rate == 0 || wav.rate == rate else { return nil }
+            rate = wav.rate
+            samples.append(wav.samples)
+        }
+        return DiscDriveSounds(rate: rate, samples: samples)
+    }
+
     public static func data(_ image: Image) -> [UInt8] {
         guard let url = bundle.url(forResource: image.rawValue, withExtension: "rom", subdirectory: "ROMs"),
               let data = try? Data(contentsOf: url) else {

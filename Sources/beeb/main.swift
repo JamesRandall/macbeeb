@@ -1,7 +1,7 @@
 // beeb: run a headless BBC Micro from the command line.
 //
 //   beeb [--load DISC.ssd:FILE] [--seconds N] [--type TEXT] [--screenshot FILE.png] [--text]
-//        [--record FILE.mp4|.mov [--codec h264|hevc|proRes]] [--disc FILE.ssd|.dsd [--boot]]
+//        [--record FILE.mp4|.mov [--codec h264|hevc|proRes] [--drive-sounds]] [--disc FILE.ssd|.dsd [--boot]]
 //        [--model-a | --master | --bplus | --compact] [--tube | --z80 | --512 | --arm | --turbo] [--tape FILE.uef|.csw]
 //
 // Boots a Model B (OS 1.2, BASIC 2) or with --master a Master 128 (with --z80 or --512 booting the
@@ -34,6 +34,7 @@ var model = BBCMicro.Model.modelB
 var tapePath: String?
 var secondProcessor = false
 var coprocessor = BBCMicro.Coprocessor.mos6502
+var driveSounds = false
 
 var arguments = CommandLine.arguments.dropFirst()
 while let argument = arguments.popFirst() {
@@ -89,6 +90,9 @@ while let argument = arguments.popFirst() {
         model = .master128
         secondProcessor = true
         coprocessor = .masterTurbo
+    case "--drive-sounds":
+        // In a recording: the disc drives' noises.
+        driveSounds = true
     case "--text":
         printText = true
     case "--pcs":
@@ -131,6 +135,9 @@ machine.tv = tv
 var recorder: MachineRecorder?
 if let recordPath {
     machine.attachAudio(sampleRate: 48_000, ring: SampleRing(capacity: 48_000))
+    if driveSounds {
+        machine.discDriveSounds = BeebROMs.discDriveSounds(for: model)
+    }
     do {
         recorder = try MachineRecorder(machine: machine, tv: tv, url: URL(fileURLWithPath: recordPath), codec: codec)
     } catch {

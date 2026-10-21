@@ -28,6 +28,8 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
         case pressBreak
         case setPaused(Bool)
         case setSpeedLimited(Bool)
+        /// Turns the disc drives' noises on or off.
+        case setDiscDriveSounds(Bool)
         /// Starts recording a movie.
         case startRecording(URL, VideoRecorder.Codec)
         /// Stops recording; `completion` gets any error (on the emulation
@@ -75,8 +77,16 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
 
     /// `makeMachine` builds the machine (on the emulation thread), for
     /// start-up and power cycles.
-    public init(sampleRate: Int = 48_000, makeMachine: @escaping @Sendable () -> BBCMicro) {
+    /// The disc drives' noises for a model, if they're to be heard (see
+    /// `setDiscDriveSounds`). Read on the emulation thread.
+    let discDriveSounds: (@Sendable (BBCMicro.Model) -> DiscDriveSounds?)?
+    fileprivate var discDriveSoundsOn: Bool
+
+    public init(sampleRate: Int = 48_000, discDriveSounds: (@Sendable (BBCMicro.Model) -> DiscDriveSounds?)? = nil,
+                discDriveSoundsOn: Bool = true, makeMachine: @escaping @Sendable () -> BBCMicro) {
         self.sampleRate = sampleRate
+        self.discDriveSounds = discDriveSounds
+        self.discDriveSoundsOn = discDriveSoundsOn
         self.makeMachine = makeMachine
         // 0.5s of audio.
         audioRing = SampleRing(capacity: sampleRate / 2)
@@ -194,6 +204,9 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
                 case .setSpeedLimited(let value):
                     speedLimited = value
                     resetWallClock()
+                case .setDiscDriveSounds(let on):
+                    discDriveSoundsOn = on
+                    session.applyDiscDriveSounds()
                 case .startRecording(let url, let codec):
                     do {
                         try session.startRecording(to: url, codec: codec)
@@ -329,7 +342,12 @@ final class HostSession: MachineSession {
             machine.enableRewind()
         }
         machine.attachAudio(sampleRate: host.sampleRate, ring: host.audioRing)
+        applyDiscDriveSounds()
         lastPublishedFrame = 0
+    }
+
+    func applyDiscDriveSounds() {
+        machine.discDriveSounds = host.discDriveSoundsOn ? host.discDriveSounds?(machine.model) : nil
     }
 
     func advance(cycles: Int) {
