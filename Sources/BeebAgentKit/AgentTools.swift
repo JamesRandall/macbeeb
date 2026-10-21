@@ -121,7 +121,7 @@ public final class AgentTools: Sendable {
                     return "drive \(drive): \"\(title)\""
                 }
                 return """
-                model: \(modelDescription(m.model))\(m.secondProcessor != nil ? " with a 6502 Second Processor" : m.z80Processor != nil ? " with a Z80 Second Processor (CP/M)" : m.master512 != nil ? " with a Master 512 (80186, DOS Plus)" : m.armProcessor != nil ? " with an ARM Evaluation System" : "")
+                model: \(modelDescription(m.model))\(m.secondProcessor != nil ? (m.configuration.coprocessor == .masterTurbo ? " with the Master Turbo's 65C102 Co-Processor (4MHz)" : " with a 6502 Second Processor") : m.z80Processor != nil ? " with a Z80 Second Processor (CP/M)" : m.master512 != nil ? " with a Master 512 (80186, DOS Plus)" : m.armProcessor != nil ? " with an ARM Evaluation System" : "")
                 emulated time: \(String(format: "%.3f", Double(m.cycles) / 2_000_000))s
                 PC=&\(hex(pc, 4)) A=&\(hex(cpu.a)) X=&\(hex(cpu.x)) Y=&\(hex(cpu.y)) S=&\(hex(cpu.s)) P=&\(hex(cpu.p))
                 screen mode: \(m.peek(0x355))
@@ -137,8 +137,8 @@ public final class AgentTools: Sendable {
             inputSchema: schema(["model": ["type": "string", "enum": ["model_a", "model_b", "b_plus", "master_128", "master_compact"],
                                            "description": "Machine to switch to (default: keep the current one)"] as JSONValue,
                                  "second_processor": prop("boolean", "Fit a second processor (default: keep as is)"),
-                                 "coprocessor": ["type": "string", "enum": ["mos6502", "z80", "master512", "arm"],
-                                                 "description": "Which second processor: mos6502 (default), z80 (CP/M; it starts with the bundled CP/M system disc in drive 0 and boots to A>), master512 (an 80186 for DOS Plus, on a master_128; it starts with the bundled DOS Plus boot disc in drive 0 and boots to A>, which takes about 40 emulated seconds) or arm (the ARM Evaluation System: 8MHz ARM1, 4MB, an A* supervisor prompt)"] as JSONValue,
+                                 "coprocessor": ["type": "string", "enum": ["mos6502", "z80", "master512", "arm", "masterTurbo"],
+                                                 "description": "Which second processor: mos6502 (default), z80 (CP/M; it starts with the bundled CP/M system disc in drive 0 and boots to A>), master512 (an 80186 for DOS Plus, on a master_128; it starts with the bundled DOS Plus boot disc in drive 0 and boots to A>, which takes about 40 emulated seconds) arm (the ARM Evaluation System: 8MHz ARM1, 4MB, an A* supervisor prompt) or masterTurbo (the Master Turbo, on a master_128: a 4MHz 65C102 on the internal Tube, otherwise like mos6502)"] as JSONValue,
                                  "disc_interface": ["type": "string", "enum": ["intel8271", "acorn1770", "watfordDDB2", "watfordDDB3", "opus"],
                                                     "description": "Model B only: the disc interface and its filing system (default: keep as is)"] as JSONValue])
         )) { context, args in
@@ -157,7 +157,7 @@ public final class AgentTools: Sendable {
             let interface = discInterface
             var requestedCoprocessor: BBCMicro.Coprocessor?
             if let name = args["coprocessor"]?.stringValue {
-                guard let named = BBCMicro.Coprocessor(rawValue: name) else { throw ToolFailure("coprocessor must be mos6502, z80, master512 or arm") }
+                guard let named = BBCMicro.Coprocessor(rawValue: name) else { throw ToolFailure("coprocessor must be mos6502, z80, master512, arm or masterTurbo") }
                 requestedCoprocessor = named
             }
             let coprocessor = requestedCoprocessor
@@ -172,7 +172,7 @@ public final class AgentTools: Sendable {
                     var newCoprocessor = coprocessor ?? current.configuration.coprocessor
                     if !newCoprocessor.fits(newModel) {
                         guard coprocessor == nil else {
-                            throw ToolFailure("the \(newCoprocessor.displayName) can't be fitted to the \(newModel.displayName)\(newCoprocessor == .master512 ? " (only to the master_128)" : "")")
+                            throw ToolFailure("the \(newCoprocessor.displayName) can't be fitted to the \(newModel.displayName)\(newCoprocessor == .master512 || newCoprocessor == .masterTurbo ? " (only to the master_128)" : "")")
                         }
                         newCoprocessor = .mos6502
                     }

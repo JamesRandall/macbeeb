@@ -50,6 +50,8 @@ extension BBCMicro {
         var tape: Tape.State?
         var tube: Tube
         var parasiteCredit: Int
+        /// The 6502 parasite's clock (nil in older snapshots: 3MHz).
+        var parasiteMHz: Int?
         var secondProcessor: SecondProcessorState?
         var z80: Z80SecondProcessor.State?
         var master512: Master512.State?
@@ -75,7 +77,7 @@ extension BBCMicro {
                  systemVIAIRQ: systemVIAIRQ, userVIAIRQ: userVIAIRQ,
                  keyColumns: keyColumns, keyScanColumn: keyScanColumn, notJoystickButtons: notJoystickButtons, resetting: resetting,
                  keyEvents: keyEvents, paste: paste, serial: serial,
-                 tape: tape?.state, tube: tube, parasiteCredit: parasiteCredit,
+                 tape: tape?.state, tube: tube, parasiteCredit: parasiteCredit, parasiteMHz: parasiteMHz,
                  secondProcessor: secondProcessor.map(SecondProcessorState.init), z80: z80Processor?.state,
                  master512: master512?.state,
                  arm: armProcessor?.state,
@@ -94,7 +96,7 @@ extension BBCMicro {
         guard s.model == model else { throw RestoreError.wrongModel(s.model) }
         guard (s.secondProcessor != nil) == (secondProcessor != nil), (s.z80 != nil) == (z80Processor != nil),
               (s.master512 != nil) == (master512 != nil),
-              (s.arm != nil) == (armProcessor != nil) else {
+              (s.arm != nil) == (armProcessor != nil), (s.parasiteMHz ?? 3) == parasiteMHz else {
             throw RestoreError.wrongSecondProcessor
         }
         cycles = s.cycles

@@ -2,7 +2,7 @@
 //
 //   beeb [--load DISC.ssd:FILE] [--seconds N] [--type TEXT] [--screenshot FILE.png] [--text]
 //        [--record FILE.mp4|.mov [--codec h264|hevc|proRes]] [--disc FILE.ssd|.dsd [--boot]]
-//        [--model-a | --master | --bplus | --compact] [--tube | --z80 | --512 | --arm] [--tape FILE.uef|.csw]
+//        [--model-a | --master | --bplus | --compact] [--tube | --z80 | --512 | --arm | --turbo] [--tape FILE.uef|.csw]
 //
 // Boots a Model B (OS 1.2, BASIC 2) or with --master a Master 128 (with --z80 or --512 booting the
 // bundled CP/M or DOS Plus disc, unless --disc gives another), types TEXT (with \n for Return), runs
@@ -84,6 +84,11 @@ while let argument = arguments.popFirst() {
     case "--arm":
         secondProcessor = true
         coprocessor = .arm
+    case "--turbo":
+        // The Master Turbo: a Master 128 with the 65C102 Co-Processor.
+        model = .master128
+        secondProcessor = true
+        coprocessor = .masterTurbo
     case "--text":
         printText = true
     case "--pcs":

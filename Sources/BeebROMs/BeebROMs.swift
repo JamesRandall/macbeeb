@@ -12,6 +12,7 @@ public enum BeebROMs {
         case z80121 = "z80-121"
         case master512BIOS = "master512-bios"
         case armEval100 = "armeval-100"
+        case masterTurboParasite = "master-turbo-parasite"
         case watfordDDFS153 = "watford-ddfs153"
         case watfordDDFS154T = "watford-ddfs154t"
         case opusDDOS345 = "opus-ddos345"
@@ -59,7 +60,7 @@ public enum BeebROMs {
             switch coprocessor {
             case .z80: .cpm
             case .master512: .dosPlus
-            case .mos6502, .arm: nil
+            case .mos6502, .arm, .masterTurbo: nil
             }
         }
 
@@ -112,7 +113,8 @@ extension BeebROMs {
     ///
     /// With `secondProcessor`, a 6502 Second Processor (Tube OS 1.10) is
     /// fitted (not on the Compact, which has no Tube), or the `coprocessor`
-    /// given: the Z80 (client ROM 1.21) or the ARM Evaluation System
+    /// given: the Z80 (client ROM 1.21), the Master Turbo's 65C102 (its
+    /// Tube OS 1.20; on the Master 128) or the ARM Evaluation System
     /// (supervisor ROM 1.00).
     ///
     /// The Z80 and the Master 512 start with their system disc in drive 0
@@ -142,6 +144,7 @@ extension BeebROMs {
             case .z80: .z80121
             case .master512: .master512BIOS
             case .arm: .armEval100
+            case .masterTurbo: .masterTurboParasite
             }
             configuration.secondProcessorROM = data(rom)
             if systemDisc, let disc = BundledDisc.system(for: coprocessor) {

@@ -1,5 +1,6 @@
 // The 6502 Second Processor: a 3MHz 65C02 with 64K of RAM, talking to the
-// host through the Tube.
+// host through the Tube. Also the Master Turbo's 65C102 Co-Processor, the
+// same at 4MHz on the Master's internal Tube (as b2 has it).
 //
 // Follows b2's parasite handling in BBCMicro_Update.inl (Copyright (C) Tom
 // Seddon, GPLv3). At power on and reset it's in boot mode, where reads of

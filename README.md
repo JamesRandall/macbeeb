@@ -255,6 +255,10 @@ machine, `*ADFS`, `*MOUNT 4` and `*AB` start ARM BBC BASIC V.
 Any of them except the Compact can have a 6502 Second Processor (Machine > Model, `--tube`):
 a 3MHz 65C02 with 64K on the Tube, booting Tube OS 1.10, following b2.
 
+Or the Master Turbo (`--turbo`): a Master 128 with the 65C102 Co-Processor,
+the same 65C02 and 64K at 4MHz on the Master's internal Tube (seen while
+ACCCON's ITU bit is set), booting its Tube OS 1.20, as b2 has it.
+
 Save states (`.beebstate`) and snapshots capture everything, discs and disc
 controllers included, so a restored machine carries on cycle for cycle.
 

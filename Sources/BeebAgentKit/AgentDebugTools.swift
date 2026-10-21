@@ -568,7 +568,7 @@ extension AgentTools {
             String(format: "%5.1f%%", r.totalCycles > 0 ? Double(n) * 100 / Double(r.totalCycles) : 0)
         }
         // A Z80 counts T-states.
-        let hz = r.cpu == .host ? 2_000_000.0 : m.debugCPUKind(r.cpu) == .z80 ? 6_000_000.0 : 3_000_000.0
+        let hz = r.cpu == .host ? 2_000_000.0 : m.debugCPUKind(r.cpu) == .z80 ? 6_000_000.0 : Double(m.parasiteMHz) * 1_000_000
         var lines = [String(format: "profiled %.2fs on the %@: %d cycles, %d frames (%.0f cycles a frame)",
                             Double(r.totalCycles) / hz, r.cpu.rawValue, r.totalCycles, r.frames, r.cyclesPerFrame),
                      "in interrupt handlers: \(percent(r.interruptCycles))", "routines:"]

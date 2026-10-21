@@ -58,6 +58,9 @@ public final class BBCMicro {
         /// The Acorn ARM Second Processor, or ARM Evaluation System (8MHz
         /// ARM1, 4MB).
         case arm
+        /// The Master Turbo's 65C102 Co-Processor: a 4MHz 65C02 with 64K,
+        /// inside the Master on its internal Tube.
+        case masterTurbo
 
         public var displayName: String {
             switch self {
@@ -65,15 +68,21 @@ public final class BBCMicro {
             case .z80: "Z80 Second Processor"
             case .master512: "Master 512 (80186)"
             case .arm: "ARM Evaluation System"
+            case .masterTurbo: "Master Turbo (65C102)"
             }
         }
 
         /// Whether it can be fitted to `model`: any of them to a machine
-        /// with a Tube, but the Master 512 (a board inside the Master) only
-        /// to the Master 128.
+        /// with a Tube, but the Master 512 and the Master Turbo's board
+        /// (both inside the Master) only to the Master 128.
         public func fits(_ model: Model) -> Bool {
-            model.hasTube && (self != .master512 || model == .master128)
+            model.hasTube && (self != .master512 && self != .masterTurbo || model == .master128)
         }
+
+        /// Whether it's on the Master's internal Tube, which the host sees
+        /// while ACCCON's ITU bit is set (the others are on the external
+        /// one, as b2 has it).
+        public var isInternal: Bool { self == .masterTurbo }
     }
 
     /// The Model B's disc interface.
@@ -150,9 +159,12 @@ public final class BBCMicro {
     /// The ARM Second Processor, if fitted instead.
     public private(set) var armProcessor: ARMSecondProcessor?
     public internal(set) var tube = Tube()
-    /// Parasite half-cycles owed: 3 more each host cycle, 2 per parasite
-    /// cycle, so host cycles alternate 1 and 2 parasite cycles (3MHz).
+    /// Parasite half-cycles owed: `parasiteMHz` more each host cycle, 2 per
+    /// parasite cycle, so host cycles alternate 1 and 2 parasite cycles at
+    /// 3MHz, or have 2 each at 4MHz.
     var parasiteCredit = 0
+    /// The 6502 parasite's clock: 3MHz, or the Master Turbo's 4MHz.
+    public let parasiteMHz: Int
 
     /// Rewind history, if enabled.
     public internal(set) var rewinder: Rewinder?
@@ -447,7 +459,10 @@ public final class BBCMicro {
         }
 
         let tubeROM = model.hasTube ? configuration.secondProcessorROM : nil
-        secondProcessor = configuration.coprocessor == .mos6502 ? tubeROM.map(SecondProcessor.init(rom:)) : nil
+        let mos6502 = configuration.coprocessor == .mos6502
+            || configuration.coprocessor == .masterTurbo && model == .master128
+        secondProcessor = mos6502 ? tubeROM.map(SecondProcessor.init(rom:)) : nil
+        parasiteMHz = configuration.coprocessor == .masterTurbo ? 4 : 3
 
         updatePaging()
         oldSystemVIAPB = systemVIA.b.p
@@ -728,11 +743,12 @@ public final class BBCMicro {
         }
     }
 
-    /// Whether the host sees the (external) Tube: always on the B and B+;
-    /// on the Master, while ACCCON's ITU bit selects the external Tube.
+    /// Whether the host sees the Tube: always on the B and B+; on the
+    /// Master, while ACCCON's ITU bit selects the Tube the co-processor's
+    /// on (internal for the Master Turbo, external for the rest).
     var tubeAccessible: Bool {
         (secondProcessor != nil || z80Processor != nil || master512 != nil || armProcessor != nil)
-            && (!model.isMaster || acccon & 0x10 == 0)
+            && (!model.isMaster || (acccon & 0x10 != 0) == configuration.coprocessor.isInternal)
     }
 
     // MARK: Master I/O
@@ -1124,10 +1140,10 @@ public final class BBCMicro {
             debugger.hostCycle()
         }
 
-        // Second processor, at 3MHz. A debugger stop can leave a cycle
-        // owed until the next host cycle.
+        // Second processor, at 3MHz (or 4MHz). A debugger stop can leave a
+        // cycle owed until the next host cycle.
         if let secondProcessor {
-            parasiteCredit += 3
+            parasiteCredit += parasiteMHz
             while parasiteCredit >= 2 && !(debugHooks && stopRequested) {
                 secondProcessor.step(tube: &tube)
                 parasiteCredit -= 2

@@ -17,4 +17,5 @@ included, as b2 and jsbeeb do, so the emulator works out of the box.
 | z80-121.rom | Z80 Second Processor client ROM 1.21 (J.G. Harston's fixes to Acorn's 1.20) | BeebEm |
 | master512-bios.rom | Master 512 80186 BIOS (16K) | BeebEm (BIOS.rom) |
 | armeval-100.rom | ARM Evaluation System supervisor ROM 1.00 | BeebEm (ARMeval_100.rom) |
+| master-turbo-parasite.rom | Master Turbo 65C102 Co-Processor Tube OS 1.20 | b2 (MasterTurboParasite.rom) |
 | mos320-*.rom | Master 128 MOS 3.20 set: MOS, Terminal (F), View (E), ADFS (D), BASIC 4 (C), Edit (B), ViewSheet (A), DFS 2.24 (9) | b2 |
