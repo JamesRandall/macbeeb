@@ -20,12 +20,21 @@ public struct DFSDisc: Sendable {
     public static let sectorSize = 256
     public static let sectorsPerTrack = 10
 
-    public var title: String
+    public var title: String {
+        didSet { countWrite() }
+    }
     /// *OPT 4 setting: 0 none, 1 *LOAD, 2 *RUN, 3 *EXEC !BOOT.
-    public var bootOption: Int
+    public var bootOption: Int {
+        didSet { countWrite() }
+    }
     public var files: [File]
-    /// The side's bytes, in logical sector order.
-    public let data: [UInt8]
+    /// The side's bytes, in logical sector order. (Changes to the title,
+    /// boot option and files reach the catalogue sectors in `image`.)
+    public internal(set) var data: [UInt8]
+    /// Sectors on the side, as the catalogue says.
+    public internal(set) var sectorCount: Int
+    /// The catalogue's write cycle (BCD), counted up by each change.
+    var writeCycle: UInt8
 
     public enum Error: Swift.Error {
         case tooSmall
@@ -44,6 +53,8 @@ public struct DFSDisc: Sendable {
         let entryBytes = Int(data[0x105])
         guard entryBytes % 8 == 0 && entryBytes <= 31 * 8 else { throw Error.badCatalogue }
         bootOption = Int(data[0x106] >> 4 & 3)
+        sectorCount = Int(data[0x106] & 3) << 8 | Int(data[0x107])
+        writeCycle = data[0x104]
 
         var files: [File] = []
         for entry in stride(from: 8, through: entryBytes, by: 8) {

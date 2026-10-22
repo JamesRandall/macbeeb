@@ -924,6 +924,19 @@ public final class BBCMicro {
         rewinder?.keyframe()
     }
 
+    /// Whether the disc in `drive` can be changed from outside the BBC, as
+    /// if swapped for another: its motor's been off for 3 seconds. ADFS
+    /// trusts the map and directory it remembers for about 4 seconds after
+    /// it last used the drive (which stops 2 seconds after), then checks
+    /// the disc ID and says "Disc changed" if it's different. Before then,
+    /// it would write its old map over the changes.
+    public func discIsIdle(drive: Int) -> Bool {
+        let d = drives[drive]
+        guard !d.spinning else { return false }
+        let now = intel8271?.time ?? wd1770?.time ?? 0
+        return now - d.speedTime >= 3_000_000
+    }
+
     /// After a power cycle, puts the discs `old` had back in the drives.
     /// Its startup disc stays only if this machine has the same one (so
     /// changing co-processor changes system disc); an empty drive keeps
