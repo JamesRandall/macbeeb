@@ -21,6 +21,9 @@ struct MacBeebApp: App {
                 Button("Check for Updates…") { Updates.shared.checkForUpdates() }
                     .disabled(!Updates.shared.isAvailable)
             }
+            CommandGroup(replacing: .help) {
+                WhatsNewMenuItem()
+            }
             CommandGroup(replacing: .newItem) {
                 Button("Open Disc…") { machine?.openDisc() }
                     .keyboardShortcut("o")
@@ -211,6 +214,11 @@ struct MacBeebApp: App {
         }
         .defaultSize(width: 900, height: 560)
 
+        Window("What's New", id: WhatsNewView.windowID) {
+            WhatsNewView()
+        }
+        .defaultSize(width: 520, height: 520)
+
         Settings {
             SettingsView()
         }
@@ -267,6 +275,11 @@ struct MachineWindow: View {
                 if machine.debuggerRequested {
                     machine.debuggerRequested = false
                     openWindow(id: "debugger", value: machine.id)
+                }
+            }
+            .onAppear {
+                if WhatsNew.shouldShowOnLaunch() {
+                    openWindow(id: WhatsNewView.windowID)
                 }
             }
             .sheet(isPresented: $machine.showingTimeline) {

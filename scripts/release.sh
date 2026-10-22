@@ -8,6 +8,10 @@
 #   MacBeeb-VERSION.dmg   for downloading
 #   MacBeeb-VERSION.zip   for Sparkle
 #   appcast.xml           the update feed, including earlier releases
+#   notes.md              this release's section of WHATSNEW.md
+#
+# WHATSNEW.md must have a "## VERSION" section: it becomes the GitHub
+# release's notes, Sparkle's update window, and Help > What's New.
 #
 # Needs, in .env.local (or the environment): APPLE_ID,
 # APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID and CSC_NAME (the Developer ID
@@ -37,6 +41,13 @@ case "$CSC_NAME" in
     *) IDENTITY="Developer ID Application: $CSC_NAME" ;;
 esac
 
+# This release's notes: its section of WHATSNEW.md, without the heading.
+NOTES=$(awk -v v="$VERSION" '
+    /^<!--/ { comment = 1 } comment { if (/-->/) comment = 0; next }
+    /^## / { on = ($2 == v); next }
+    on' WHATSNEW.md | sed -e '/./,$!d')
+[ -n "$NOTES" ] || { echo "release: WHATSNEW.md has no \"## $VERSION\" section" >&2; exit 1; }
+
 REPO=JamesRandall/macbeeb
 SPARKLE_BIN=.build/artifacts/sparkle/Sparkle/bin
 [ -x "$SPARKLE_BIN/generate_keys" ] || swift package resolve
@@ -58,6 +69,7 @@ APP=.build/app/MacBeeb.app
 OUT=.build/releases/$VERSION
 rm -rf "$OUT"
 mkdir -p "$OUT/sparkle"
+printf '%s\n' "$NOTES" > "$OUT/notes.md"
 
 notarise() {
     xcrun notarytool submit "$1" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" \
@@ -89,7 +101,9 @@ echo "Making the appcast..."
 # Start from the published feed so earlier releases stay listed.
 gh release download --repo "$REPO" --pattern appcast.xml --dir "$OUT/sparkle" 2>/dev/null || true
 cp "$ZIP" "$OUT/sparkle/"
-"$SPARKLE_BIN/generate_appcast" --account macbeeb \
+# Release notes beside the archive, with its name, are embedded in its item.
+cp "$OUT/notes.md" "$OUT/sparkle/MacBeeb-$VERSION.md"
+"$SPARKLE_BIN/generate_appcast" --account macbeeb --embed-release-notes \
     --download-url-prefix "https://github.com/$REPO/releases/download/v$VERSION/" \
     "$OUT/sparkle"
 cp "$OUT/sparkle/appcast.xml" "$OUT/appcast.xml"
@@ -101,7 +115,7 @@ echo "Built $OUT"
 if [ -n "$PUBLISH" ]; then
     git tag "v$VERSION"
     git push origin "v$VERSION"
-    gh release create "v$VERSION" --repo "$REPO" --title "MacBeeb $VERSION" --generate-notes \
+    gh release create "v$VERSION" --repo "$REPO" --title "MacBeeb $VERSION" --notes-file "$OUT/notes.md" \
         "$DMG" "$ZIP" "$OUT/appcast.xml"
     echo "Published https://github.com/$REPO/releases/tag/v$VERSION"
 fi

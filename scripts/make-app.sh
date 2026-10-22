@@ -37,6 +37,8 @@ make beebasm UNIVERSAL=$UNIVERSAL
 cp .build/beebasm/beebasm "$APP/Contents/MacOS/"
 cp ThirdParty/beebasm/COPYING.txt "$APP/Contents/Resources/BeebAsm-COPYING.txt"
 cp LICENSE "$APP/Contents/Resources/LICENSE.txt"
+# The release notes, for Help > What's New.
+cp WHATSNEW.md "$APP/Contents/Resources/WhatsNew.md"
 # ditto keeps the framework's symlinks.
 ditto "$BIN/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
 

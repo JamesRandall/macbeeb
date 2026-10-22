@@ -83,6 +83,14 @@ commit and creates the GitHub release with all three. The app checks
 `https://github.com/JamesRandall/macbeeb/releases/latest/download/appcast.xml`,
 so updates reach users only once the repo's releases are public.
 
+Before a release, add a `## 1.0` section to `WHATSNEW.md` (newest first: an
+optional line of introduction, then `- ` bullets with inline Markdown); the
+release script won't build without it. The section becomes the GitHub
+release's notes and is embedded in the appcast, so Sparkle's update window
+shows it. The app bundles the whole file: on the first launch after an
+update it opens What's New, with the releases since the version last run
+marked New, and Help > What's New in MacBeeb opens it any time.
+
 It reads `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` and
 `CSC_NAME` from `.env.local` (ignored by git). The Sparkle EdDSA key is in
 the login keychain under the account `macbeeb`; create it once with
