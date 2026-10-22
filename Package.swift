@@ -12,6 +12,7 @@ let package = Package(
         .executable(name: "beeb", targets: ["beeb"]),
         .executable(name: "MacBeeb", targets: ["MacBeeb"]),
         .executable(name: "macbeeb-mcp", targets: ["macbeeb-mcp"]),
+        .executable(name: "MacBeebQuickLook", targets: ["MacBeebQuickLook"]),
         .executable(name: "beeb-bench", targets: ["beeb-bench"]),
         .executable(name: "m6502-gen", targets: ["m6502-gen"]),
     ],
@@ -55,6 +56,16 @@ let package = Package(
                            .product(name: "Sparkle", package: "Sparkle")],
             // Sparkle.framework is embedded in Contents/Frameworks.
             linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
+        ),
+
+        // Quick Look previews of disc images: an app extension, so it's
+        // entered through NSExtensionMain. scripts/make-app.sh bundles it.
+        .executableTarget(
+            name: "MacBeebQuickLook",
+            dependencies: ["BeebCore"],
+            swiftSettings: [.unsafeFlags(["-application-extension"])],
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain",
+                                           "-Xlinker", "-application_extension"])]
         ),
 
         // 6502 state machine generator. Run `swift run m6502-gen` after

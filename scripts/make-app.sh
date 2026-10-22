@@ -14,6 +14,7 @@ if [ -n "$UNIVERSAL" ]; then
 fi
 swift build -c release $ARCHS --product MacBeeb
 swift build -c release $ARCHS --product macbeeb-mcp
+swift build -c release $ARCHS --product MacBeebQuickLook
 BIN=$(swift build -c release $ARCHS --show-bin-path)
 
 APP=.build/app/MacBeeb.app
@@ -39,18 +40,26 @@ cp ThirdParty/beebasm/COPYING.txt "$APP/Contents/Resources/BeebAsm-COPYING.txt"
 cp LICENSE "$APP/Contents/Resources/LICENSE.txt"
 # The release notes, for Help > What's New.
 cp WHATSNEW.md "$APP/Contents/Resources/WhatsNew.md"
+# The Quick Look preview of disc images, an app extension.
+APPEX="$APP/Contents/PlugIns/MacBeebQuickLook.appex"
+mkdir -p "$APPEX/Contents/MacOS"
+cp "$BIN/MacBeebQuickLook" "$APPEX/Contents/MacOS/"
+cp Resources/QuickLook/Info.plist "$APPEX/Contents/"
 # ditto keeps the framework's symlinks.
 ditto "$BIN/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
 
 if [ -n "$SPARKLE_PUBLIC_KEY" ]; then
     plutil -replace SUPublicEDKey -string "$SPARKLE_PUBLIC_KEY" "$APP/Contents/Info.plist"
 fi
-if [ -n "$VERSION" ]; then
-    plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"
-fi
-if [ -n "$BUILD_NUMBER" ]; then
-    plutil -replace CFBundleVersion -string "$BUILD_NUMBER" "$APP/Contents/Info.plist"
-fi
+# The extension's version is the app's.
+for PLIST in "$APP/Contents/Info.plist" "$APPEX/Contents/Info.plist"; do
+    if [ -n "$VERSION" ]; then
+        plutil -replace CFBundleShortVersionString -string "$VERSION" "$PLIST"
+    fi
+    if [ -n "$BUILD_NUMBER" ]; then
+        plutil -replace CFBundleVersion -string "$BUILD_NUMBER" "$PLIST"
+    fi
+done
 
 IDENTITY="${SIGN_IDENTITY:--}"
 if [ "$IDENTITY" = "-" ]; then
@@ -65,7 +74,8 @@ sign() {
 }
 
 # Sparkle's helpers first (as Sparkle's documentation describes), then the
-# framework, the MCP server and the app.
+# framework, the MCP server, the Quick Look extension (sandboxed, as
+# extensions must be) and the app.
 SPARKLE="$APP/Contents/Frameworks/Sparkle.framework/Versions/B"
 sign "$SPARKLE/XPCServices/Installer.xpc"
 sign --preserve-metadata=entitlements "$SPARKLE/XPCServices/Downloader.xpc"
@@ -74,6 +84,7 @@ sign "$SPARKLE/Updater.app"
 sign "$APP/Contents/Frameworks/Sparkle.framework"
 sign "$APP/Contents/MacOS/macbeeb-mcp"
 sign "$APP/Contents/MacOS/beebasm"
+sign --entitlements Resources/QuickLook/QuickLook.entitlements "$APPEX"
 sign "$APP"
 codesign --verify --deep --strict "$APP"
 echo "Built $APP"

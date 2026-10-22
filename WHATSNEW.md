@@ -15,6 +15,7 @@ won't build a release without one.
 - **New Disc:** File ▸ New Disc… (⌘N) makes a blank disc, formatted and ready to save to: DFS on 40 or 80 tracks, single or double sided, or ADFS S, M or L. Give it a title and choose a drive to put it in.
 - **Disc contents:** File ▸ Show Disc Contents (⇧⌘I) lists the files on a disc, DFS or ADFS. Drag files out to Finder, each with a .inf file holding its BBC name and addresses, or drag Mac files in. Rename, relock, readdress and delete files, make ADFS directories, and set the title and boot option, all with undo. On ADFS, type `*MOUNT` afterwards, as you would after swapping a real disc.
 - **BASIC as text:** drop a `.bas` text file on a disc and it becomes a BASIC program, tokenised just as BBC BASIC would. Export as Text… turns a program back into a listing.
+- **Quick Look:** select a disc image in Finder and press space to see what's on it: the title, boot option and files on each side or in each directory.
 
 ## 1.3.1 — 22 October 2026
 

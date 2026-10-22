@@ -333,6 +333,13 @@ change made, and back to its file: ADFS remembers the disc it last used for
 about 4 seconds, and after that sees a new disc ID and says "Disc changed"
 until *MOUNT, as with a real disc swapped.
 
+In Finder, Quick Look (space) shows a disc image's catalogue: its title,
+boot option and files, both sides of a double-sided DFS disc and every ADFS
+directory. It's an app extension in MacBeeb.app (Sources/MacBeebQuickLook,
+bundled by `scripts/make-app.sh`), which macOS picks up once the app has
+been opened; it covers BeebEm's type for these files too, which BeebEm
+claims where it's installed.
+
 The drives sound as they work: the motor spinning up, running and down,
 the head stepping and seeking, from MAME's recordings of 5.25" drives (3.5"
 on the Compact), mixed in at the sound chip's rate as b2 does. Machine >
