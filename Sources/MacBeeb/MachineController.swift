@@ -27,6 +27,11 @@ final class MachineController {
     var displayStyle = DisplayStyle.saved {
         didSet { UserDefaults.standard.set(displayStyle.rawValue, forKey: DisplayStyle.defaultsKey) }
     }
+    /// The monitor it's drawn on: colour, or green or amber monochrome.
+    /// Shared by all windows.
+    var monitor = Monitor.saved {
+        didSet { UserDefaults.standard.set(monitor.rawValue, forKey: Monitor.defaultsKey) }
+    }
     /// The window's renderer, for capturing the display as shown.
     @ObservationIgnored weak var renderer: Renderer?
 

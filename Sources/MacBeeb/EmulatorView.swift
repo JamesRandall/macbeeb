@@ -280,6 +280,7 @@ final class EmulatorNSView: MTKView {
 struct EmulatorView: NSViewRepresentable {
     let host: EmulatorHost
     let style: DisplayStyle
+    let monitor: Monitor
     /// Called with the renderer once it exists.
     var onRenderer: (Renderer) -> Void = { _ in }
     var onHover: ((Int, Int)?) -> Void = { _ in }
@@ -304,6 +305,7 @@ struct EmulatorView: NSViewRepresentable {
         view.delegate = view.renderer
         if let renderer = view.renderer {
             renderer.style = style
+            renderer.monitor = monitor
             onRenderer(renderer)
         }
         return view
@@ -311,5 +313,6 @@ struct EmulatorView: NSViewRepresentable {
 
     func updateNSView(_ view: EmulatorNSView, context: Context) {
         view.renderer?.style = style
+        view.renderer?.monitor = monitor
     }
 }

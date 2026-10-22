@@ -9,6 +9,10 @@ release's section for the GitHub release and Sparkle's update window, and
 won't build a release without one.
 -->
 
+## 1.4
+
+- **Green and amber screens:** View ▸ Monitor puts the picture on a monochrome monitor with a green (P1) or amber (P3) phosphor, with any display style. Like the real thing, there's no colour grille, colours become shades by their brightness, and the phosphor glows on briefly.
+
 ## 1.3.1 — 22 October 2026
 
 - **What's New:** this window opens after an update, and Help ▸ What's New in MacBeeb opens it any time.

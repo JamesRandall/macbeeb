@@ -101,6 +101,15 @@ struct MacBeebApp: App {
                     }
                 }
                 .disabled(machine == nil)
+                Picker("Monitor", selection: Binding(
+                    get: { machine?.monitor ?? Monitor.saved },
+                    set: { machine?.monitor = $0 }
+                )) {
+                    ForEach(Monitor.allCases) { monitor in
+                        Text(monitor.name).tag(monitor)
+                    }
+                }
+                .disabled(machine == nil)
                 Menu("Zoom") {
                     ForEach(MachineController.zoomLevels, id: \.self) { level in
                         Toggle("\(Int(level * 100))%", isOn: Binding(get: { machine?.zoom == level },
@@ -245,7 +254,7 @@ struct MachineWindow: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        EmulatorView(host: machine.host, style: machine.displayStyle, onRenderer: { machine.renderer = $0 },
+        EmulatorView(host: machine.host, style: machine.displayStyle, monitor: machine.monitor, onRenderer: { machine.renderer = $0 },
                      onHover: { machine.hoveredPixel = $0.map { (x: $0.0, y: $0.1) } },
                      onZoom: { machine.pictureZoomed($0) }, keyboardDisc: { machine.bootDiscPath },
                      onBecomeKey: { Joysticks.shared.machine = machine })

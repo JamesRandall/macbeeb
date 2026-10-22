@@ -155,10 +155,16 @@ struct MachineToolbar: CustomizableToolbarContent {
                     }
                 }
                 .pickerStyle(.inline)
+                Picker("Monitor", selection: Binding(get: { machine.monitor }, set: { machine.monitor = $0 })) {
+                    ForEach(Monitor.allCases) { monitor in
+                        Text(monitor.name).tag(monitor)
+                    }
+                }
+                .pickerStyle(.inline)
             } label: {
                 Label("Display", systemImage: "tv")
             }
-            .help("Display style")
+            .help("Display style and monitor")
         }
 
         ToolbarItem(id: "keyboard", showsByDefault: false) {

@@ -29,6 +29,32 @@ enum DisplayStyle: String, CaseIterable, Identifiable {
     }
 }
 
+/// The monitor the BBC is plugged into, separately from how its picture is
+/// drawn: a colour one, or a monochrome one with a green or amber phosphor.
+enum Monitor: String, CaseIterable, Identifiable {
+    case colour
+    /// P1 phosphor.
+    case green
+    /// P3 phosphor.
+    case amber
+
+    var id: Self { self }
+
+    var name: String {
+        switch self {
+        case .colour: "Colour"
+        case .green: "Green Screen"
+        case .amber: "Amber Screen"
+        }
+    }
+
+    static let defaultsKey = "MacBeebMonitor"
+
+    static var saved: Monitor {
+        UserDefaults.standard.string(forKey: defaultsKey).flatMap(Monitor.init(rawValue:)) ?? .colour
+    }
+}
+
 /// Draws the emulator's frames with Metal.
 @MainActor
 final class Renderer: NSObject, MTKViewDelegate {
@@ -39,14 +65,19 @@ final class Renderer: NSObject, MTKViewDelegate {
     let device: MTLDevice
     let queue: MTLCommandQueue
     let pipeline: MTLRenderPipelineState
-    let texture: MTLTexture
+    /// The latest frame and the one before it, for a monochrome
+    /// phosphor's afterglow.
+    private var texture: MTLTexture
+    private var previousTexture: MTLTexture
     let host: EmulatorHost
     var shownFrame = -1
     var style = DisplayStyle.saved
+    var monitor = Monitor.saved
 
     /// Matches `Uniforms` in the shader.
     struct Uniforms {
         var style: UInt32
+        var monitor: UInt32
         var viewportHeight: Float
     }
 
@@ -74,8 +105,10 @@ final class Renderer: NSObject, MTKViewDelegate {
             height: EmulatorHost.Frame.height,
             mipmapped: false)
         textureDescriptor.usage = .shaderRead
-        guard let texture = device.makeTexture(descriptor: textureDescriptor) else { return nil }
+        guard let texture = device.makeTexture(descriptor: textureDescriptor),
+              let previousTexture = device.makeTexture(descriptor: textureDescriptor) else { return nil }
         self.texture = texture
+        self.previousTexture = previousTexture
         super.init()
     }
 
@@ -92,7 +125,20 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     private func uploadLatestFrame() {
         guard let frame = host.frame, frame.number != shownFrame else { return }
+        // A frame that follows on keeps the last one for the afterglow;
+        // after a jump (a pause, a rewind) there's nothing to glow.
+        let followsOn = frame.number == shownFrame + 1
         shownFrame = frame.number
+        swap(&texture, &previousTexture)
+        defer {
+            if !followsOn {
+                let blit = queue.makeCommandBuffer()
+                let encoder = blit?.makeBlitCommandEncoder()
+                encoder?.copy(from: texture, to: previousTexture)
+                encoder?.endEncoding()
+                blit?.commit()
+            }
+        }
         frame.pixels.withUnsafeBytes { bytes in
             texture.replace(region: MTLRegionMake2D(0, 0, EmulatorHost.Frame.width, EmulatorHost.Frame.height),
                             mipmapLevel: 0,
@@ -115,12 +161,18 @@ final class Renderer: NSObject, MTKViewDelegate {
                                         width: width, height: height, znear: 0, zfar: 1))
         encoder.setRenderPipelineState(pipeline)
         encoder.setFragmentTexture(texture, index: 0)
+        encoder.setFragmentTexture(previousTexture, index: 1)
         let styleIndex: UInt32 = switch style {
         case .sharp: 0
         case .smooth: 1
         case .crt: 2
         }
-        var uniforms = Uniforms(style: styleIndex, viewportHeight: Float(height))
+        let monitorIndex: UInt32 = switch monitor {
+        case .colour: 0
+        case .green: 1
+        case .amber: 2
+        }
+        var uniforms = Uniforms(style: styleIndex, monitor: monitorIndex, viewportHeight: Float(height))
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 0)
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         encoder.endEncoding()
@@ -165,6 +217,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     struct Uniforms {
         uint style;
+        uint monitor;
         float viewportHeight;
     };
 
@@ -177,6 +230,23 @@ final class Renderer: NSObject, MTKViewDelegate {
     }
 
     constant float beamLines = 288;
+
+    // The phosphor's colour at full brightness, in linear light.
+    float3 phosphorColour(uint monitor) {
+        return monitor == 1 ? float3(0.03, 1.0, 0.06)   // P1 green, about #33FF44
+                            : float3(1.0, 0.42, 0.01);  // P3 amber, about #FFB00F
+    }
+
+    // What a monochrome monitor makes of a linear colour: the composite
+    // signal's luma (weighted as gamma-encoded RGB, so blue is dim), in the
+    // phosphor's colour. A colour monitor passes it through.
+    float3 phosphor(float3 colour, uint monitor) {
+        if (monitor == 0) {
+            return colour;
+        }
+        float luma = dot(pow(colour, 1 / 2.4), float3(0.299, 0.587, 0.114));
+        return phosphorColour(monitor) * pow(luma, 2.4);
+    }
 
     // One beam line's colour at x, in linear light, slightly blurred
     // horizontally like a real spot.
@@ -196,16 +266,33 @@ final class Renderer: NSObject, MTKViewDelegate {
         return colour * exp(-0.5 * distance * distance / (width * width));
     }
 
+    // A monochrome phosphor still glows faintly from the last frame,
+    // softly, as the glow spreads.
+    float3 afterglow(float3 colour, texture2d<float> previous, float2 uv, uint monitor) {
+        if (monitor == 0) {
+            return colour;
+        }
+        constexpr sampler s(filter::linear, address::clamp_to_edge);
+        float dx = 1.0 / previous.get_width(), dy = 1.0 / previous.get_height();
+        float3 last = (previous.sample(s, uv).rgb * 2
+                     + previous.sample(s, uv + float2(dx, 0)).rgb + previous.sample(s, uv - float2(dx, 0)).rgb
+                     + previous.sample(s, uv + float2(0, dy)).rgb + previous.sample(s, uv - float2(0, dy)).rgb) / 6;
+        return max(colour, phosphor(pow(last, 2.4), monitor) * 0.3);
+    }
+
     fragment float4 fragmentMain(VertexOut in [[stage_in]],
                                  texture2d<float> frame [[texture(0)]],
+                                 texture2d<float> previous [[texture(1)]],
                                  constant Uniforms &u [[buffer(0)]]) {
         constexpr sampler nearestSampler(filter::nearest);
         constexpr sampler linearSampler(filter::linear);
-        if (u.style == 0) {
-            return float4(frame.sample(nearestSampler, in.uv).rgb, 1);
-        }
-        if (u.style == 1) {
-            return float4(frame.sample(linearSampler, in.uv).rgb, 1);
+        if (u.style == 0 || u.style == 1) {
+            float3 c = u.style == 0 ? frame.sample(nearestSampler, in.uv).rgb : frame.sample(linearSampler, in.uv).rgb;
+            if (u.monitor == 0) {
+                return float4(c, 1);
+            }
+            float3 lit = afterglow(phosphor(pow(c, 2.4), u.monitor), previous, in.uv, u.monitor);
+            return float4(pow(saturate(lit), 1 / 2.4), 1);
         }
 
         // CRT. Below about 2 output pixels per line, scanlines alias:
@@ -217,16 +304,19 @@ final class Renderer: NSObject, MTKViewDelegate {
         float line = floor(y);
         float offset = y - line - 0.5;
         float neighbour = offset < 0 ? line - 1 : line + 1;
-        float3 here = lineColour(frame, in.uv.x, line);
-        float3 next = lineColour(frame, in.uv.x, neighbour);
+        float3 here = phosphor(lineColour(frame, in.uv.x, line), u.monitor);
+        float3 next = phosphor(lineColour(frame, in.uv.x, neighbour), u.monitor);
         float3 scanned = beam(here, offset) + beam(next, 1 - abs(offset));
         // Keep average brightness about the same as the flat picture.
         scanned *= 1.15;
         float3 flat = mix(here, next, abs(offset) * 0.5);
         float3 colour = mix(flat, scanned, scanlineStrength);
 
-        // Aperture grille, when there's room for it.
-        if (pixelsPerLine >= 3) {
+        colour = afterglow(colour, previous, in.uv, u.monitor);
+
+        // Aperture grille, when there's room for it. A monochrome tube
+        // hasn't one.
+        if (pixelsPerLine >= 3 && u.monitor == 0) {
             uint stripe = uint(in.position.x) % 3;
             float3 mask = float3(stripe == 0 ? 1.0 : 0.9, stripe == 1 ? 1.0 : 0.9, stripe == 2 ? 1.0 : 0.9);
             colour *= mask * 1.06;
