@@ -322,7 +322,10 @@ File > Show Disc Contents (⇧⌘I) lists the files on the discs in the
 drives, DFS (both sides of a double-sided disc, as the BBC's drives 2 and 3)
 or ADFS (with its directories). Files drag out to Finder, each with a .inf
 file holding its BBC name, addresses and lock, and Mac files and folders drag
-in (named and addressed by their .inf files if they have them). Files can be
+in (named and addressed by their .inf files if they have them; without one,
+a .bas file of text is tokenised as BBC BASIC 2 would, and a .txt file's
+lines end in CRs for *TYPE and *EXEC). A BASIC program can be exported as
+text (Export as Text…, in the file's menu). Files can be
 renamed, readdressed, locked and deleted, ADFS directories made, and the
 title and boot option set, with undo. A change waits until the drive's been
 idle a few seconds, then goes in as if the disc were swapped for one with the

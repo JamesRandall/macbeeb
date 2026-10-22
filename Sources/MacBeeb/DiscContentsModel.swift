@@ -2,6 +2,7 @@ import AppKit
 import BeebCore
 import BeebHost
 import Observation
+import UniformTypeIdentifiers
 
 /// What's on the discs in a machine's drives, for the disc contents
 /// window, and the changes made there. A change waits for the drive to be
@@ -279,7 +280,13 @@ final class DiscContentsModel {
     /// .inf files beside them where there are any.
     func add(_ urls: [URL], undoManager: UndoManager?) {
         let isADFS = volume?.isADFS ?? false
-        let incoming = urls.compactMap { Incoming(url: $0, adfs: isADFS) }
+        let incoming: [MacFile]
+        do {
+            incoming = try urls.compactMap { try MacFile.read($0, adfs: isADFS) }
+        } catch {
+            alert = error.localizedDescription
+            return
+        }
         guard !incoming.isEmpty else {
             if urls.contains(where: \.hasDirectoryPath) && !isADFS {
                 alert = "DFS discs can’t hold folders."
@@ -296,6 +303,28 @@ final class DiscContentsModel {
     }
 
     // MARK: Taking files out
+
+    /// Whether an item is a tokenised BASIC program.
+    func isBASIC(_ item: DiscVolume.Item) -> Bool {
+        guard !item.isDirectory, let volume else { return false }
+        return BBCBasic.isProgram(volume.contents(of: item, at: location))
+    }
+
+    /// Saves a BASIC program as text, where the user says.
+    func exportAsText(_ item: DiscVolume.Item) {
+        guard let volume else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = InfFile.macName(item.name) + ".bas"
+        panel.allowedContentTypes = [UTType(filenameExtension: "bas", conformingTo: .plainText) ?? .plainText]
+        panel.message = "The program listed as text, a line per line, as LIST shows it."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let text = BBCBasic.list(volume.contents(of: item, at: location))
+        do {
+            try Data(text.unicodeScalars.map { UInt8(truncatingIfNeeded: $0.value) }).write(to: url)
+        } catch {
+            NSAlert(error: error).runModal()
+        }
+    }
 
     /// Writes items into `folder`, each file with a .inf beside it, and
     /// ADFS directories as folders. Returns the files written.
@@ -328,80 +357,6 @@ final class DiscContentsModel {
             let inf = InfFile(name: item.fullName, loadAddress: item.loadAddress,
                               executionAddress: item.executionAddress, length: item.length, locked: item.locked)
             try Data(inf.text.utf8).write(to: url.appendingPathExtension("inf"))
-        }
-    }
-}
-
-/// A Mac file or folder on its way onto a disc.
-struct Incoming: Sendable {
-    var name: String
-    var loadAddress: UInt32 = 0
-    var executionAddress: UInt32 = 0
-    var locked = false
-    /// nil for a folder.
-    var contents: [UInt8]?
-    var children: [Incoming] = []
-
-    /// Reads `url`, and its .inf if it has one (NAME.inf or, for NAME.ext,
-    /// NAME.inf). Nil for .inf files themselves, and for folders on DFS.
-    init?(url: URL, adfs: Bool) {
-        guard url.pathExtension.lowercased() != "inf" else { return nil }
-        let macName = url.lastPathComponent
-        if url.hasDirectoryPath || (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
-            guard adfs else { return nil }
-            name = Self.bbcName(macName, adfs: true)
-            let contents = (try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil,
-                                                                         options: .skipsHiddenFiles)) ?? []
-            children = contents.sorted { $0.lastPathComponent < $1.lastPathComponent }
-                .compactMap { Incoming(url: $0, adfs: true) }
-            return
-        }
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        contents = [UInt8](data)
-        let infURLs = [url.appendingPathExtension("inf"), url.deletingPathExtension().appendingPathExtension("inf")]
-        if let infURL = infURLs.first(where: { FileManager.default.fileExists(atPath: $0.path) }),
-           let text = try? String(contentsOf: infURL, encoding: .isoLatin1), let inf = InfFile(text: text) {
-            name = adfs ? String(inf.name.split(separator: ".").last ?? Substring(inf.name)) : inf.name
-            loadAddress = inf.loadAddress
-            executionAddress = inf.executionAddress
-            locked = inf.locked
-        } else {
-            name = Self.bbcName(macName, adfs: adfs)
-        }
-    }
-
-    /// A Mac file name as a BBC one: "/" back from ":", a DFS directory
-    /// kept ("W.DATA"), any other extension dropped, cut to fit.
-    static func bbcName(_ macName: String, adfs: Bool) -> String {
-        var name = InfFile.bbcName(macName)
-        let parts = name.split(separator: ".", omittingEmptySubsequences: false)
-        if !adfs, parts.count == 2, parts[0].count == 1 {
-            return String(parts[0]) + "." + String(parts[1].prefix(DFSDisc.maxNameLength))
-        }
-        if parts.count > 1 {
-            name = parts.dropLast().joined(separator: ".")
-        }
-        name = name.replacingOccurrences(of: " ", with: "_").replacingOccurrences(of: ".", with: "_")
-        return String(name.prefix(adfs ? ADFSDisc.maxNameLength : DFSDisc.maxNameLength))
-    }
-
-    func add(to volume: inout DiscVolume, at location: DiscVolume.Location) throws {
-        if let contents {
-            try volume.save(at: location, name: name, loadAddress: loadAddress, executionAddress: executionAddress,
-                            contents: contents, locked: locked)
-            return
-        }
-        // A folder: an ADFS directory (or the one there already).
-        let existing = try volume.items(at: location).first { $0.id == name.uppercased() }
-        if existing == nil {
-            try volume.createDirectory(at: location, name: name)
-        }
-        guard let directory = try volume.items(at: location).first(where: { $0.id == name.uppercased() }),
-              directory.isDirectory else { throw DiscEditError.fileExists(name) }
-        var inner = location
-        inner.directory = directory.startSector
-        for child in children {
-            try child.add(to: &volume, at: inner)
         }
     }
 }

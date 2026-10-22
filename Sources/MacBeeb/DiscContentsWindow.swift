@@ -166,7 +166,7 @@ struct DiscContentsWindow: View {
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = model.volume?.isADFS ?? false
         panel.prompt = "Add"
-        panel.message = "Files with .inf files beside them keep their BBC names and addresses."
+        panel.message = "Files with .inf files beside them keep their BBC names and addresses; .bas text becomes a BASIC program."
         guard panel.runModal() == .OK else { return }
         model.add(panel.urls, undoManager: undoManager)
     }
@@ -374,6 +374,10 @@ struct DiscFileTable: NSViewRepresentable {
                 }
             }
             menu.addItem(withTitle: "Export…", action: #selector(exportSelected), keyEquivalent: "").target = self
+            if items.count == 1, model.isBASIC(items[0]) {
+                menu.addItem(withTitle: "Export as Text…", action: #selector(exportSelectedAsText),
+                             keyEquivalent: "").target = self
+            }
             menu.addItem(.separator())
             menu.addItem(withTitle: "Delete", action: #selector(deleteSelected), keyEquivalent: "").target = self
         }
@@ -401,6 +405,12 @@ struct DiscFileTable: NSViewRepresentable {
                 try model.export(model.selectedItems, to: folder)
             } catch {
                 NSAlert(error: error).runModal()
+            }
+        }
+
+        @objc private func exportSelectedAsText() {
+            if let item = model.selectedItems.first {
+                model.exportAsText(item)
             }
         }
 
