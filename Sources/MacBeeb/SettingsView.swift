@@ -12,6 +12,8 @@ struct SettingsView: View {
                 .tabItem { Label("Gamepad", systemImage: "gamecontroller") }
             DebuggingSettingsView()
                 .tabItem { Label("Debugging", systemImage: "ladybug") }
+            ClassicsSettingsView()
+                .tabItem { Label("Games", systemImage: "books.vertical") }
         }
         .frame(width: 520, height: 460)
     }
@@ -268,5 +270,75 @@ struct DebuggingSettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+}
+
+/// The BBC Micro Classics bookshelf: whether, and where, to look for
+/// downloaded games.
+struct ClassicsSettingsView: View {
+    @State private var classics = ClassicsLibrary.shared
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("When MacBeeb opens", selection: $classics.startsWithBookshelf) {
+                    Text("Show a BBC Micro").tag(false)
+                    Text("Show only the Game Library").tag(true)
+                }
+                .pickerStyle(.radioGroup)
+                Text("Opening with only the game library suits playing games: choose one and its BBC Micro opens, set up to play it. Takes effect the next time MacBeeb opens.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Toggle("Add downloaded Classics automatically", isOn: Binding(
+                    get: { classics.autoDetect == true },
+                    set: { classics.autoDetect = $0 }
+                ))
+                Text("When you get a game from BBCMicro.co.uk, MacBeeb looks for the disc image in this folder and adds it to the bookshelf once the download finishes. It only reads the folder, only while MacBeeb is open, and never changes your downloads.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                LabeledContent("Folder") {
+                    HStack {
+                        Text(classics.downloadFolder.path(percentEncoded: false)
+                            .replacingOccurrences(of: URL.homeDirectory.path(percentEncoded: false), with: "~/"))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Button("Choose…") { chooseFolder() }
+                    }
+                }
+                if classics.downloadFolder != ClassicsLibrary.defaultDownloadFolder {
+                    Button("Use Downloads") { classics.downloadFolder = ClassicsLibrary.defaultDownloadFolder }
+                }
+                switch classics.watchState {
+                case .off:
+                    EmptyView()
+                case .watching:
+                    Label("Looking for downloaded games", systemImage: "checkmark.circle")
+                        .foregroundStyle(.secondary)
+                case .noAccess(let reason):
+                    Label("MacBeeb can’t read this folder: \(reason) Allow it in System Settings ▸ Privacy & Security ▸ Files & Folders, or choose another folder.",
+                          systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                }
+            } footer: {
+                Text("You can always add games with Import Disc… on the bookshelf, or by dragging disc images onto it.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    /// For browsers that save somewhere other than Downloads.
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.directoryURL = classics.downloadFolder
+        panel.message = "Choose the folder your browser saves downloads to."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        classics.downloadFolder = url
     }
 }

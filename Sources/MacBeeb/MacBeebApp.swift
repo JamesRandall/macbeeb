@@ -1,5 +1,6 @@
 import AppKit
 import BeebCore
+import BeebLibrary
 import BeebROMs
 import SwiftUI
 
@@ -9,9 +10,13 @@ struct MacBeebApp: App {
     @FocusedValue(MachineController.self) private var machine
 
     var body: some Scene {
-        WindowGroup("BBC Micro") {
+        WindowGroup("BBC Micro", id: MachineWindow.windowID) {
             MachineWindow()
         }
+        // With Settings > Games > When MacBeeb opens set to the game
+        // library, it opens alone.
+        .defaultLaunchBehavior(ClassicsLibrary.launchesWithBookshelf ? .suppressed : .automatic)
+        .restorationBehavior(ClassicsLibrary.launchesWithBookshelf ? .disabled : .automatic)
         .defaultSize(width: 960, height: 768)
         .commands {
             CommandGroup(replacing: .appInfo) {
@@ -25,6 +30,9 @@ struct MacBeebApp: App {
                 WhatsNewMenuItem()
             }
             CommandGroup(replacing: .newItem) {
+                BookshelfMenuItem()
+                NewMachineMenuItem()
+                Divider()
                 Button("New Disc…") { machine?.newDisc() }
                     .keyboardShortcut("n")
                     .disabled(!(machine?.model.hasDiscInterface ?? false))
@@ -73,8 +81,9 @@ struct MacBeebApp: App {
                     .disabled(machine?.tapeName == nil)
                 Button("Eject Tape") { machine?.ejectTape() }
                     .disabled(machine?.tapeName == nil)
-            }
-            CommandGroup(replacing: .saveItem) {
+                // Here rather than replacing .saveItem, which SwiftUI on macOS 27
+                // leaves out of the menu altogether.
+                Divider()
                 Button("Save Screenshot…") { machine?.saveScreenshot() }
                     .keyboardShortcut("s")
                     .disabled(machine == nil)
@@ -85,6 +94,31 @@ struct MacBeebApp: App {
                 Button("Load State…") { machine?.loadState() }
                     .keyboardShortcut("l", modifiers: [.command, .shift])
                     .disabled(machine == nil)
+                Divider()
+                // Not F5/F6 alone (the BBC's keys) or ⌘F5 (VoiceOver).
+                Button("Quick Save") { machine?.quickSave() }
+                    .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF6FunctionKey)!)), modifiers: [.command, .shift])
+                    .disabled(machine?.snapshotOwner == nil || machine?.snapshotBusy == true)
+                    .help("Saves the game in drive 0 exactly as it is; the last five are kept. Put a disc in to use it.")
+                Button("Quick Load") { machine?.quickLoad() }
+                    .keyboardShortcut(KeyEquivalent(Character(UnicodeScalar(NSF5FunctionKey)!)), modifiers: [.command, .shift])
+                    .disabled(machine?.snapshotHistory.isEmpty ?? true || machine?.snapshotBusy == true)
+                    .help("Goes back to the newest quick save of the disc in drive 0")
+                Menu("Snapshots") {
+                    if let machine, let owner = machine.snapshotOwner {
+                        if machine.snapshotHistory.isEmpty {
+                            Text("No snapshots of “\(owner.name)” yet")
+                        }
+                        ForEach(Array(machine.snapshotHistory.enumerated()), id: \.element.id) { index, snapshot in
+                            Button("\(index + 1). \(snapshot.created.formatted(date: .abbreviated, time: .standard))") {
+                                machine.quickLoad(snapshot)
+                            }
+                        }
+                    } else {
+                        Text("Put a disc in to take snapshots")
+                    }
+                }
+                .disabled(machine == nil)
                 Divider()
                 Button(machine?.recordingURL == nil ? "Start Recording…" : "Stop Recording") { machine?.toggleRecording() }
                     .keyboardShortcut("r", modifiers: [.command, .option])
@@ -237,6 +271,12 @@ struct MacBeebApp: App {
         }
         .defaultSize(width: 900, height: 560)
 
+        Window(BookshelfView.title, id: BookshelfView.windowID) {
+            BookshelfView()
+        }
+        .defaultSize(width: 1040, height: 780)
+        .defaultLaunchBehavior(ClassicsLibrary.launchesWithBookshelf ? .presented : .automatic)
+
         Window("What's New", id: WhatsNewView.windowID) {
             WhatsNewView()
         }
@@ -263,7 +303,29 @@ struct DiscKeysButton: View {
     }
 }
 
+/// File > Game Library.
+struct BookshelfMenuItem: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Game Library") { openWindow(id: BookshelfView.windowID) }
+            .keyboardShortcut("k", modifiers: [.command, .shift])
+    }
+}
+
+/// File > New BBC Micro Window: another machine (or the first, when
+/// MacBeeb opened with only the bookshelf).
+struct NewMachineMenuItem: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("New BBC Micro Window") { openWindow(id: MachineWindow.windowID) }
+            .keyboardShortcut("n", modifiers: [.command, .option])
+    }
+}
+
 struct MachineWindow: View {
+    static let windowID = "machine"
     @State private var machine = MachineController()
     @Environment(\.openWindow) private var openWindow
 
@@ -271,7 +333,18 @@ struct MachineWindow: View {
         EmulatorView(host: machine.host, style: machine.displayStyle, monitor: machine.monitor, onRenderer: { machine.renderer = $0 },
                      onHover: { machine.hoveredPixel = $0.map { (x: $0.0, y: $0.1) } },
                      onZoom: { machine.pictureZoomed($0) }, keyboardDisc: { machine.bootDiscPath },
-                     onBecomeKey: { Joysticks.shared.machine = machine })
+                     onBecomeKey: {
+                         Joysticks.shared.machine = machine
+                         MachineController.frontmost = machine
+                     },
+                     onClose: {
+                         // Closed (the bookshelf may keep the app open):
+                         // it stops, and the bookshelf stops using it.
+                         machine.setPaused(true)
+                         if MachineController.frontmost === machine {
+                             MachineController.frontmost = nil
+                         }
+                     })
             .overlay(alignment: .bottomLeading) {
                 if let inspection = machine.inspection {
                     Text(inspection)
@@ -283,6 +356,20 @@ struct MachineWindow: View {
                         .allowsHitTesting(false)
                 }
             }
+            .overlay(alignment: .top) {
+                if let toast = machine.toast {
+                    Text(toast)
+                        .font(.callout.weight(.medium))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.regularMaterial, in: Capsule())
+                        .padding(10)
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
+                        .accessibilityAddTraits(.updatesFrequently)
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: machine.toast)
             .frame(minWidth: 368, minHeight: 288)
             .background(.black)
             .focusedSceneValue(machine)
@@ -303,6 +390,23 @@ struct MachineWindow: View {
             .onAppear {
                 if WhatsNew.shouldShowOnLaunch() {
                     openWindow(id: WhatsNewView.windowID)
+                }
+                if let launch = MachineController.pendingLaunch {
+                    MachineController.pendingLaunch = nil
+                    MachineController.frontmost = machine
+                    launch(machine)
+                }
+            }
+            .onChange(of: machine.bookshelfRequested) {
+                if machine.bookshelfRequested {
+                    machine.bookshelfRequested = false
+                    openWindow(id: BookshelfView.windowID)
+                }
+            }
+            .onChange(of: machine.toast) {
+                if let toast = machine.toast {
+                    NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
+                                         userInfo: [.announcement: toast, .priority: NSAccessibilityPriorityLevel.medium.rawValue])
                 }
             }
             .onChange(of: machine.discContentsRequested) {
@@ -358,6 +462,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate()
         // Starts the background update checks.
         _ = Updates.shared
+        // Picks up downloads awaited before the app last quit.
+        _ = ClassicsLibrary.shared
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

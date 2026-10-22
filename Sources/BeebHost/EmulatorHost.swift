@@ -39,8 +39,25 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
         case saveState(URL, completion: @Sendable (Error?) -> Void)
         /// Replaces the machine with one restored from a save state.
         case loadState(SaveStateFile)
+        /// Restores a save state (a quick save): builds the machine first, so
+        /// a state that can't be restored leaves the running one alone.
+        /// The restored discs in `writeBacks`' drives are written back
+        /// through them, and keys held at the save are released.
+        /// `completion` gets any error (on the emulation thread).
+        case restoreState(SaveStateFile, writeBacks: [Int: WriteBack], completion: @Sendable (Error?) -> Void)
         /// Runs a closure on the emulation thread with the session.
         case perform(@Sendable (MachineSession) -> Void)
+    }
+
+    /// Where a drive's disc goes when the BBC writes to it.
+    public struct WriteBack: Sendable {
+        public var format: Disc.ImageFormat
+        public var onWrite: @Sendable ([UInt8]) -> Void
+
+        public init(format: Disc.ImageFormat, onWrite: @escaping @Sendable ([UInt8]) -> Void) {
+            self.format = format
+            self.onWrite = onWrite
+        }
     }
 
     public struct Frame: Sendable {
@@ -246,6 +263,22 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
                         resetWallClock()
                     } catch {
                         NSLog("MacBeeb: can't load state: \(error)")
+                    }
+                case .restoreState(let file, let writeBacks, let completion):
+                    do {
+                        let restored = try file.makeMachine()
+                        if let debugger = session.machine.debuggerIfCreated {
+                            restored.debugger.adopt(debugger)
+                        }
+                        session.replace(with: restored)
+                        restored.releaseAllKeys()
+                        for (drive, writeBack) in writeBacks {
+                            session.attachWriteBack(drive: drive, writeBack)
+                        }
+                        resetWallClock()
+                        completion(nil)
+                    } catch {
+                        completion(error)
                     }
                 case .perform(let body):
                     body(session)
@@ -457,16 +490,31 @@ final class HostSession: MachineSession {
 
     private func insert(_ disc: Disc, format: Disc.ImageFormat, drive: Int, onWrite: (@Sendable ([UInt8]) -> Void)?) {
         if let onWrite {
-            disc.onTrackWritten = { [unowned disc] _, _ in
-                if let bytes = try? disc.toImage(format) {
-                    onWrite(bytes)
-                }
-            }
-            writeBacks[drive] = WriteBack(disc: disc, format: format, write: onWrite)
+            attach(disc, format: format, drive: drive, onWrite: onWrite)
         } else {
             writeBacks[drive] = nil
         }
         machine.insertDisc(disc, drive: drive)
+    }
+
+    private func attach(_ disc: Disc, format: Disc.ImageFormat, drive: Int, onWrite: @escaping @Sendable ([UInt8]) -> Void) {
+        disc.onTrackWritten = { [unowned disc] _, _ in
+            if let bytes = try? disc.toImage(format) {
+                onWrite(bytes)
+            }
+        }
+        writeBacks[drive] = WriteBack(disc: disc, format: format, write: onWrite)
+    }
+
+    /// Writes the disc already in `drive` back through `writeBack`, now and
+    /// whenever the BBC writes to it (after restoring a state, whose discs
+    /// are its own).
+    func attachWriteBack(drive: Int, _ writeBack: EmulatorHost.WriteBack) {
+        guard let disc = machine.drives[drive].disc else { return }
+        attach(disc, format: writeBack.format, drive: drive, onWrite: writeBack.onWrite)
+        if let bytes = try? disc.toImage(writeBack.format) {
+            writeBack.onWrite(bytes)
+        }
     }
 
     /// Changes the files on the disc in `drive`, as if it were swapped for

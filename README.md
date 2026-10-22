@@ -54,6 +54,7 @@ The drive noises are [MAME](https://github.com/mamedev/mame)'s recordings.
 | `Sources/BeebCore` | The emulation core: pure Swift, no UI frameworks |
 | `Sources/BeebROMs` | Bundled ROM images (Acorn copyright, not GPL) |
 | `Sources/BeebCapture` | Screenshots and video recording |
+| `Sources/BeebLibrary` | The BBC Micro Classics catalogue and covers, the library of imported games, and quick saves |
 | `Sources/BeebHost` | Runs a machine on its own thread, paced by audio |
 | `Sources/BeebAgentKit`, `Sources/macbeeb-mcp` | Agent tools and the MCP server |
 | `Sources/BeebDAP`, `Tools/vscode-macbeeb` | The Debug Adapter Protocol server and the VS Code extension |
@@ -348,6 +349,49 @@ recording.
 
 Save states (`.beebstate`) and snapshots capture everything, discs and disc
 controllers included, so a restored machine carries on cycle for cycle.
+
+File > Quick Save (⇧⌘F6) and Quick Load (⇧⌘F5) keep the last five save
+states of the disc in drive 0 (or drive 1, if drive 0 has none), in
+Application Support/MacBeeb/Snapshots. They belong to the disc, not its
+name or contents: a library game's disc by its library ID, and any other
+disc file by an ID MacBeeb gives it when it's first opened (Media.json),
+which follows it through the BBC's writes and renames. A save is written
+aside, read back and checked, and only then replaces the oldest; a load is
+checked and built into a new machine before the running one is replaced.
+Restoring a library game puts its disc file back as it was in the snapshot;
+other disc files aren't rewound on disc, and the restored disc stays in
+memory. F5 and F6 without ⌘⇧ go to the BBC, and ⌘F5 is left to VoiceOver.
+Each save keeps a screenshot of the frame and its time. The Game Library
+shows a game's snapshots in its details as screenshots to click, under a
+Resume button that loads the newest; a game's tile has a Resume link
+instead of "Ready to play" once it has one.
+
+File > Game Library (⇧⌘K) has three tabs. BBC Micro Classics is BBCMicro.co.uk's top 20
+games (`Sources/BeebLibrary/Data/classics.json`) and a book for the
+archive. Author's Picks is twenty more chosen by MacBeeb's author, also from the
+archive; seven are in the top 20 too, and are the same games, installed once. MacBeeb doesn't download or include any game: Get opens the game's
+page on BBCMicro.co.uk in the default browser, and, if the user agrees,
+MacBeeb watches Downloads (or a folder chosen in Settings > Games) while
+it's open, for a finished .ssd or .dsd. A disc is recognised only by its
+SHA-256 matching the catalogue; an unknown disc that turns up while a
+download is awaited is offered for the user to identify. Recognised discs
+are copied into Application Support/MacBeeb/Library (the original is only
+read), and Play runs a working copy on the machine the game needs: a Model
+B, with a 6502 Second Processor for Elite, or a Master 128 for Repton Infinity's
+enhanced Master version and games that need sideways RAM, such as Exile (its
+disc boots to the game's menu there; whether its loader picks the enhanced
+version on a Master hasn't been confirmed). `Sources/BeebLibrary/COVERS.md` records
+where the covers came from and how the fingerprints were made.
+`MACBEEB_CLASSICS_DISCS=/folder/of/discs make test` boots each game's real
+disc (kept outside the repository) as Play does. My Games, the third tab, are the user's own: a disc image of any
+format MacBeeb reads and/or a cover picture, dropped on the bookshelf in
+either order or together (a disc and a picture with the same name pair up),
+with a title, machine and start method (Shift-Break, a typed command, or
+just inserting the disc) filled in on a sheet. Dropping a disc or picture
+on a game gives it one later. Copies live in Library/MyGames; a disc that
+matches a Classic's fingerprint goes to the Classics instead. Settings > Games > When
+MacBeeb opens can make the bookshelf the only window at launch; a machine
+window opens to play a game, or from File > New BBC Micro Window (⌥⌘N).
 
 Cassettes (.uef, including gzipped, and .csw) play through a 6850 ACIA and
 serial ULA that decode the tape's tones as the real hardware does, so

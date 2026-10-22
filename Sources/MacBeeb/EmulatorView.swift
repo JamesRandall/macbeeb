@@ -12,6 +12,8 @@ final class EmulatorNSView: MTKView {
     var keyboardDisc: () -> String? = { nil }
     /// Called when the window becomes key.
     var onBecomeKey: () -> Void = {}
+    /// Called when its window closes.
+    var onClose: () -> Void = {}
     /// Called with the TV pixel under the mouse (nil when it leaves).
     var onHover: ((Int, Int)?) -> Void = { _ in }
 
@@ -87,6 +89,23 @@ final class EmulatorNSView: MTKView {
 
     /// Posted (with the host) by Machine > Capture Mouse.
     static let toggleMouseCapture = Notification.Name("MacBeebToggleMouseCapture")
+    /// Brings the window showing a host (the notification's object) to the
+    /// front.
+    static let bringToFront = Notification.Name("MacBeebBringToFront")
+    /// Forgets the keys held on the Mac: the machine's been replaced (a
+    /// quick load), so they've been released on the BBC.
+    static let resetKeys = Notification.Name("MacBeebResetKeys")
+
+    @objc private func bringToFront(_ notification: Notification) {
+        guard (notification.object as AnyObject?) === host else { return }
+        window?.makeKeyAndOrderFront(nil)
+        window?.makeFirstResponder(self)
+    }
+
+    @objc private func resetKeys(_ notification: Notification) {
+        guard (notification.object as AnyObject?) === host else { return }
+        translator.reset()
+    }
 
     /// While captured, the Mac's mouse is the BBC's: the pointer's hidden
     /// and held still, and its movements and buttons go to the machine.
@@ -209,6 +228,8 @@ final class EmulatorNSView: MTKView {
                                                name: NSWindow.didResignKeyNotification, object: window)
         NotificationCenter.default.addObserver(self, selector: #selector(windowDidBecomeKey),
                                                name: NSWindow.didBecomeKeyNotification, object: window)
+        NotificationCenter.default.addObserver(self, selector: #selector(windowWillClose),
+                                               name: NSWindow.willCloseNotification, object: window)
         if window?.isKeyWindow == true {
             onBecomeKey()
         }
@@ -216,10 +237,18 @@ final class EmulatorNSView: MTKView {
                                                name: Self.toggleMouseCapture, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(applyZoom),
                                                name: Self.setZoom, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(bringToFront),
+                                               name: Self.bringToFront, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(resetKeys),
+                                               name: Self.resetKeys, object: nil)
     }
 
     @objc private func windowDidBecomeKey(_ notification: Notification) {
         onBecomeKey()
+    }
+
+    @objc private func windowWillClose(_ notification: Notification) {
+        onClose()
     }
 
     @objc private func windowDidResignKey(_ notification: Notification) {
@@ -287,6 +316,7 @@ struct EmulatorView: NSViewRepresentable {
     var onZoom: (Double) -> Void = { _ in }
     var keyboardDisc: () -> String? = { nil }
     var onBecomeKey: () -> Void = {}
+    var onClose: () -> Void = {}
 
     func makeNSView(context: Context) -> EmulatorNSView {
         let device = MTLCreateSystemDefaultDevice()
@@ -296,6 +326,7 @@ struct EmulatorView: NSViewRepresentable {
         view.onZoom = onZoom
         view.keyboardDisc = keyboardDisc
         view.onBecomeKey = onBecomeKey
+        view.onClose = onClose
         view.colorPixelFormat = .bgra8Unorm
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
         view.preferredFramesPerSecond = 120

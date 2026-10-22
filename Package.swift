@@ -9,6 +9,7 @@ let package = Package(
         .library(name: "BeebCore", targets: ["BeebCore"]),
         .library(name: "BeebCapture", targets: ["BeebCapture"]),
         .library(name: "BeebROMs", targets: ["BeebROMs"]),
+        .library(name: "BeebLibrary", targets: ["BeebLibrary"]),
         .executable(name: "beeb", targets: ["beeb"]),
         .executable(name: "MacBeeb", targets: ["MacBeeb"]),
         .executable(name: "macbeeb-mcp", targets: ["macbeeb-mcp"]),
@@ -35,6 +36,11 @@ let package = Package(
         // (Acorn and Digital Research copyright, not GPL).
         .target(name: "BeebROMs", dependencies: ["BeebCore"], resources: [.copy("ROMs"), .copy("Discs"), .copy("Sounds")]),
 
+        // The BBC Micro Classics bookshelf's catalogue and covers, the
+        // library of imported games, and quick saves.
+        .target(name: "BeebLibrary", dependencies: ["BeebCore"], exclude: ["COVERS.md"],
+                resources: [.copy("Covers"), .copy("Data")]),
+
         // Screenshots (and later, video recording).
         .target(name: "BeebCapture", dependencies: ["BeebCore"]),
 
@@ -52,7 +58,7 @@ let package = Package(
         // The Mac app.
         .executableTarget(
             name: "MacBeeb",
-            dependencies: ["BeebCore", "BeebHost", "BeebCapture", "BeebROMs", "BeebAgentKit", "BeebDAP",
+            dependencies: ["BeebCore", "BeebHost", "BeebCapture", "BeebROMs", "BeebAgentKit", "BeebDAP", "BeebLibrary",
                            .product(name: "Sparkle", package: "Sparkle")],
             // Sparkle.framework is embedded in Contents/Frameworks.
             linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
@@ -77,7 +83,8 @@ let package = Package(
 
         .testTarget(
             name: "BeebCoreTests",
-            dependencies: ["BeebCore", "BeebROMs", "BeebCapture", "BeebHost", "BeebAgentKit", "BeebDAP", "M6502GenKit"],
+            dependencies: ["BeebCore", "BeebROMs", "BeebCapture", "BeebHost", "BeebAgentKit", "BeebDAP", "BeebLibrary",
+                           "M6502GenKit"],
             resources: [.copy("Resources")]
         ),
 

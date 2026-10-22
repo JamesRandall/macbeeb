@@ -33,6 +33,15 @@ struct MachineToolbar: CustomizableToolbarContent {
             .help("Choose the machine (power cycles)")
         }
 
+        ToolbarItem(id: "classics") {
+            Button {
+                machine.bookshelfRequested = true
+            } label: {
+                Label("Games", systemImage: "books.vertical")
+            }
+            .help("The game library: BBC Micro Classics from BBCMicro.co.uk, and your own games")
+        }
+
         ToolbarItem(id: "disc") {
             Menu {
                 Button("Open and Boot Disc…") { machine.openDisc() }

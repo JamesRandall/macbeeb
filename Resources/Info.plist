@@ -70,6 +70,8 @@
 	<string>public.app-category.entertainment</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>MacBeeb looks in Downloads for BBC Micro disk images that you choose to download, so it can add recognised games to your library automatically. It does not alter your downloads.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>

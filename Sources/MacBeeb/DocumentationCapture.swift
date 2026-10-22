@@ -11,10 +11,13 @@ import AppKit
 ///   name: writes NAME-WINDOW.png for each window (main, debugger), the
 ///   emulator's picture drawn in (a cached display leaves Metal out).
 /// - `com.accidentalfish.macbeeb.showDebugger`: opens the debugger.
+/// - `com.accidentalfish.macbeeb.showClassics`: opens the game library
+///   (captured as NAME-classics.png).
 @MainActor
 enum DocumentationCapture {
     static let captureNotification = Notification.Name("com.accidentalfish.macbeeb.capture")
     static let showDebuggerNotification = Notification.Name("com.accidentalfish.macbeeb.showDebugger")
+    static let showClassicsNotification = Notification.Name("com.accidentalfish.macbeeb.showClassics")
 
     static func start(for machine: MachineController) {
         guard let directory = UserDefaults.standard.string(forKey: "MacBeebCaptureDirectory") else { return }
@@ -28,6 +31,11 @@ enum DocumentationCapture {
         center.addObserver(forName: showDebuggerNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated {
                 machine.debuggerRequested = true
+            }
+        }
+        center.addObserver(forName: showClassicsNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                machine.bookshelfRequested = true
             }
         }
     }
@@ -47,6 +55,8 @@ enum DocumentationCapture {
                 drawPicture(of: emulator, renderer: machine.renderer, into: rep, frameView: frameView)
             } else if window.title.hasPrefix("Debugger") {
                 suffix = "debugger"
+            } else if window.title == BookshelfView.title {
+                suffix = "classics"
             } else {
                 continue
             }

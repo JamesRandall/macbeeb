@@ -1,0 +1,548 @@
+{
+  "version": 1,
+  "source": "BBCMicro.co.uk's top 20 (StarDot community nominations), https://bbcmicro.co.uk/about.php",
+  "archive": {
+    "id": "bbcmicro-archive",
+    "title": "The BBC Micro Archive",
+    "subtitle": "Explore the complete BBC Micro games archive",
+    "pitch": "Explore thousands more BBC Micro games and the work that keeps them playable.",
+    "about": "BBCMicro.co.uk is the Complete BBC Micro Games Archive. Its volunteers convert tapes to discs, fix bugs, gather instructions and test compatibility, so that thousands of games can be played on original hardware and in emulators.",
+    "url": "https://bbcmicro.co.uk/",
+    "aboutURL": "https://bbcmicro.co.uk/about.php"
+  },
+  "games": [
+    {
+      "id": "elite-copro", "rank": 1, "title": "Elite", "editionLabel": "Co-pro edition (SNG45)",
+      "archiveGameID": 3471, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=3471",
+      "publisher": "Acornsoft", "year": 1985, "authors": "Ian Bell and David Braben",
+      "description": "Trade, fight and explore across eight galaxies in the game that defined open-world space sims. This is the 6502 Second Processor edition, with more colour and smoother graphics than the standard release.",
+      "machine": { "model": "modelB", "coprocessor": "mos6502",
+                   "summary": "BBC Model B with a 6502 Second Processor" },
+      "knownDisks": [
+        { "sha256": "5b2eedbdeaafbf28f1145b727dd401cd9fb2a7c37937194ea740f7c715540b6b", "byteCount": 102400,
+          "expectedFileName": "Disc999-EliteSNG45.ssd", "variantNotes": "Elite [co-pro] SNG45, as downloaded 2026-10-22" }
+      ]
+    },
+    {
+      "id": "chuckie-egg", "rank": 2, "title": "Chuckie Egg",
+      "archiveGameID": 25, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=25",
+      "publisher": "A&F Software", "year": 1983, "authors": "Nigel Alderton and Doug Anderson",
+      "description": "Hen-House Harry climbs ladders and dodges ostriches to collect a dozen eggs per level, while a caged mother duck waits to be let loose. A platform classic for up to four players.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "da34e9b7b2fda70ede334f2224887130fa4ca4fb14f854141cede380f5958597", "byteCount": 204800,
+          "expectedFileName": "Disc002-ChuckieEgg.ssd" }
+      ]
+    },
+    {
+      "id": "repton-3", "rank": 3, "title": "Repton 3", "editionLabel": "With level editor",
+      "archiveGameID": 425, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=425",
+      "publisher": "Superior Software", "year": 1986, "authors": "Matthew Atkinson",
+      "description": "Repton digs for diamonds through 24 puzzle screens of falling rocks, fungus and time capsules, and the included editors let you design your own maps and graphics.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "fd139c27139e9616a32b91fbc0e81c4cbad86f7926805e834d3f5f1bc8dc8ab7", "byteCount": 204800,
+          "expectedFileName": "Disc024-Repton3P.ssd" }
+      ]
+    },
+    {
+      "id": "exile-64k", "rank": 4, "title": "Exile", "editionLabel": "64K edition, with enhanced version",
+      "archiveGameID": 709, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=709",
+      "publisher": "Superior Software", "year": 1988, "authors": "Peter Irvin and Jeremy Smith",
+      "description": "Explore the caves of the planet Phoebus in a sprawling physics-driven adventure of gravity, inertia, teleports and unpredictable creatures. The disc includes the enhanced version for machines with sideways RAM.",
+      "machine": { "model": "master128", "needsSidewaysRAM": true,
+                   "summary": "BBC Master 128 (which has sideways RAM)" },
+      "knownDisks": [
+        { "sha256": "f7d9121ec7a5622d87fe8c21469959c27d01f2518e7ede8af3fa9bc0889acda6", "byteCount": 204800,
+          "expectedFileName": "Disc040-ExileR.ssd" }
+      ]
+    },
+    {
+      "id": "starship-command", "rank": 5, "title": "Starship Command",
+      "archiveGameID": 35, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=35",
+      "publisher": "Acornsoft", "year": 1983, "authors": "Peter Irvin",
+      "description": "Captain a rotating starship at the centre of the screen, fighting off waves of enemy craft with torpedoes and shields, and earn a new command if Star Fleet approves.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "867badd51ec4c68ed06e6a0806bb3c87b1e31aa7531fed19da4ff601d20c42e9", "byteCount": 204800,
+          "expectedFileName": "Disc002-StarshipCommand.ssd" }
+      ]
+    },
+    {
+      "id": "thrust", "rank": 6, "title": "Thrust",
+      "archiveGameID": 432, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=432",
+      "publisher": "Superior Software", "year": 1986, "authors": "Jeremy Smith",
+      "description": "Steer a ship against gravity and inertia into planetary caverns, tow a heavy pod back out on a tether, and destroy the reactor on the way if you dare.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "d85b0ae2a814d632846e924de01839bd190dba316353e417af4a6b4e3cbd3d2a", "byteCount": 204800,
+          "expectedFileName": "Disc024-Thrust.ssd" }
+      ]
+    },
+    {
+      "id": "citadel", "rank": 7, "title": "Citadel",
+      "archiveGameID": 290, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=290",
+      "publisher": "Superior Software", "year": 1985, "authors": "Michael Jakobsen",
+      "description": "A huge flick-screen arcade adventure through a castle and its island, gathering crystals to stop Marduk the Dictator's invasion.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "7f752b5522846cb085c064f9c7dea86130d83fcfcb7552f6baf994d09d63fdd9", "byteCount": 204800,
+          "expectedFileName": "Disc017-Citadel.ssd" }
+      ]
+    },
+    {
+      "id": "repton-2", "rank": 8, "title": "Repton 2",
+      "archiveGameID": 298, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=298",
+      "publisher": "Superior Software", "year": 1985, "authors": "Timothy Tyler",
+      "description": "One vast interconnected world of diamonds, earth, monsters and transporters, to be cleared completely, along with a jigsaw of puzzle pieces, before Repton can finish.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "fbdca7d8f36329d554285f109f15cb70c6aec86ea64b8a274b2cf4f8e675b3b5", "byteCount": 204800,
+          "expectedFileName": "Disc017-Repton2.ssd" }
+      ]
+    },
+    {
+      "id": "revs", "rank": 9, "title": "Revs",
+      "archiveGameID": 267, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=267",
+      "publisher": "Acornsoft", "year": 1985, "authors": "Geoff Crammond",
+      "description": "A remarkably realistic Formula 3 simulation of Silverstone, with practice, qualifying and race modes and car setup to tune.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "b49af30acdc546bd84562053bfed6cebf004be15e4ad06b9c1e2c3468506991f", "byteCount": 204800,
+          "expectedFileName": "Disc015-Revs.ssd" }
+      ]
+    },
+    {
+      "id": "repton", "rank": 10, "title": "Repton",
+      "archiveGameID": 266, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=266",
+      "publisher": "Superior Software", "year": 1985, "authors": "Timothy Tyler",
+      "description": "The original: guide a lizard through twelve screens of diamonds and falling rocks against the clock, with passwords to skip ahead.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "cdd9e3d02f8565c9173251fdac16950f6e37a5963962b2999059d49c572a6845", "byteCount": 204800,
+          "expectedFileName": "Disc015-ReptonP.ssd" }
+      ]
+    },
+    {
+      "id": "imogen", "rank": 11, "title": "Imogen",
+      "archiveGameID": 512, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=512",
+      "publisher": "Micro Power", "year": 1986, "authors": "Michael St. Aubyn",
+      "description": "A wizard who can become a cat or a monkey solves a chain of single-screen puzzles, each one a careful sequence of changes of shape.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "6d1b7f70ad3781d41a3d593adade6fe46a3b2ee6e0ebbaff4d474efc91d96dab", "byteCount": 204800,
+          "expectedFileName": "Disc029-ImogenSTDP.ssd" }
+      ]
+    },
+    {
+      "id": "codename-droid", "rank": 12, "title": "Codename: Droid", "editionLabel": "Stryker's Run Part 2",
+      "archiveGameID": 564, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=564",
+      "publisher": "Superior Software", "year": 1987, "authors": "Nicholas Chamberlain and Martin Edmondson",
+      "description": "Commander John Stryker returns in a fast-scrolling action adventure, leaping, flying and shooting through enemy territory.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "6ba625c4e9672450681f700783f59625bd48a3cc09599eb7a03991564476024c", "byteCount": 204800,
+          "expectedFileName": "Disc032-CodenameDroidStrykersRun2.ssd" }
+      ]
+    },
+    {
+      "id": "firetrack", "rank": 13, "title": "Firetrack",
+      "archiveGameID": 598, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=598",
+      "publisher": "Electric Dreams", "year": 1987, "authors": "Nick Pelling",
+      "description": "A silky-smooth vertically scrolling shoot-'em-up over the asteroid belt, famous for pushing the BBC's hardware scrolling further than anyone thought possible.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "eabcc984038d10b277f35a66cb4c774e45baacff669dc98502fb6b8cb31220c4", "byteCount": 204800,
+          "expectedFileName": "Disc034-FireTrack.ssd" }
+      ]
+    },
+    {
+      "id": "arcadians", "rank": 14, "title": "Arcadians",
+      "archiveGameID": 20, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=20",
+      "publisher": "Acornsoft", "year": 1982, "authors": "Nick Pelling",
+      "description": "Swooping, diving waves of aliens in a polished early arcade shooter that showed what the BBC Micro could do.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "14908ca21fb99ad67982e07a1ce08e576536f95a947b9d4539ff753d2978b112", "byteCount": 204800,
+          "expectedFileName": "Disc002-Arcadians.ssd" }
+      ]
+    },
+    {
+      "id": "mr-ee", "rank": 15, "title": "Mr Ee",
+      "archiveGameID": 85, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=85",
+      "publisher": "Micro Power", "year": 1984, "authors": "Adrian Stephens",
+      "description": "A wizard tunnels through the earth collecting cherries, chased by monsters he can squash with apples or hit with his crystal ball.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "e7eb3b8b73a58cf8a54fb9d9792290dfdae557ca5f6482f2f6b01f7164a601ce", "byteCount": 204800,
+          "expectedFileName": "Disc005-MrEe.ssd" }
+      ]
+    },
+    {
+      "id": "zalaga", "rank": 16, "title": "Zalaga",
+      "archiveGameID": 54, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=54",
+      "publisher": "Aardvark", "year": 1983, "authors": "Nick Pelling",
+      "description": "Formations of insect-like aliens peel off to attack in a fast and frantic arcade shooter.",
+      "machine": { "model": "modelB",
+                   "summary": "BBC Model B (the archive lists it as not working on a Master)" },
+      "knownDisks": [
+        { "sha256": "9a39b1d7c57ac3d9f942e4915305f730133c468c8b1866b1338be04e875633a5", "byteCount": 204800,
+          "expectedFileName": "Disc003-Zalaga.ssd" }
+      ]
+    },
+    {
+      "id": "castle-quest", "rank": 17, "title": "Castle Quest",
+      "archiveGameID": 238, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=238",
+      "publisher": "Micro Power", "year": 1985, "authors": "Anthony So",
+      "description": "Explore a castle full of trolls, witches and spiders, collecting objects and working out where each one is needed to reach the treasure.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "d792fff8f7798c1decf6cb75eed82cd82ef4b42a9b2cff189bafa0e7e3cb121f", "byteCount": 204800,
+          "expectedFileName": "Disc014-CastleQuest.ssd" }
+      ]
+    },
+    {
+      "id": "galaforce", "rank": 18, "title": "Galaforce",
+      "archiveGameID": 438, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=438",
+      "publisher": "Superior Software", "year": 1986, "authors": "Kevin Edwards and Martin Galway",
+      "description": "Twenty zones of alien attack waves in eight directions, with superb sound and smooth movement. The original release.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "56d57f9a0675251468e043388074cb46a22c40cbc781e75363ff3fe5d954dc48", "byteCount": 204800,
+          "expectedFileName": "Disc025-Galaforce.ssd" }
+      ]
+    },
+    {
+      "id": "skirmish", "rank": 19, "title": "Skirmish",
+      "archiveGameID": 822, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=822",
+      "publisher": "Go-Dax", "year": 1988, "authors": "Stuart Cheshire",
+      "description": "Joust-style flapping combat for one or two players: rise above your opponent and land on them before they land on you.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "09edcce63c1350f553cb289ded1f681a56b26d89230be928811c6f80bd9d6b8f", "byteCount": 204800,
+          "expectedFileName": "Disc046-Skirmish.ssd" }
+      ]
+    },
+    {
+      "id": "snapper", "rank": 20, "title": "Snapper",
+      "archiveGameID": 14, "archivePageURL": "https://bbcmicro.co.uk/game.php?id=14",
+      "publisher": "Acornsoft", "year": 1982, "authors": "Jonathan Griffiths",
+      "description": "Acornsoft's maze chase: eat the dots, avoid the monsters, and turn the tables with a power pill.",
+      "machine": { "model": "modelB", "summary": "BBC Model B" },
+      "knownDisks": [
+        { "sha256": "2f64daf772af3e562b0f2db9f13f71a13f776b24d42c2c8401845316c1488369", "byteCount": 204800,
+          "expectedFileName": "Disc001-SnapperV2.ssd", "variantNotes": "V2.2" }
+      ]
+    }
+  ],
+  "moreGames": [
+    {
+      "id": "holed-out",
+      "title": "Holed Out!!",
+      "archiveGameID": 1249,
+      "archivePageURL": "https://bbcmicro.co.uk/game.php?id=1249",
+      "publisher": "4th Dimension",
+      "year": 1989,
+      "authors": "Gordon J. Key",
+      "description": "Golf for one to four players, with simple controls and skill levels that let beginners take on experts. It loads into two banks of sideways RAM, so it needs a machine that has them.",
+      "machine": {
+        "model": "master128",
+        "needsSidewaysRAM": true,
+        "summary": "BBC Master 128 (which has sideways RAM)"
+      },
+      "knownDisks": [
+        {
+          "sha256": "f8dd0d9267b9a54f3397fd006098f100bda2c6dadadd9b0a8f10d47ab9d0a735",
+          "byteCount": 204800,
+          "expectedFileName": "Disc070-HoledOutRx2.ssd"
+        }
+      ]
+    },
+    {
+      "id": "simcity",
+      "title": "SimCity",
+      "archiveGameID": 934,
+      "archivePageURL": "https://bbcmicro.co.uk/game.php?id=934",
+      "publisher": "Superior Software",
+      "year": 1990,
+      "authors": "Will Wright and Peter Scott",
+      "description": "Zone land, lay roads and power lines, set taxes and keep the citizens happy as a town grows into a city. Will Wright's simulation, squeezed into a BBC Micro.",
+      "machine": {
+        "model": "modelB",
+        "summary": "BBC Model B"
+      },
+      "knownDisks": [
+        {
+          "sha256": "c5b14595b32920a142bcdcebe7bf1a6b8287878c6b9c7f98257bb7de4bbdf07e",
+          "byteCount": 204800,
+          "expectedFileName": "Disc052-SimCitySTD.ssd"
+        }
+      ]
+    },
+    {
+      "id": "planetoid",
+      "title": "Planetoid",
+      "editionLabel": "Version 2.1",
+      "archiveGameID": 11,
+      "archivePageURL": "https://bbcmicro.co.uk/game.php?id=11",
+      "publisher": "Acornsoft",
+      "year": 1982,
+      "authors": "Neil Raine",
+      "description": "A fast, faithful take on the arcade game Defender: skim the planet's surface, blast landers and rescue the humanoids before they're carried off.",
+      "machine": {
+        "model": "modelB",
+        "summary": "BBC Model B"
+      },
+      "knownDisks": [
+        {
+          "sha256": "062d4ffc8966dcf23ceae6232a50cda75ced0e0425417ae0f68cdcb9229d388f",
+          "byteCount": 204800,
+          "expectedFileName": "Disc001-PlanetoidAKADefender.ssd",
+          "variantNotes": "V2.1"
+        }
+      ]
+    },
+    {
+      "id": "ravenskull",
+      "title": "Ravenskull",
+      "editionLabel": "Disc edition",
+      "archiveGameID": 412,
+      "archivePageURL": "https://bbcmicro.co.uk/game.php?id=412",
+      "publisher": "Superior Software",
+      "year": 1986,
+      "authors": "Nicholas Chamberlain and Martin Edmondson",
+      "description": "Explore the four huge levels of Ravenskull Castle, seen from above, gathering treasure and the pieces of a mystical silver crucifix while you dodge its traps and creatures.",
+      "machine": {
+        "model": "modelB",
+        "summary": "BBC Model B"
+      },
+      "knownDisks": [
+        {
+          "sha256": "6586d2911eea6799228bceeaf5ce618b485c0ab1efc7d048c831b1fdfc703f09",
+          "byteCount": 204800,
+          "expectedFileName": "Disc023-Ravenskull.ssd"
+        }
+      ]
+    },
+    {
+      "id": "uim",
+      "title": "U.I.M.",
+      "editionLabel": "Ultra Intelligent Machine",
+      "archiveGameID": 1385,
+      "archivePageURL": "https://bbcmicro.co.uk/game.php?id=1385",
+      "publisher": "4th Dimension",
+      "year": 1989,
+      "authors": "Matthew Atkinson",
+      "description": "Trade, fight and explore in solid 3D, like Elite but deep under the sea. The game needs a bank of sideways RAM.",
+      "machine": {
+        "model": "master128",
+        "needsSidewaysRAM": true,
+        "summary": "BBC Master 128 (which has sideways RAM)"
+      },
+      "knownDisks": [
+        {
+          "sha256": "2ad3a4a105372707385fe6def5a924fa3c6af4da3ef3b56eda88901a9faf54cb",
+          "byteCount": 204800,
+          "expectedFileName": "Disc077-UIMR.ssd"
+        }
+      ]
+    },
+    {
+      "id": "barbarian",
+      "title": "Barbarian",
+      "editionLabel": "The Ultimate Warrior",
+      "archiveGameID": 757,
+      "archivePageURL": "https://bbcmicro.co.uk/game.php?id=757",
+      "publisher": "Superior Software",
+      "year": 1988,
+      "authors": "Peter Scott and Dylan",
+      "description": "Big, bloody sword fights, one on one, against the computer or a friend, on the way to rescue the princess from the evil sorcerer Drax.",
+      "machine": {
+        "model": "modelB",
+        "summary": "BBC Model B"
+      },
+      "knownDisks": [
+        {
+          "sha256": "c3c16e39f315f5ae7abdd799f8462f4f0a620433d9bac401e93b069ec4178eb4",
+          "byteCount": 204800,
+          "expectedFileName": "Disc043-BarbarianGame1or2.ssd"
+        }
+      ]
+    },
+    {
+      "id": "nevryon",
+      "title": "Nevryon",
+      "editionLabel": "Disc edition",
+      "archiveGameID": 1183,
+      "archivePageURL": "https://bbcmicro.co.uk/game.php?id=1183",
+      "publisher": "4th Dimension",
+      "year": 1990,
+      "authors": "Graeme Richardson",
+      "description": "A fast sideways-scrolling shoot 'em up across eight levels, powering up your ship with lasers, a ram, a gun droid and missiles. Too big for tape: it was only ever on disc.",
+      "machine": {
+        "model": "modelB",
+        "summary": "BBC Model B"
+      },
+      "knownDisks": [
+        {
+          "sha256": "b51b90550fd7857741c581f9a037dc996165005632b1514195147f2642b72ddb",
+          "byteCount": 204800,
+          "expectedFileName": "Disc066-NevryonP.ssd"
+        }
+      ]
+    },
+    {
+      "id": "strykers-run-128k",
+      "title": "Stryker's Run",
+      "editionLabel": "Enhanced 128K edition",
+      "archiveGameID": 3286,
+      "archivePageURL": "https://bbcmicro.co.uk/game.php?id=3286",
+      "publisher": "Superior Software",
+      "year": 1986,
+      "authors": "Chris Roberts and P. Meller",
+      "description": "Run, shoot and steal aircraft across a scrolling battlefield to carry the enemy's plans back to headquarters. The disc includes an enhanced game for machines with 128K.",
+      "machine": {
+        "model": "master128",
+        "needsSidewaysRAM": true,
+        "summary": "BBC Master 128, for the enhanced game"
+      },
+      "knownDisks": [
+        {
+          "sha256": "3c52a069917eb9f537a2330cd811e4f1c2103e59520b146fa557d183c04d035d",
+          "byteCount": 102400,
+          "expectedFileName": "Disc999-StrykersRunEnhanced.ssd"
+        }
+      ]
+    },
+    {
+      "id": "repton-around-the-world",
+      "title": "Repton: Around the World in 40 Screens",
+      "editionLabel": "A Repton 3 expansion",
+      "archiveGameID": 812,
+      "archivePageURL": "https://bbcmicro.co.uk/game.php?id=812",
+      "publisher": "Superior Software",
+      "year": 1987,
+      "authors": "Matthew Atkinson",
+      "description": "Forty new Repton 3 screens on a tour of the world. It stands alone and doesn't need Repton 3.",
+      "machine": {
+        "model": "modelB",
+        "summary": "BBC Model B"
+      },
+      "knownDisks": [
+        {
+          "sha256": "5ee4f75d9966102043bb9b87916cecebcd59ab9e4d1b7c0170a2e67e0c291ca9",
+          "byteCount": 204800,
+          "expectedFileName": "Disc046-AroundTheWorldIn40ScreensP.ssd"
+        }
+      ]
+    },
+    {
+      "id": "repton-infinity",
+      "title": "Repton Infinity",
+      "editionLabel": "With level editor",
+      "archiveGameID": 3571,
+      "archivePageURL": "https://bbcmicro.co.uk/game.php?id=3571",
+      "publisher": "Superior Software",
+      "year": 1988,
+      "authors": "David Lawrence and David Acton",
+      "description": "Repton, plus a game-creation kit: redesign the maps and graphics, and even rewrite how every object behaves. The full release, with its editors.",
+      "machine": {
+        "model": "master128",
+        "summary": "BBC Master 128, for the enhanced Master version"
+      },
+      "knownDisks": [
+        {
+          "sha256": "ba80a6b57db6041f685a28a9c100053e3d230334c2c3221794e8408ee0288b72",
+          "byteCount": 135424,
+          "expectedFileName": "Disc999-ReptonInfinity.ssd"
+        }
+      ]
+    },
+    {
+      "id": "doctor-who-mines-of-terror",
+      "title": "Doctor Who and the Mines of Terror",
+      "editionLabel": "Master edition",
+      "archiveGameID": 2972,
+      "archivePageURL": "https://bbcmicro.co.uk/game.php?id=2972",
+      "publisher": "Micro Power",
+      "year": 1986,
+      "authors": "Gary Partis",
+      "description": "The Doctor and his robot cat Splinx explore a vast mine, a sprawling arcade adventure of puzzles and perils. This edition is for the BBC Master 128 and Model B+.",
+      "machine": {
+        "model": "master128",
+        "summary": "BBC Master 128"
+      },
+      "knownDisks": [
+        {
+          "sha256": "fe793339675c35c8856af716b1591303e4bbf286b27ff79eb852a8094c848089",
+          "byteCount": 84224,
+          "expectedFileName": "Disc999-DoctorWhoAndTheMinesOfTerror-BPlusMaster.ssd"
+        }
+      ]
+    },
+    {
+      "id": "exploding-fist",
+      "title": "The Way of the Exploding Fist",
+      "archiveGameID": 341,
+      "archivePageURL": "https://bbcmicro.co.uk/game.php?id=341",
+      "publisher": "Melbourne House",
+      "year": 1985,
+      "authors": "Michael Simpson",
+      "description": "Karate, one on one, with a big repertoire of kicks, punches and sweeps, judged in half and full points as in a real bout.",
+      "machine": {
+        "model": "modelB",
+        "summary": "BBC Model B"
+      },
+      "knownDisks": [
+        {
+          "sha256": "a481903169454c9fda8c0789c52e08955e31ab2a6bcaac610ff52ebaf71041b9",
+          "byteCount": 204800,
+          "expectedFileName": "Disc019-WayOfTheExplodingFist.ssd"
+        }
+      ]
+    },
+    {
+      "id": "knight-lore",
+      "title": "Knight Lore",
+      "archiveGameID": 208,
+      "archivePageURL": "https://bbcmicro.co.uk/game.php?id=208",
+      "publisher": "Ultimate Play The Game",
+      "year": 1984,
+      "authors": "Chris Stamper, Tim Stamper and Paul Proctor",
+      "description": "Sabreman has forty days to brew a cure for his werewolf curse in a castle drawn in isometric 3D, one room and one puzzle at a time.",
+      "machine": {
+        "model": "modelB",
+        "summary": "BBC Model B"
+      },
+      "knownDisks": [
+        {
+          "sha256": "31a52c7c2932f8b0c00a6650bba4f214aea5713e8b80550204f1a9b65eecbd03",
+          "byteCount": 204800,
+          "expectedFileName": "Disc012-KnightLore.ssd"
+        }
+      ]
+    }
+  ],
+  "authorsPicks": [
+    "elite-copro",
+    "exile-64k",
+    "holed-out",
+    "thrust",
+    "revs",
+    "simcity",
+    "planetoid",
+    "chuckie-egg",
+    "ravenskull",
+    "uim",
+    "barbarian",
+    "nevryon",
+    "codename-droid",
+    "strykers-run-128k",
+    "repton-around-the-world",
+    "repton-infinity",
+    "firetrack",
+    "doctor-who-mines-of-terror",
+    "exploding-fist",
+    "knight-lore"
+  ]
+}

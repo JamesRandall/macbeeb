@@ -4,6 +4,7 @@ import BeebCapture
 import BeebCore
 import BeebDAP
 import BeebHost
+import BeebLibrary
 import BeebROMs
 import Observation
 import UniformTypeIdentifiers
@@ -60,6 +61,8 @@ final class MachineController {
     var debuggerRequested = false
     /// Set to open the disc contents window (the machine window opens it).
     var discContentsRequested = false
+    /// Set to open the BBC Micro Classics bookshelf.
+    var bookshelfRequested = false
     /// Counts changes to the discs in the drives: a disc put in or taken
     /// out, or written to by the BBC.
     private(set) var discChanges = 0
@@ -136,6 +139,9 @@ final class MachineController {
         startAgentServer()
         DocumentationCapture.start(for: self)
         Self.all[id] = self
+        if Self.frontmost == nil {
+            Self.frontmost = self
+        }
         runSelfTestIfRequested()
     }
 
@@ -591,6 +597,22 @@ final class MachineController {
     /// the Master 512's DOS Plus), if any.
     @ObservationIgnored private var startupDiscName: String?
 
+    /// Who the discs in the drives are, for quick saves, by drive.
+    private(set) var driveMedia: [Int: DiscMedia] = [:]
+    /// The quick saves of the disc that owns them now, newest first.
+    private(set) var snapshotHistory: [SnapshotManifest] = []
+    /// A quick save or load is under way.
+    private(set) var snapshotBusy = false
+    /// A brief message over the picture ("Snapshot saved · 3 of 5").
+    private(set) var toast: String?
+    @ObservationIgnored private var toastTask: Task<Void, Never>?
+    /// The machine whose window was in front last: the bookshelf plays
+    /// games in it.
+    static weak var frontmost: MachineController?
+    /// What a new machine window does when it opens (the bookshelf opens
+    /// one to play a game in, when there isn't one).
+    static var pendingLaunch: ((MachineController) -> Void)?
+
     static let discTypes: [UTType] = Disc.ImageFormat.extensions.map { UTType(filenameExtension: $0) ?? .data }
 
     /// Asks for a disc image, puts it in `drive`, and (for drive 0, if
@@ -689,32 +711,52 @@ final class MachineController {
     }
 
     /// Puts the disc image at `url` in `drive`. Writes go back to the file.
-    func insertDisc(_ url: URL, drive: Int = 0, boot: Bool = true) {
+    ///
+    /// `media`: who the disc is, for quick saves (a library game's disc);
+    /// otherwise it's looked up, or registered, by its file.
+    func insertDisc(_ url: URL, drive: Int = 0, boot: Bool = true, media: DiscMedia? = nil) {
         guard let data = try? Data(contentsOf: url) else {
             NSAlert(error: CocoaError(.fileReadUnknown)).runModal()
             return
         }
         let format = Disc.ImageFormat(path: url.path) ?? .ssd
-        let writable = FileManager.default.isWritableFile(atPath: url.path)
-        let noteWrite = noteDiscWrite
-        let onWrite: @Sendable ([UInt8]) -> Void = { bytes in
-            if writable {
-                DispatchQueue.global(qos: .utility).async {
-                    try? Data(bytes).write(to: url, options: .atomic)
-                }
-            }
-            noteWrite()
-        }
-        host.send(.insertDisc(image: [UInt8](data), format: format, drive: drive, onWrite: onWrite))
+        let media = media ?? DiscMedia(id: ClassicsLibrary.shared.media.identity(forFileAt: url, digest: GameLibrary.sha256(data)),
+                                       name: url.lastPathComponent, gameID: nil, managed: false)
+        host.send(.insertDisc(image: [UInt8](data), format: format, drive: drive,
+                              onWrite: writeBack(to: url, media: media).onWrite))
         discChanges += 1
-        discNames[drive] = url.lastPathComponent
+        discNames[drive] = media.name
+        setMedia(media, drive: drive)
         if drive == 0 {
             bootDiscPath = url.standardizedFileURL.path
         }
-        NSDocumentController.shared.noteNewRecentDocumentURL(url)
-        RecentDiscs.shared.add(url)
+        // Library discs are reached through the bookshelf.
+        if !media.managed {
+            NSDocumentController.shared.noteNewRecentDocumentURL(url)
+            RecentDiscs.shared.add(url)
+        }
         if boot && drive == 0 {
             host.send(.shiftBreak)
+        }
+    }
+
+    /// Writing a disc back to its file, as the BBC writes to it.
+    private func writeBack(to url: URL, media: DiscMedia) -> EmulatorHost.WriteBack {
+        let format = Disc.ImageFormat(path: url.path) ?? .ssd
+        let writable = FileManager.default.isWritableFile(atPath: url.path)
+        let noteWrite = noteDiscWrite
+        let registry = ClassicsLibrary.shared.media
+        return EmulatorHost.WriteBack(format: format) { bytes in
+            if writable {
+                DispatchQueue.global(qos: .utility).async {
+                    let data = Data(bytes)
+                    try? data.write(to: url, options: .atomic)
+                    if !media.managed {
+                        registry.noteWritten(id: media.id, digest: GameLibrary.sha256(data))
+                    }
+                }
+            }
+            noteWrite()
         }
     }
 
@@ -732,6 +774,7 @@ final class MachineController {
         host.send(.insertDisc(image: disc.data, format: disc.format, drive: drive, onWrite: { _ in noteWrite() }))
         discChanges += 1
         discNames[drive] = disc.rawValue
+        setMedia(nil, drive: drive)
         if drive == 0 {
             bootDiscPath = nil
         }
@@ -741,6 +784,7 @@ final class MachineController {
         host.send(.insertDisc(image: nil, format: .ssd, drive: drive, onWrite: nil))
         discChanges += 1
         discNames[drive] = nil
+        setMedia(nil, drive: drive)
         if drive == 0 {
             bootDiscPath = nil
         }
@@ -807,6 +851,8 @@ final class MachineController {
             coprocessor = file.configuration.coprocessor
             discInterface = file.configuration.discInterface
             discNames = [:]
+            driveMedia = [:]
+            refreshSnapshotHistory()
             discChanges += 1
             bootDiscPath = nil
             startupDiscName = nil
@@ -819,5 +865,209 @@ final class MachineController {
 
     func pressBreak() {
         host.send(.pressBreak)
+    }
+}
+
+/// A disc image's identity, for quick saves: a library game's disc, or a
+/// disc file registered by MediaRegistry.
+struct DiscMedia: Equatable, Sendable {
+    var id: UUID
+    var name: String
+    /// The curated game, for a library disc.
+    var gameID: String?
+    /// Whether it's a library disc, whose file follows a restored state.
+    var managed: Bool
+}
+
+// MARK: Classics and quick saves
+
+extension MachineController {
+    /// The disc whose quick saves these are: drive 0's, or drive 1's if
+    /// drive 0 has none.
+    var snapshotOwner: DiscMedia? {
+        driveMedia[0] ?? driveMedia[1]
+    }
+
+    private func setMedia(_ media: DiscMedia?, drive: Int) {
+        let owner = snapshotOwner
+        driveMedia[drive] = media
+        if snapshotOwner != owner {
+            refreshSnapshotHistory()
+        }
+    }
+
+    func refreshSnapshotHistory() {
+        guard let owner = snapshotOwner else {
+            snapshotHistory = []
+            return
+        }
+        Task {
+            let history = await ClassicsLibrary.shared.snapshots.history(owner: owner.id)
+            if snapshotOwner?.id == owner.id {
+                snapshotHistory = history
+            }
+        }
+    }
+
+    func showToast(_ message: String) {
+        toast = message
+        toastTask?.cancel()
+        toastTask = Task {
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            toast = nil
+        }
+    }
+
+    /// Whether the machine has a disc of the user's in it, which playing
+    /// something else would take out.
+    var isPlayingSomething: Bool {
+        guard let name = discNames[0] else { return false }
+        return name != startupDiscName
+    }
+
+    /// Plays a library game: sets the machine up as the game needs (a
+    /// power cycle), puts its disc in drive 0 and boots it.
+    func play(_ game: CuratedGame, disc url: URL, record: InstalledGame) {
+        let requirement = game.machine
+        model = requirement.model
+        // The games were checked on the standard 8271 interface.
+        discInterface = .intel8271
+        secondProcessor = requirement.coprocessor != nil
+        if let coprocessor = requirement.coprocessor {
+            self.coprocessor = coprocessor
+        }
+        // Always a fresh machine, even if it's the same one.
+        changeMachine()
+        insertDisc(url, drive: 0, boot: true,
+                   media: DiscMedia(id: record.libraryID, name: game.title, gameID: game.id, managed: true))
+        NotificationCenter.default.post(name: EmulatorNSView.bringToFront, object: host)
+    }
+
+    /// Plays one of My Games on the machine the user chose for it,
+    /// starting it as they said.
+    func play(_ game: PersonalGame, disc url: URL) {
+        model = game.model
+        secondProcessor = game.coprocessor != nil
+        if let coprocessor = game.coprocessor {
+            self.coprocessor = coprocessor
+        }
+        changeMachine()
+        let media = DiscMedia(id: game.id, name: game.title, gameID: nil, managed: true)
+        switch game.start {
+        case .boot:
+            insertDisc(url, drive: 0, boot: true, media: media)
+        case .insertOnly:
+            insertDisc(url, drive: 0, boot: false, media: media)
+        case .type(let command):
+            insertDisc(url, drive: 0, boot: false, media: media)
+            let command = command.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !command.isEmpty {
+                // Once the machine's at its prompt.
+                let host = host
+                Task {
+                    try? await Task.sleep(for: .seconds(2))
+                    host.send(.paste(command + "\n"))
+                }
+            }
+        }
+        NotificationCenter.default.post(name: EmulatorNSView.bringToFront, object: host)
+    }
+
+    /// Takes a snapshot of the machine and its discs, for the disc in the
+    /// drive.
+    func quickSave() {
+        guard let owner = snapshotOwner else {
+            showToast("Put a disc in to quick save")
+            return
+        }
+        guard !snapshotBusy else { return }
+        snapshotBusy = true
+        let drives = discNames.keys.sorted().map { drive in
+            let media = driveMedia[drive]
+            return SnapshotManifest.DriveMedia(drive: drive, media: media?.id, name: discNames[drive] ?? "",
+                                               managed: media?.managed ?? false)
+        }
+        let manifest = SnapshotManifest(owner: owner.id, gameID: owner.gameID, title: owner.name, model: model,
+                                        coprocessor: fittedCoprocessor, drives: drives)
+        Task {
+            defer { snapshotBusy = false }
+            do {
+                // One consistent capture, between slices on the emulation
+                // thread; everything else happens off it.
+                let (state, frame) = try await host.performAsync { session in
+                    (SaveStateFile(session.machine), session.tv.lastFrame)
+                }
+                let thumbnail = await Task.detached {
+                    Screenshot.png(pixels: frame, width: EmulatorHost.Frame.width, height: EmulatorHost.Frame.height)
+                }.value
+                let history = try await ClassicsLibrary.shared.snapshots.save(state, thumbnailPNG: thumbnail, manifest: manifest)
+                if snapshotOwner?.id == owner.id {
+                    snapshotHistory = history
+                }
+                ClassicsLibrary.shared.noteSnapshotsChanged()
+                showToast("Snapshot saved · \(history.count) of \(ClassicsLibrary.shared.snapshots.limit)")
+            } catch {
+                showToast("Couldn’t save a snapshot")
+                NSAlert(error: error).runModal()
+            }
+        }
+    }
+
+    /// Restores a snapshot (the newest of the current disc's, by default).
+    /// It's checked before the running machine is touched.
+    func quickLoad(_ chosen: SnapshotManifest? = nil) {
+        guard let manifest = chosen ?? snapshotHistory.first else {
+            showToast("No snapshots yet")
+            return
+        }
+        guard !snapshotBusy else { return }
+        snapshotBusy = true
+        let library = ClassicsLibrary.shared
+        Task {
+            defer { snapshotBusy = false }
+            do {
+                let file = try await library.snapshots.load(manifest)
+                // Library discs' files follow the restored discs.
+                var writeBacks: [Int: EmulatorHost.WriteBack] = [:]
+                var restoredMedia: [Int: DiscMedia] = [:]
+                var paths: [Int: URL] = [:]
+                for drive in manifest.drives {
+                    guard let id = drive.media else { continue }
+                    // (Drives without one held bundled discs.)
+                    var media = DiscMedia(id: id, name: drive.name, gameID: nil, managed: drive.managed)
+                    if drive.managed, let disc = await library.managedDisc(id: id) {
+                        media.gameID = disc.gameID
+                        writeBacks[drive.drive] = writeBack(to: disc.url, media: media)
+                        paths[drive.drive] = disc.url
+                    } else if !drive.managed, let record = library.media.record(id: id) {
+                        // Files outside the library aren't overwritten
+                        // with older contents: the restored disc stays in
+                        // memory.
+                        paths[drive.drive] = URL(fileURLWithPath: record.path)
+                    }
+                    restoredMedia[drive.drive] = media
+                }
+                let error: Error? = await withCheckedContinuation { continuation in
+                    host.send(.restoreState(file, writeBacks: writeBacks, completion: { continuation.resume(returning: $0) }))
+                }
+                if let error { throw error }
+                model = file.configuration.model
+                secondProcessor = file.configuration.secondProcessorROM != nil
+                coprocessor = file.configuration.coprocessor
+                discInterface = file.configuration.discInterface
+                startupDiscName = nil
+                discNames = Dictionary(uniqueKeysWithValues: manifest.drives.map { ($0.drive, $0.name) })
+                driveMedia = restoredMedia
+                bootDiscPath = paths[0]?.standardizedFileURL.path
+                tapeName = file.snapshot.hasTape ? "Tape" : nil
+                discChanges += 1
+                NotificationCenter.default.post(name: EmulatorNSView.resetKeys, object: host)
+                snapshotHistory = await library.snapshots.history(owner: manifest.owner)
+                showToast("Snapshot restored")
+            } catch {
+                NSAlert(error: error).runModal()
+            }
+        }
     }
 }
