@@ -647,6 +647,25 @@ final class MachineController {
         insertDisc(url, drive: drive, boot: boot)
     }
 
+    /// File > New Disc…: saves a blank, formatted disc image where the user
+    /// says, and puts it in the drive they choose (without booting it:
+    /// there's nothing on it to boot).
+    func newDisc() {
+        let empty = [0, 1].filter { discNames[$0] == nil }
+        guard let choice = NewDiscPanel(model: model, emptyDrives: empty).run() else { return }
+        do {
+            try Data(choice.kind.image(title: choice.title)).write(to: choice.url, options: .atomic)
+        } catch {
+            NSAlert(error: error).runModal()
+            return
+        }
+        if let drive = choice.drive {
+            insertDisc(choice.url, drive: drive, boot: false)
+        } else {
+            RecentDiscs.shared.add(choice.url)
+        }
+    }
+
     /// Opens and boots a disc from File > Open Recent Disc, or says it's
     /// gone (and forgets it).
     func openRecentDisc(_ url: URL) {

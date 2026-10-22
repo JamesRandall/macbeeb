@@ -313,6 +313,11 @@ Or the Master Turbo (`--turbo`): a Master 128 with the 65C102 Co-Processor,
 the same 65C02 and 64K at 4MHz on the Master's internal Tube (seen while
 ACCCON's ITU bit is set), booting its Tube OS 1.20, as b2 has it.
 
+File > New Disc… (⌘N) makes a blank disc image, formatted as DFS's *FORM
+or ADFS's FORM leaves one: DFS on 40 or 80 tracks, single or double sided
+(.ssd/.dsd), or ADFS S, M or L (.adf/.adl). It has the title you give it
+(or the file's name), and goes in the drive you choose, ready to save to.
+
 The drives sound as they work: the motor spinning up, running and down,
 the head stepping and seeking, from MAME's recordings of 5.25" drives (3.5"
 on the Compact), mixed in at the sound chip's rate as b2 does. Machine >

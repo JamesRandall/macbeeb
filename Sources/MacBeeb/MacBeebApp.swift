@@ -25,6 +25,9 @@ struct MacBeebApp: App {
                 WhatsNewMenuItem()
             }
             CommandGroup(replacing: .newItem) {
+                Button("New Disc…") { machine?.newDisc() }
+                    .keyboardShortcut("n")
+                    .disabled(!(machine?.model.hasDiscInterface ?? false))
                 Button("Open Disc…") { machine?.openDisc() }
                     .keyboardShortcut("o")
                     .disabled(!(machine?.model.hasDiscInterface ?? false))

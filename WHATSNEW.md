@@ -12,6 +12,7 @@ won't build a release without one.
 ## 1.4
 
 - **Green and amber screens:** View ▸ Monitor puts the picture on a monochrome monitor with a green (P1) or amber (P3) phosphor, with any display style. Like the real thing, there's no colour grille, colours become shades by their brightness, and the phosphor glows on briefly.
+- **New Disc:** File ▸ New Disc… (⌘N) makes a blank disc, formatted and ready to save to: DFS on 40 or 80 tracks, single or double sided, or ADFS S, M or L. Give it a title and choose a drive to put it in.
 
 ## 1.3.1 — 22 October 2026
 
