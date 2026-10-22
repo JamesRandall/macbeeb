@@ -318,6 +318,18 @@ or ADFS's FORM leaves one: DFS on 40 or 80 tracks, single or double sided
 (.ssd/.dsd), or ADFS S, M or L (.adf/.adl). It has the title you give it
 (or the file's name), and goes in the drive you choose, ready to save to.
 
+File > Show Disc Contents (⇧⌘I) lists the files on the discs in the
+drives, DFS (both sides of a double-sided disc, as the BBC's drives 2 and 3)
+or ADFS (with its directories). Files drag out to Finder, each with a .inf
+file holding its BBC name, addresses and lock, and Mac files and folders drag
+in (named and addressed by their .inf files if they have them). Files can be
+renamed, readdressed, locked and deleted, ADFS directories made, and the
+title and boot option set, with undo. A change waits until the drive's been
+idle a few seconds, then goes in as if the disc were swapped for one with the
+change made, and back to its file: ADFS remembers the disc it last used for
+about 4 seconds, and after that sees a new disc ID and says "Disc changed"
+until *MOUNT, as with a real disc swapped.
+
 The drives sound as they work: the motor spinning up, running and down,
 the head stepping and seeking, from MAME's recordings of 5.25" drives (3.5"
 on the Compact), mixed in at the sound chip's rate as b2 does. Machine >

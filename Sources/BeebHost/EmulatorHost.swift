@@ -318,6 +318,30 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
     }
 
     /// Runs `body` on the emulation thread, without blocking the caller.
+    public enum DiscChange: Sendable {
+        case changed(before: DiscVolume, after: DiscVolume)
+        /// The drive's been used too recently: try again shortly.
+        case busy
+        case noDisc
+    }
+
+    /// What's on the disc in `drive`: nil if it's empty.
+    public func readVolume(drive: Int) async throws -> DiscVolume? {
+        try await performAsync { session in
+            guard let disc = session.machine.drives[drive].disc else { return nil }
+            return try DiscVolume(disc: disc)
+        }
+    }
+
+    /// Changes the files on the disc in `drive` (see HostSession.changeVolume).
+    public func changeVolume(drive: Int,
+                             _ change: @escaping @Sendable (inout DiscVolume) throws -> Void) async throws -> DiscChange {
+        try await performAsync { session in
+            guard let session = session as? HostSession else { return .noDisc }
+            return try session.changeVolume(drive: drive, change)
+        }
+    }
+
     public func performAsync<T: Sendable>(_ body: @escaping @Sendable (MachineSession) throws -> T) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
             send(.perform { session in
@@ -415,18 +439,57 @@ final class HostSession: MachineSession {
             return
         }
         do {
-            let disc = try Disc.fromImage(image, format: format)
-            if let onWrite {
-                disc.onTrackWritten = { [unowned disc] _, _ in
-                    if let bytes = try? disc.toImage(format) {
-                        onWrite(bytes)
-                    }
-                }
-            }
-            machine.insertDisc(disc, drive: drive)
+            insert(try Disc.fromImage(image, format: format), format: format, drive: drive, onWrite: onWrite)
         } catch {
             NSLog("MacBeeb: bad disc image: \(error)")
         }
+    }
+
+    /// Where each drive's disc is written back to, while it's still the
+    /// disc that was put in with it (an agent's load_disc puts others in
+    /// without).
+    private struct WriteBack {
+        weak var disc: Disc?
+        var format: Disc.ImageFormat
+        var write: @Sendable ([UInt8]) -> Void
+    }
+    private var writeBacks: [Int: WriteBack] = [:]
+
+    private func insert(_ disc: Disc, format: Disc.ImageFormat, drive: Int, onWrite: (@Sendable ([UInt8]) -> Void)?) {
+        if let onWrite {
+            disc.onTrackWritten = { [unowned disc] _, _ in
+                if let bytes = try? disc.toImage(format) {
+                    onWrite(bytes)
+                }
+            }
+            writeBacks[drive] = WriteBack(disc: disc, format: format, write: onWrite)
+        } else {
+            writeBacks[drive] = nil
+        }
+        machine.insertDisc(disc, drive: drive)
+    }
+
+    /// Changes the files on the disc in `drive`, as if it were swapped for
+    /// a disc with the change made (ADFS's with a new disc ID), once the
+    /// drive's idle. A disc put in with a write-back goes back to it.
+    func changeVolume(drive: Int, _ change: (inout DiscVolume) throws -> Void) throws -> EmulatorHost.DiscChange {
+        guard let old = machine.drives[drive].disc else { return .noDisc }
+        guard machine.discIsIdle(drive: drive) else { return .busy }
+        let before = try DiscVolume(disc: old)
+        var volume = before
+        try change(&volume)
+        if case .adfs(var adfs) = volume {
+            adfs.changeDiscID()
+            volume = .adfs(adfs)
+        }
+        let disc = try Disc.fromImage(volume.image, format: volume.format)
+        disc.writeProtected = old.writeProtected
+        let writeBack = writeBacks[drive].flatMap { $0.disc === old ? $0 : nil }
+        insert(disc, format: writeBack?.format ?? volume.format, drive: drive, onWrite: writeBack?.write)
+        if let writeBack, let bytes = try? disc.toImage(writeBack.format) {
+            writeBack.write(bytes)
+        }
+        return .changed(before: before, after: volume)
     }
 
     func startRecording(to url: URL, codec: VideoRecorder.Codec) throws {

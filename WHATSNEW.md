@@ -13,6 +13,7 @@ won't build a release without one.
 
 - **Green and amber screens:** View ▸ Monitor puts the picture on a monochrome monitor with a green (P1) or amber (P3) phosphor, with any display style. Like the real thing, there's no colour grille, colours become shades by their brightness, and the phosphor glows on briefly.
 - **New Disc:** File ▸ New Disc… (⌘N) makes a blank disc, formatted and ready to save to: DFS on 40 or 80 tracks, single or double sided, or ADFS S, M or L. Give it a title and choose a drive to put it in.
+- **Disc contents:** File ▸ Show Disc Contents (⇧⌘I) lists the files on a disc, DFS or ADFS. Drag files out to Finder, each with a .inf file holding its BBC name and addresses, or drag Mac files in. Rename, relock, readdress and delete files, make ADFS directories, and set the title and boot option, all with undo. On ADFS, type `*MOUNT` afterwards, as you would after swapping a real disc.
 
 ## 1.3.1 — 22 October 2026
 

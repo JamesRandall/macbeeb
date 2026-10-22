@@ -58,6 +58,11 @@ final class MachineController {
     @ObservationIgnored private(set) lazy var debugger = DebuggerModel(host: host)
     /// Set when the debugger stops the machine, so the window opens.
     var debuggerRequested = false
+    /// Set to open the disc contents window (the machine window opens it).
+    var discContentsRequested = false
+    /// Counts changes to the discs in the drives: a disc put in or taken
+    /// out, or written to by the BBC.
+    private(set) var discChanges = 0
     @ObservationIgnored private var lastDebugStop: StopReason?
     /// Why the debugger has stopped the machine, if it has.
     private(set) var debugStop: StopReason?
@@ -688,12 +693,17 @@ final class MachineController {
         }
         let format = Disc.ImageFormat(path: url.path) ?? .ssd
         let writable = FileManager.default.isWritableFile(atPath: url.path)
-        let onWrite: (@Sendable ([UInt8]) -> Void)? = writable ? { @Sendable (bytes: [UInt8]) in
-            DispatchQueue.global(qos: .utility).async {
-                try? Data(bytes).write(to: url, options: .atomic)
+        let noteWrite = noteDiscWrite
+        let onWrite: @Sendable ([UInt8]) -> Void = { bytes in
+            if writable {
+                DispatchQueue.global(qos: .utility).async {
+                    try? Data(bytes).write(to: url, options: .atomic)
+                }
             }
-        } : nil
+            noteWrite()
+        }
         host.send(.insertDisc(image: [UInt8](data), format: format, drive: drive, onWrite: onWrite))
+        discChanges += 1
         discNames[drive] = url.lastPathComponent
         if drive == 0 {
             bootDiscPath = url.standardizedFileURL.path
@@ -705,9 +715,19 @@ final class MachineController {
         }
     }
 
+    /// Tells the disc contents window, from any thread, that a disc's
+    /// been written to.
+    private var noteDiscWrite: @Sendable () -> Void {
+        { [weak self] in
+            Task { @MainActor in self?.discChanges += 1 }
+        }
+    }
+
     /// Puts one of the bundled discs in `drive`. Writes stay in memory.
     func insertBundledDisc(_ disc: BeebROMs.BundledDisc, drive: Int) {
-        host.send(.insertDisc(image: disc.data, format: disc.format, drive: drive, onWrite: nil))
+        let noteWrite = noteDiscWrite
+        host.send(.insertDisc(image: disc.data, format: disc.format, drive: drive, onWrite: { _ in noteWrite() }))
+        discChanges += 1
         discNames[drive] = disc.rawValue
         if drive == 0 {
             bootDiscPath = nil
@@ -716,6 +736,7 @@ final class MachineController {
 
     func ejectDisc(drive: Int) {
         host.send(.insertDisc(image: nil, format: .ssd, drive: drive, onWrite: nil))
+        discChanges += 1
         discNames[drive] = nil
         if drive == 0 {
             bootDiscPath = nil
@@ -783,6 +804,7 @@ final class MachineController {
             coprocessor = file.configuration.coprocessor
             discInterface = file.configuration.discInterface
             discNames = [:]
+            discChanges += 1
             bootDiscPath = nil
             startupDiscName = nil
             tapeName = file.snapshot.hasTape ? "Tape" : nil

@@ -57,6 +57,10 @@ struct MacBeebApp: App {
                     .disabled(!(machine?.model.hasDiscInterface ?? false))
                 }
                 Divider()
+                Button("Show Disc Contents") { machine?.discContentsRequested = true }
+                    .keyboardShortcut("i", modifiers: [.command, .shift])
+                    .disabled(!(machine?.model.hasDiscInterface ?? false))
+                Divider()
                 Button("Eject Drive 0") { machine?.ejectDisc(drive: 0) }
                     .disabled(machine?.discNames[0] == nil)
                 Button("Eject Drive 1") { machine?.ejectDisc(drive: 1) }
@@ -216,6 +220,13 @@ struct MacBeebApp: App {
         }
         .defaultSize(width: 1100, height: 760)
 
+        WindowGroup("Disc Contents", id: DiscContentsWindow.windowID, for: UUID.self) { $id in
+            if let id, let machine = MachineController.all[id] {
+                DiscContentsWindow(machine: machine)
+            }
+        }
+        .defaultSize(width: 620, height: 520)
+
         Window("Connect an AI Agent", id: MCPSetupView.windowID) {
             MCPSetupView()
         }
@@ -292,6 +303,12 @@ struct MachineWindow: View {
             .onAppear {
                 if WhatsNew.shouldShowOnLaunch() {
                     openWindow(id: WhatsNewView.windowID)
+                }
+            }
+            .onChange(of: machine.discContentsRequested) {
+                if machine.discContentsRequested {
+                    machine.discContentsRequested = false
+                    openWindow(id: DiscContentsWindow.windowID, value: machine.id)
                 }
             }
             .sheet(isPresented: $machine.showingTimeline) {

@@ -218,3 +218,22 @@ struct DiscEditingTests {
         #expect(after.contents(of: after.file(named: "NOTE")!) == Array("FROM A MAC\r".utf8))
     }
 }
+
+struct InfFileTests {
+    @Test func readsTheUsualForms() throws {
+        let a = try #require(InfFile(text: "$.ELITE   FF1900 FF8023 001234 L CRC=ABCD\n"))
+        #expect(a == InfFile(name: "$.ELITE", loadAddress: 0xFFFF_1900, executionAddress: 0xFFFF_8023,
+                             length: 0x1234, locked: true))
+        let b = try #require(InfFile(text: "Loader 00003000 00003000 Locked"))
+        #expect(b.loadAddress == 0x3000 && b.length == nil && b.locked)
+        let c = try #require(InfFile(text: "W.DATA 30000 0"))
+        #expect(c.loadAddress == 0x3_0000 && c.executionAddress == 0 && !c.locked)
+        #expect(InfFile(text: "  \n") == nil)
+    }
+
+    @Test func writesWhatItReads() {
+        let inf = InfFile(name: "$.PROG", loadAddress: 0xFFFF_1900, executionAddress: 0xFFFF_8023, length: 300, locked: true)
+        #expect(inf.text == "$.PROG    FFFF1900 FFFF8023 0000012C L\n")
+        #expect(InfFile(text: inf.text) == inf)
+    }
+}

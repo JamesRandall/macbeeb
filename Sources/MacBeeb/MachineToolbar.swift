@@ -39,6 +39,7 @@ struct MachineToolbar: CustomizableToolbarContent {
                 Button("Insert in Drive 0…") { machine.openDisc(drive: 0, boot: false) }
                 Button("Insert in Drive 1…") { machine.openDisc(drive: 1, boot: false) }
                 Button("New Disc…") { machine.newDisc() }
+                Button("Show Disc Contents") { machine.discContentsRequested = true }
                 Divider()
                 Button("Eject Drive 0") { machine.ejectDisc(drive: 0) }
                     .disabled(machine.discNames[0] == nil)
