@@ -28,8 +28,18 @@ struct DiscContentsWindow: View {
                 Divider()
             }
             if let problem = model.problem {
-                ContentUnavailableView(problem, systemImage: "opticaldiscdrive")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ContentUnavailableView {
+                    Label(problem, systemImage: "opticaldiscdrive")
+                } actions: {
+                    if machine.discNames[model.drive] == nil {
+                        HStack {
+                            Button("New Disc…") { machine.newDisc(drive: model.drive) }
+                                .buttonStyle(.borderedProminent)
+                            Button("Insert Disc…") { machine.openDisc(drive: model.drive, boot: false) }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 DiscFileTable(model: model, onInfo: { editing = $0 })
             }

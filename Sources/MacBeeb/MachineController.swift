@@ -655,8 +655,11 @@ final class MachineController {
     /// File > New Disc…: saves a blank, formatted disc image where the user
     /// says, and puts it in the drive they choose (without booting it:
     /// there's nothing on it to boot).
-    func newDisc() {
-        let empty = [0, 1].filter { discNames[$0] == nil }
+    ///
+    /// `drive`: the drive to offer to put it in, rather than the first
+    /// empty one.
+    func newDisc(drive: Int? = nil) {
+        let empty = drive.map { [$0] } ?? [0, 1].filter { discNames[$0] == nil }
         guard let choice = NewDiscPanel(model: model, emptyDrives: empty).run() else { return }
         do {
             try Data(choice.kind.image(title: choice.title)).write(to: choice.url, options: .atomic)
