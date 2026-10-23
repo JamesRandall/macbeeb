@@ -85,6 +85,7 @@ enum Guide {
     static let order: [(String, String)] = [
         ("README", "book"),
         ("sideways-ram", "memorychip"),
+        ("watford-shadow-ram", "square.2.layers.3d"),
         ("developer-reference", "chevron.left.forwardslash.chevron.right"),
     ]
 

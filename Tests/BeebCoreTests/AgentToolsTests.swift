@@ -300,6 +300,21 @@ struct AgentHardwareToolsTests {
         #expect(output.contains("Hello from sideways RAM bank 13"), "\(output)")
     }
 
+    @Test func watfordBoardOverMCP() {
+        let (tools, _) = modelBTools()
+        #expect(!tools.call("power_cycle", arguments: ["memory_board": "watford_32k"]).isError)
+        let hardware = support.text(tools.call("get_hardware", arguments: [:]))
+        #expect(hardware.contains("controller ROM: Shadow RAM OS 2.40 (bundled) in bank 13, SHA-256 a2e7c05f"), "\(hardware)")
+        #expect(hardware.contains("watford latch:"), "\(hardware)")
+        let himem = support.text(tools.call("run_command", arguments: ["text": "MODE 1:PRINT ~HIMEM"]))
+        #expect(himem.contains("8000"), "\(himem)")
+        _ = tools.call("run_command", arguments: ["text": "*FX34,1"])
+        _ = tools.call("run_command", arguments: ["text": "?&5000=&42"])
+        #expect(support.text(tools.call("peek", arguments: ["address": "&5000", "length": 1, "space": "board"])).contains("5000  42"))
+        #expect(!support.text(tools.call("peek", arguments: ["address": "&5000", "length": 1, "space": "main"])).contains("5000  42"))
+        #expect(support.text(tools.call("memory_regions", arguments: [:])).contains("Watford board RAM"))
+    }
+
     @Test func errorsExplainThemselves() throws {
         let (tools, _) = modelBTools()
         let rom = Bundle.module.resourceURL!.appendingPathComponent("Resources/expansions/hello.rom").path

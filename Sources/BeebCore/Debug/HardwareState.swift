@@ -186,6 +186,14 @@ extension BBCMicro {
         guard expansions.board != .none else { return nil }
         var rows = [("Board", expansions.board.displayName),
                     ("ROMSEL (read and write)", "\(hex(romsel)) (bank \(romsel & 0x0F))")]
+        if watfordFitted {
+            rows.append(("Watford latch", watfordMapping.description))
+            rows.append(("Writes to &FFFD", "\(watfordFFFDWrites) (no known effect)"))
+            rows.append(("Video reads", "main RAM, always"))
+        }
+        if let bank = expansions.board.controllerROMBank {
+            rows.append(("Controller ROM", sidewaysSlots[bank].header.map { "\($0.name), bank \(bank)" } ?? "missing (bank \(bank))"))
+        }
         for bank in expansions.sidewaysRAMBanks {
             let slot = sidewaysSlots[bank]
             rows.append(("Bank \(bank) (RAM)", slot.header.map { "ROM image: \($0.name)" } ?? "no ROM image"))

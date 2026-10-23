@@ -23,12 +23,17 @@ extension BBCMicro {
         case sidewaysRAM16
         /// Two 16K banks: a BeebMaster-style 32K module.
         case sidewaysRAM32
+        /// Watford Electronics' 32K RAM board: shadow RAM for &3000-&7FFF
+        /// (or the whole 32K), switched by writes to &FFFC-&FFFF, with its
+        /// ROM (Shadow RAM OS) in a motherboard socket.
+        case watford32K
 
         public var displayName: String {
             switch self {
             case .none: "None (stock Model B)"
             case .sidewaysRAM16: "Sideways RAM 16K"
             case .sidewaysRAM32: "Sideways RAM 32K"
+            case .watford32K: "Watford Electronics 32K Shadow RAM"
             }
         }
 
@@ -38,10 +43,21 @@ extension BBCMicro {
             case .none: 0
             case .sidewaysRAM16: 0x4000
             case .sidewaysRAM32: 0x8000
+            case .watford32K: 0x8000
             }
         }
 
         public var isSidewaysRAM: Bool { self == .sidewaysRAM16 || self == .sidewaysRAM32 }
+
+        /// The bank its controller ROM goes in, if it has one.
+        public var controllerROMBank: Int? {
+            switch self {
+            case .none, .sidewaysRAM16, .sidewaysRAM32: nil
+            // The manual: the DFS in the lowest-priority socket and the
+            // board's ROM next to it, BASIC in the highest.
+            case .watford32K: 13
+            }
+        }
     }
 
     /// The Model B's expansions. On other models it's ignored.
@@ -65,7 +81,7 @@ extension BBCMicro {
         /// The sideways RAM banks the board provides.
         public var sidewaysRAMBanks: [Int] {
             switch board {
-            case .none: []
+            case .none, .watford32K: []
             case .sidewaysRAM16: [sidewaysRAMSocket]
             case .sidewaysRAM32: [sidewaysRAMSocket, sidewaysRAMSocket - secondBankBelow]
             }
@@ -92,6 +108,37 @@ extension BBCMicro {
             sidewaysRAMSocket = try c.decodeIfPresent(Int.self, forKey: .sidewaysRAMSocket) ?? 13
             secondBankBelow = try c.decodeIfPresent(Int.self, forKey: .secondBankBelow) ?? 4
         }
+    }
+
+    /// What the Watford board's latch maps, set by the address of a write
+    /// to &FFFC-&FFFF (the data doesn't matter). MAME's we32kram.cpp and
+    /// the board's manual ("Direct control").
+    public enum WatfordMapping: UInt8, Codable, Sendable {
+        /// &FFFC: the board's RAM for all of &0000-&7FFF.
+        case all = 0
+        /// &FFFE: the BBC's own RAM.
+        case bbc = 2
+        /// &FFFF: the board's RAM for &3000-&7FFF, the BBC's below.
+        case upper = 3
+
+        public var description: String {
+            switch self {
+            case .all: "board RAM for &0000–&7FFF (&FFFC)"
+            case .bbc: "BBC RAM (&FFFE)"
+            case .upper: "board RAM for &3000–&7FFF (&FFFF)"
+            }
+        }
+    }
+
+    /// An expansion board's latches, for save states. Versioned: a field
+    /// added later is optional, so older states still load.
+    struct ExpansionState: Codable, Sendable {
+        static let currentVersion = 1
+        var version = Self.currentVersion
+        var watfordMapping: WatfordMapping?
+        /// Writes to &FFFD seen (the Watford board decodes it, but what it
+        /// does isn't known).
+        var watfordFFFDWrites: Int?
     }
 
     /// One of the sixteen sideways banks, as the hardware has it.
@@ -168,6 +215,8 @@ extension BBCMicro {
             let owner: String
             if boardBanks.contains(bank) {
                 owner = board == .sidewaysRAM32 ? "32K sideways RAM module" : "16K sideways RAM module"
+            } else if board.controllerROMBank == bank && kind == .rom {
+                owner = "\(board == .watford32K ? "Watford board" : "Board")'s ROM, in a motherboard socket"
             } else if model == .modelB || model == .modelA {
                 owner = (12...15).contains(bank) ? "Motherboard socket" : "Not fitted"
             } else {

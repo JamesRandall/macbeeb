@@ -1,5 +1,6 @@
 import BeebCore
 import BeebHost
+import BeebROMs
 import Foundation
 
 /// The machine's hardware: what's fitted, the sideways banks, and loading
@@ -7,7 +8,7 @@ import Foundation
 extension AgentTools {
     /// Agents' names for the memory boards.
     static let agentBoards: [String: BBCMicro.MemoryBoard] = [
-        "none": .none, "sideways_ram_16": .sidewaysRAM16, "sideways_ram_32": .sidewaysRAM32,
+        "none": .none, "sideways_ram_16": .sidewaysRAM16, "sideways_ram_32": .sidewaysRAM32, "watford_32k": .watford32K,
     ]
 
     static func agentName(_ board: BBCMicro.MemoryBoard) -> String {
@@ -59,6 +60,22 @@ extension AgentTools {
                     }
                     lines.append(board)
                     lines.append("memory: 32K main RAM\(e.board.extraRAM > 0 ? " + \(e.board.extraRAM / 1024)K on the board" : "")")
+                    if let bank = e.board.controllerROMBank {
+                        let rom = m.sidewaysBankContents(bank).map { Array($0.prefix(Firmware.standard(for: e.board)?.size ?? 0x4000)) }
+                        let identity = rom.map { Firmware.identify($0, for: e.board) }
+                        let described: String = switch identity {
+                        case .known(let f)?: "\(f.name) \(f.version)\(f.isBundled ? " (bundled)" : "")"
+                        case .unknown?: "an unknown version"
+                        default: "missing"
+                        }
+                        lines.append("controller ROM: \(described) in bank \(bank), SHA-256 \(rom.map(Firmware.sha256) ?? "-")")
+                    }
+                    if m.watfordFitted {
+                        lines.append("watford latch: \(m.watfordMapping.description); board RAM is peek space \"board\" (&0000-&7FFF); the video always shows main RAM")
+                    }
+                    if let problem = c.expansionProblem {
+                        lines.append("problem: \(problem)")
+                    }
                 } else {
                     lines.append("memory board: none (expansion boards fit the Model B only)")
                 }

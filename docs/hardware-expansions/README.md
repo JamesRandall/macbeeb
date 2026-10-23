@@ -22,6 +22,7 @@ To take it out again, choose **None (stock Model B)** and restart.
 | None (stock Model B) | Nothing: the Model B as it came | |
 | Sideways RAM 16K | One 16K bank of RAM in a ROM socket | [Sideways RAM](sideways-ram.md) |
 | Sideways RAM 32K | Two 16K banks on one module | [Sideways RAM](sideways-ram.md) |
+| Watford Electronics 32K Shadow RAM | 32K of shadow RAM, with its ROM (Shadow RAM OS 2.40) | [Watford Shadow RAM](watford-shadow-ram.md) |
 
 Only one memory board can be fitted at a time: on a real BBC they all plug
 into the same places. Expansion boards are for the Model B. The B+ and the
@@ -41,7 +42,9 @@ next Break. It can also hold data.
 
 **Shadow RAM** gives programs back the memory the screen uses. Without it,
 MODE 0, 1 or 2 takes 20K for the screen, leaving under 6K for a BASIC
-program with a DFS. Shadow RAM boards aren't in MacBeeb yet.
+program with a DFS. A shadow RAM board puts more RAM at the same addresses
+as the screen: programs use the board's RAM, and the screen stays in the
+BBC's. Its ROM switches between them as the OS draws.
 
 ## Restarting
 
@@ -61,6 +64,9 @@ that keeps memory) works too.
 | Power Cycle (⇧⌘R) | Cleared | Cleared, then any power-on images loaded | Kept |
 | A different board | Cleared | Cleared | Changed |
 
+Boards with their own ROM may react to these too. The Watford board, for
+example, turns itself off on Ctrl-Break, as the real one did.
+
 MacBeeb remembers the board, like the model, for new windows and next time.
 Save states (**File ▸ Save State…**) include the board and everything in
 its RAM. Games from the Game Library always start on a stock Model B.
@@ -79,5 +85,7 @@ AI agents can fit boards and load sideways RAM with MacBeeb's MCP tools
   reach the four motherboard sockets, because the BBC only decodes part of
   ROMSEL. MacBeeb doesn't model that: each bank answers only to its own
   number, as on a machine with a ROM board.
-- Shadow RAM boards (Watford Electronics 32K, Aries B32) and VideoNuLA are
-  being added. They'll appear here when they're done and tested.
+- Boards with a ROM (the Watford board) come with a tested copy of their
+  real ROM, checked by its hash. You can use your own dump instead.
+- The Aries B32 and B12 and VideoNuLA are being added. They'll appear here
+  when they're done and tested.

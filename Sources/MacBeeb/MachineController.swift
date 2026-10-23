@@ -56,6 +56,9 @@ final class MachineController {
     private static let expansionsDefaultsKey = "MacBeebExpansions"
     /// Files put into sideways RAM banks at power on, by bank.
     private(set) var powerOnImagePaths: [Int: String]
+    /// Controller ROMs the user has chosen in place of the bundled ones,
+    /// by board.
+    private(set) var controllerROMPaths: [BBCMicro.MemoryBoard: String]
     private static let powerOnImagesDefaultsKey = "MacBeebSidewaysPowerOnImages"
     /// Counts changes to the hardware (a power cycle with new hardware, or
     /// sideways RAM loaded or cleared), for the Hardware Expansions window.
@@ -115,9 +118,12 @@ final class MachineController {
         self.expansions = expansions
         let powerOnImagePaths = Self.savedPowerOnImagePaths
         self.powerOnImagePaths = powerOnImagePaths
+        let controllerROMPaths = Self.savedControllerROMPaths
+        self.controllerROMPaths = controllerROMPaths
         let configuration = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
                                                    discInterface: discInterface, expansions: expansions,
-                                                   sidewaysImages: Self.images(at: powerOnImagePaths))
+                                                   sidewaysImages: Self.images(at: powerOnImagePaths),
+                                                   controllerROM: Self.controllerROM(for: expansions.board, paths: controllerROMPaths))
         let discDriveSounds = UserDefaults.standard.object(forKey: Self.discDriveSoundsDefaultsKey) as? Bool ?? true
         self.discDriveSounds = discDriveSounds
         host = EmulatorHost(discDriveSounds: Self.discDriveSounds(for:), discDriveSoundsOn: discDriveSounds) {
@@ -545,6 +551,7 @@ final class MachineController {
     // For the hardware extension (another file).
     func setExpansionsValue(_ new: BBCMicro.Expansions) { expansions = new }
     func setPowerOnImagePathsValue(_ new: [Int: String]) { powerOnImagePaths = new }
+    func setControllerROMPathsValue(_ new: [BBCMicro.MemoryBoard: String]) { controllerROMPaths = new }
     func noteHardwareChanged() { hardwareChanges += 1 }
     /// Power cycles into the hardware as now set.
     func restartWithHardware() { changeMachine() }
@@ -552,7 +559,8 @@ final class MachineController {
     private func changeMachine() {
         let configuration = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
                                                    discInterface: discInterface, expansions: expansions,
-                                                   sidewaysImages: Self.images(at: powerOnImagePaths))
+                                                   sidewaysImages: Self.images(at: powerOnImagePaths),
+                                                   controllerROM: Self.controllerROM(for: expansions.board, paths: controllerROMPaths))
         hardwareChanges += 1
         // As BBCMicro.insertDiscs: an empty drive 0, or one with the old
         // machine's system disc, gets the new machine's.

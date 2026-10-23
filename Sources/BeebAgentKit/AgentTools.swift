@@ -200,7 +200,7 @@ public final class AgentTools: Sendable {
                                  "disc_interface": ["type": "string", "enum": ["intel8271", "acorn1770", "watfordDDB2", "watfordDDB3", "opus"],
                                                     "description": "Model B only: the disc interface and its filing system (default: keep as is)"] as JSONValue,
                                  "memory_board": ["type": "string", "enum": .array(agentBoards.keys.sorted().map { .string($0) }),
-                                                  "description": "Model B only: the memory expansion board (default: keep as is). none is the stock Model B; sideways_ram_16 and sideways_ram_32 are a 16K or 32K sideways RAM module in a motherboard socket. get_hardware shows what's fitted"] as JSONValue,
+                                                  "description": "Model B only: the memory expansion board (default: keep as is). none is the stock Model B; sideways_ram_16 and sideways_ram_32 are a 16K or 32K sideways RAM module in a motherboard socket; watford_32k is Watford Electronics' 32K shadow RAM board with its ROM (Shadow RAM OS 2.40) in bank 13. get_hardware shows what's fitted"] as JSONValue,
                                  "sideways_ram_socket": prop("integer", "Sideways RAM boards: the socket (bank) the module's in, 12 or 13 (default 13)"),
                                  "second_bank_below": prop("integer", "sideways_ram_32: the second bank is 4 (default) or 8 below the first, as the module's lead is wired")])
         )) { context, args in

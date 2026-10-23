@@ -28,6 +28,9 @@ public enum BeebROMs {
         case mos320Edit = "mos320-edit"
         case mos320ViewSheet = "mos320-viewsht"
         case mos320DFS = "mos320-dfs"
+        /// Expansion boards' controller ROMs (see Firmware).
+        case watford32KRAM240 = "watford-32kram-240"
+        case ariesB32100 = "aries-b32-100"
     }
 
     /// The resource bundle. In an app it's in Contents/Resources (SwiftPM's
@@ -150,7 +153,8 @@ extension BeebROMs {
                                      discInterface: BBCMicro.DiscInterface = .intel8271,
                                      systemDisc: Bool = true,
                                      expansions: BBCMicro.Expansions = .none,
-                                     sidewaysImages: [Int: [UInt8]] = [:]) -> BBCMicro.Configuration {
+                                     sidewaysImages: [Int: [UInt8]] = [:],
+                                     controllerROM: [UInt8]? = nil) -> BBCMicro.Configuration {
         var configuration = standardConfiguration(for: model)
         configuration.coprocessor = coprocessor
         if model == .modelB {
@@ -176,6 +180,11 @@ extension BeebROMs {
             if systemDisc, let disc = BundledDisc.system(for: coprocessor) {
                 configuration.startupDisc = .init(name: disc.rawValue, image: disc.data, format: disc.format)
             }
+        }
+        // A board's controller ROM: the bundled one, or the user's own.
+        if let bank = configuration.fittedExpansions.board.controllerROMBank,
+           let firmware = Firmware.standard(for: configuration.fittedExpansions.board) {
+            configuration.sidewaysROMs[bank] = controllerROM ?? firmware.bundledData
         }
         // Only into RAM, and never over a ROM.
         let ramBanks = configuration.sidewaysRAMBanks.union(configuration.fittedExpansions.sidewaysRAMBanks)

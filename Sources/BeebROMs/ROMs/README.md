@@ -19,3 +19,21 @@ included, as b2 and jsbeeb do, so the emulator works out of the box.
 | armeval-100.rom | ARM Evaluation System supervisor ROM 1.00 | BeebEm (ARMeval_100.rom) |
 | master-turbo-parasite.rom | Master Turbo 65C102 Co-Processor Tube OS 1.20 | b2 (MasterTurboParasite.rom) |
 | mos320-*.rom | Master 128 MOS 3.20 set: MOS, Terminal (F), View (E), ADFS (D), BASIC 4 (C), Edit (B), ViewSheet (A), DFS 2.24 (9) | b2 |
+| watford-32kram-240.rom | Watford Electronics 32K RAM board: Shadow RAM OS 2.40, (C)1985 Ian Smith (8K) | mdfs.net (WERAMv240); = MAME's we32kram_v2.40.rom |
+| aries-b32-100.rom | Aries B32: ARIES-B32 1.00, (C)1985 David Barnett & Chris Jordan (16K) | mdfs.net (Aries32v10); = MAME's aries-b32_v2.2.rom |
+
+## Expansion boards' controller ROMs
+
+These two come from J.G. Harston's archive (mdfs.net/System/ROMs/Display/ShadowRAM/)
+and match the images MAME uses byte for byte (SHA-1 below). They're bundled
+so the boards work without hunting for firmware, on the same basis as the
+ROMs above, and the user can replace them. **Redistribution permission
+hasn't been found** for either (the Aries manual forbids copying its ROM),
+so this is recorded here for review. `Firmware.swift` holds the known
+versions and their hashes.
+
+| File | SHA-1 | SHA-256 | Status |
+| --- | --- | --- | --- |
+| watford-32kram-240.rom | 0a5efb084eb1ae353b9c79c026e9e26cd7695293 | a2e7c05f809e62faf980096459165fa356cf7c253265131ec68a91bcd2f8bfcb | Copyright Watford Electronics/Ian Smith; permission not found |
+| aries-b32-100.rom | 466e3b68f1a8e0287ae095cb3c16dac6afc89dcb | 8f1e288c08a706f76a43bd8ae296bfb7dce0a3f6244d8f95831261be97a78051 | Copyright Chris Jordan and David Barnett; permission not found |
+

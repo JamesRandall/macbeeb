@@ -1,0 +1,10 @@
+10 REM Needs more memory than MODE 1 leaves on a stock Model B
+20 MODE 1
+30 PRINT "HIMEM is &";~HIMEM
+40 DIM P%(2500)
+50 FOR I%=0 TO 2500:P%(I%)=I%*I%:NEXT
+60 GCOL 0,1
+70 FOR A=0 TO 2*PI STEP PI/45
+80 MOVE 640,512:DRAW 640+460*COS(A),512+460*SIN(A)
+90 NEXT
+100 PRINT "Free for programs: ";HIMEM-TOP-4*2500;" bytes"

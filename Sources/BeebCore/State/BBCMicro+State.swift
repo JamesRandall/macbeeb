@@ -56,6 +56,9 @@ extension BBCMicro {
         var z80: Z80SecondProcessor.State?
         var master512: Master512.State?
         var arm: ARMSecondProcessor.State?
+        /// An expansion board's latches (nil in older snapshots, and on a
+        /// machine without one).
+        var expansion: ExpansionState?
 
         /// Whether the snapshot has a tape in the recorder.
         public var hasTape: Bool { tape != nil }
@@ -81,6 +84,7 @@ extension BBCMicro {
                  secondProcessor: secondProcessor.map(SecondProcessorState.init), z80: z80Processor?.state,
                  master512: master512?.state,
                  arm: armProcessor?.state,
+                 expansion: expansionSnapshot,
                  crtcLastOutput: crtcLastOutput,
                  ic15Byte: ic15Byte, unit: unit)
     }
@@ -114,6 +118,7 @@ extension BBCMicro {
         }
         romsel = s.romsel
         acccon = s.acccon
+        restoreExpansion(s.expansion)
         updatePaging()
         pageTable = s.pageTable
         lastVideoByte = s.lastVideoByte
@@ -167,6 +172,23 @@ extension BBCMicro {
         if let rewinder, !rewinder.isReplaying {
             rewinder.reset()
         }
+    }
+}
+
+extension BBCMicro {
+    var expansionSnapshot: ExpansionState? {
+        guard configuration.fittedExpansions.board != .none else { return nil }
+        var state = ExpansionState()
+        if watfordFitted {
+            state.watfordMapping = watfordMapping
+            state.watfordFFFDWrites = watfordFFFDWrites
+        }
+        return state
+    }
+
+    func restoreExpansion(_ state: ExpansionState?) {
+        watfordMapping = state?.watfordMapping ?? .bbc
+        watfordFFFDWrites = state?.watfordFFFDWrites ?? 0
     }
 }
 

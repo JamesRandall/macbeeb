@@ -19,6 +19,9 @@ public enum MemorySpace: Hashable, Sendable, Codable, CustomStringConvertible {
     case osROM
     /// The second processor's 64K.
     case parasiteRAM
+    /// A Model B expansion board's own RAM (the Watford board's 32K), at
+    /// the addresses it can stand in for (&0000-&7FFF).
+    case boardRAM
 
     public var description: String {
         switch self {
@@ -30,6 +33,7 @@ public enum MemorySpace: Hashable, Sendable, Codable, CustomStringConvertible {
         case .sidewaysBank(let bank): "bank\(String(bank, radix: 16, uppercase: true))"
         case .osROM: "os"
         case .parasiteRAM: "parasite_ram"
+        case .boardRAM: "board"
         }
     }
 
@@ -45,6 +49,7 @@ public enum MemorySpace: Hashable, Sendable, Codable, CustomStringConvertible {
         case "hazel": self = .hazel
         case "os", "mos": self = .osROM
         case "parasite_ram": self = .parasiteRAM
+        case "board": self = .boardRAM
         default:
             for prefix in ["bank", "rom"] where lower.hasPrefix(prefix) {
                 if let bank = Int(lower.dropFirst(prefix.count), radix: 16), (0..<16).contains(bank) {
@@ -220,6 +225,9 @@ extension BBCMicro {
         if model == .master128 {
             regions.append(MemoryRegion(space: .hazel, name: "HAZEL", base: 0xC000, size: 0x2000, isROM: false))
         }
+        if watfordFitted {
+            regions.append(MemoryRegion(space: .boardRAM, name: "Watford board RAM", base: 0, size: 0x8000, isROM: false))
+        }
         for bank in 0..<16 where sidewaysBanks[bank] != nil {
             let ram = sidewaysRAMBanks.contains(bank)
             regions.append(MemoryRegion(space: .sidewaysBank(bank),
@@ -245,6 +253,8 @@ extension BBCMicro {
             return (0..<0x8000).contains(address) ? ram + address : nil
         case .shadowRAM:
             return model != .modelB && (0x3000..<0x8000).contains(address) ? ram + Self.shadowOffset + address : nil
+        case .boardRAM:
+            return watfordFitted && (0..<0x8000).contains(address) ? ram + Self.shadowOffset + address : nil
         case .andy:
             let size = model == .bPlus ? 0x3000 : model == .master128 ? 0x1000 : 0
             return (0x8000..<0x8000 + size).contains(address) ? ram + Self.andyOffset + address - 0x8000 : nil

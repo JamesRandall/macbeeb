@@ -105,3 +105,34 @@ against the known hashes.
 Each phase: core, tests (unit, in-emulator with the real ROMs, picture
 hashes), save states, debugger and MCP, the app's Hardware Expansions
 window, and its guide.
+
+## Phase 1 findings: sideways RAM
+
+- OS 1.20 scans the sideways banks on every Break, not only on a hard reset:
+  a ROM image put into RAM is found after a plain Break (tested).
+- DFS 2.26's SRAM 1.05 (`*SRLOAD` and the rest) works with BeebMaster-style
+  RAM, written whenever selected. It's the in-guest loader for the tests.
+- Not modelled: the Model B's partial ROMSEL decode (banks 0-11 aliasing
+  the four sockets). Stock MacBeeb never modelled it, and adding it would
+  change the stock machine.
+
+## Phase 2 findings: Watford
+
+- The board is on from power on (the ROM's doing; MAME's latch starts at
+  BBC RAM, as MacBeeb's does). `*HELP RAMSTATUS` reports "RAM board active",
+  PAGE &1A00 (a page of workspace), HIMEM &8000.
+- At the prompt the latch is at BBC RAM (&FFFE): the ROM switches to the
+  board only while a program runs. The UI's live latch shows this.
+- Ctrl-Break turns the board off ("On CTRL-BREAK the whole system is
+  disabled and no workspace is claimed"): HIMEM &3000 and PAGE &1900 until
+  `*RAMON` and Break. Plain Break keeps its state. Both tested.
+- &FFFD: Shadow RAM OS 2.40 never wrote it in any test (counted). Left
+  unimplemented and documented.
+- ROM order: the manual suggests the DFS in the lowest-priority socket and
+  the board's ROM next to it. MacBeeb keeps the DFS in 14 and the board's ROM
+  in 13. SAVE and LOAD of a program past &3000 in MODE 1 were tested with
+  both orders, and both work.
+- Software-visible results: a 16K array in MODE 1 with the drawing unchanged
+  by frame hash; `*FX34` data areas land in the right physical RAM; the
+  guide's example program fails with "DIM space" on a stock Model B and runs
+  with the board.

@@ -257,6 +257,13 @@ public final class BBCMicro {
     /// Offset of the RAM the video hardware reads: shadow when ACCCON D is
     /// set.
     var videoRAMOffset = 0
+    /// A Watford 32K RAM board is fitted: its RAM is the shadow area of
+    /// `ram` (unused otherwise on the Model B), mapped by `watfordMapping`.
+    /// The video always reads main RAM.
+    public let watfordFitted: Bool
+    public internal(set) var watfordMapping = WatfordMapping.bbc
+    /// Writes to &FFFD, which the Watford board decodes to no known effect.
+    public internal(set) var watfordFFFDWrites = 0
     /// The Master's data bus isn't buffered: unmapped reads see the last
     /// byte the video fetched.
     var lastVideoByte: UInt8 = 0
@@ -397,6 +404,19 @@ public final class BBCMicro {
             expansions = try c.decodeIfPresent(Expansions.self, forKey: .expansions) ?? .none
         }
 
+        /// What's wrong with the expansions, if anything: bad wiring, or a
+        /// board without its controller ROM (which does nothing on its own).
+        public var expansionProblem: String? {
+            let e = fittedExpansions
+            if let problem = e.problem { return problem }
+            if let bank = e.board.controllerROMBank {
+                guard let rom = sidewaysROMs[bank], ROMHeader(Array(rom.prefix(0x100))) != nil else {
+                    return "The \(e.board.displayName) needs its ROM in bank \(bank)"
+                }
+            }
+            return nil
+        }
+
         /// The expansions in effect: the Model B's, or none.
         public var fittedExpansions: Expansions {
             model == .modelB ? expansions : .none
@@ -419,6 +439,7 @@ public final class BBCMicro {
         precondition(configuration.os.count == 16384, "OS ROM must be 16K")
         self.configuration = configuration
         model = configuration.model
+        watfordFitted = configuration.fittedExpansions.board == .watford32K
         let master = model.isMaster
         cpu = M6502(variant: master ? .cmos : .nmos)
 
@@ -542,6 +563,10 @@ public final class BBCMicro {
         // MOS there, not HAZEL.
         let shadowMOS = hazel ? shadowAll : shadowVDU
         let pagedRAMPages = bPlus ? 3 : 1
+        // The Watford board: its RAM in place of all main RAM, or of
+        // &3000-&7FFF.
+        let boardAll = watfordFitted && watfordMapping == .all
+        let boardUpper = watfordFitted && watfordMapping != .bbc
 
         for table in [0, 16] {
             let shadow = table == 0 ? shadowAll : shadowMOS
@@ -550,14 +575,14 @@ public final class BBCMicro {
                 var write: UnsafeMutablePointer<UInt8>?
                 switch page {
                 case 0..<3:
-                    read = ram + page << 12
+                    read = ram + (boardAll ? Self.shadowOffset : 0) + page << 12
                     write = read
                 case 4..<8 where model == .modelA:
                     // 16K: A14 isn't decoded, so the upper 16K is the lower.
                     read = ram + (page - 4) << 12
                     write = read
                 case 3..<8:
-                    read = ram + (shadow ? Self.shadowOffset : 0) + page << 12
+                    read = ram + (shadow || boardUpper ? Self.shadowOffset : 0) + page << 12
                     write = read
                 case 8..<12 where pagedRAM && page - 8 < pagedRAMPages:
                     read = ram + Self.andyOffset + (page - 8) << 12
@@ -776,6 +801,22 @@ public final class BBCMicro {
                 unmappedIOWriteObserver?(address, value)
             }
         }
+    }
+
+    /// A write to &FFFC-&FFFF with the Watford board fitted: the address
+    /// sets the mapping (the OS ROM there ignores the write itself).
+    func watfordControl(_ address: UInt16) {
+        switch address & 3 {
+        case 0: watfordMapping = .all
+        case 2: watfordMapping = .bbc
+        case 3: watfordMapping = .upper
+        default:
+            // &FFFD: decoded by the board, but nothing documents what it
+            // does (MAME ignores it). Counted, so it shows if it matters.
+            watfordFFFDWrites += 1
+            return
+        }
+        updatePaging()
     }
 
     /// Whether the host sees the Tube: always on the B and B+; on the
@@ -1163,6 +1204,9 @@ public final class BBCMicro {
                     }
                 } else {
                     writePages[pageTable + Int(address >> 12)][Int(address & 0xFFF)] = cpu.dbus
+                    if address >= 0xFFFC && watfordFitted {
+                        watfordControl(address)
+                    }
                 }
             } else {
                 if cpu.access == .opcode {
