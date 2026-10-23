@@ -273,8 +273,8 @@ public struct Level2FileServerDisc: Sendable, Equatable {
         "*RUN :\(utilitiesDrive).FS\n\(date.text)\n1\nS\n\(min(max(stations, 1), maxStations))\n"
     }
 
-    /// The most logged-on stations the server is asked for.
-    public static let maxStations = 50
+    /// The most logged-on stations the server is asked for (it refuses 50).
+    public static let maxStations = 30
 
     /// A disc from a .dsd image (its sides interleaved, a track at a time).
     public init(image: [UInt8]) throws {

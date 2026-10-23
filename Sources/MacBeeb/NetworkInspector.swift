@@ -168,25 +168,45 @@ struct MachineInspector: View {
 
             if node.kind == .fileServer {
                 InspectorSection("File Server") {
+                    LabeledContent("Server") {
+                        Picker("Server", selection: Binding(get: { node.level }, set: { session.setFileServerLevel(node.id, $0) })) {
+                            ForEach(FileServerLevel.allCases, id: \.self) { level in
+                                Text(level.displayName).tag(level)
+                            }
+                        }
+                        .labelsHidden()
+                        .help("Level 1 runs on a Model B from a DFS disc. Level 2 needs a 6502 Second Processor, and has users, passwords, directories and boot options. Changing it restarts the server with a fresh disc of its own.")
+                    }
                     if let line = controller?.consoleLine {
                         LabeledContent("Console", value: line)
                             .font(.callout.monospaced())
                     }
                     HStack {
                         Button("Add Files…") { session.chooseFilesForServer(node.id) }
-                            .help("Put Mac files on the server, in directory A (or drag them onto its card)")
+                            .help(node.level == .level2
+                                  ? "Put Mac files in the server's $.LIBRARY, with the server switched off (or drag them onto its card)"
+                                  : "Put Mac files on the server, in directory A (or drag them onto its card)")
                         Button("Show Files") {
                             if let controller { openWindow(id: DiscContentsWindow.windowID, value: controller.id) }
                         }
                         .disabled(controller == nil)
                         .help("The server's disc: its files, to add, rename, delete or drag out to the Mac")
                     }
-                    Button("Start File Server") { session.startFileServer(node.id) }
-                        .help("Runs Acorn's Level 1 file server from its disc, giving every other machine the shared directory A")
-                    Text("Acorn's Level 1 file server runs on this BBC, from its disc. Every other machine on the network shares directory A: on them, type *NET, then SAVE, LOAD, CHAIN and *CAT use the server. Drop Mac files on its card to put them there (BASIC as .bas text, or files with .inf addresses). Open its window to see the server's console.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if node.level == .level2 {
+                        Button("Start File Server") { session.startFileServer(node.id) }
+                            .help("Runs Acorn's Level 2 file server in the Second Processor, from the utilities disc in drive 1, serving the disc in drive 0")
+                        Text("Acorn's Level 2 file server runs in this BBC's 6502 Second Processor, serving the disc in drive 0. Its users are SYST (who can make others with *NEWUSER), BOOT and GUEST, none with a password. On the other machines, type *NET, then *I AM GUEST (or another user): each has their own directory, and $.LIBRARY is everyone's library. Shift-Break logs on as BOOT and runs its !BOOT (hold N too on a Model B). Files dropped on its card go in $.LIBRARY, with the server off.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Button("Start File Server") { session.startFileServer(node.id) }
+                            .help("Runs Acorn's Level 1 file server from its disc, giving every other machine the shared directory A")
+                        Text("Acorn's Level 1 file server runs on this BBC, from its disc. Every other machine on the network shares directory A: on them, type *NET, then SAVE, LOAD, CHAIN and *CAT use the server. Drop Mac files on its card to put them there (BASIC as .bas text, or files with .inf addresses). Open its window to see the server's console.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
 

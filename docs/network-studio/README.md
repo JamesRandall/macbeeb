@@ -147,6 +147,34 @@ network.
 To start the server by hand (after Break, for example), choose **Start File
 Server** in its inspector or right-click menu.
 
+**A Level 2 file server**: add **Level 2 File Server** from the palette
+(station 254, or 253 if that's taken), or switch a file server's
+**Server** to Level 2 in its inspector. Acorn's Level 2 server runs in a
+Model B with a 6502 Second Processor, serving its own disc in drive 0, with
+the server's utilities disc in drive 1. Unlike Level 1, it has users with
+passwords, each with their own directory (and directories inside it), and
+boot options:
+
+- Its disc starts with users **SYST** (system privileged: `*NEWUSER` makes
+  others), **BOOT** and **GUEST**, none with a password, and a library,
+  `$.LIBRARY`, everyone's library at log-on.
+- On a station: `*NET`, then `*I AM GUEST` (or `*I AM name password`).
+  `*CAT`, `*CDIR`, `*DIR`, `*LIB`, `*ACCESS`, `*PASS`, `SAVE`, `LOAD` and
+  `CHAIN` work as Acorn's user guide says. `*CAT $` shows everyone's
+  directories, and `$.name.file` loads another user's file if its access
+  allows (`*ACCESS file WR/R`).
+- **Boot options**: `*OPT 4,3` makes logging on `*EXEC` your `!BOOT`
+  (1 loads it, 2 runs it). BOOT's option is 3, and its `!BOOT` is a `*CAT`.
+  **Shift-Break** logs on as BOOT and runs it when the network is the
+  filing system: on a Model B, hold N as well (Shift+N+Break); on a
+  Master, after `*NET`.
+- **Files from the Mac** go in `$.LIBRARY`, readable by everyone (`CHAIN
+  "$.LIBRARY.PROG"`, or `*PROG` for machine code), and folders become
+  directories. Switch the server off first: it keeps its disc's map and
+  directories in memory while it serves.
+- Switching a server between Level 1 and Level 2 restarts it with a fresh
+  disc of its own kind: the other kind's disc comes out.
+
 **Files from the Mac**: drag files onto the file server's card, or choose
 **Add Files…** in its inspector. They go on the server's disc in directory
 A, where every station can load them, while it serves. A BASIC listing

@@ -270,7 +270,9 @@ struct EconetLevel2Tests {
         #expect(disc.users.map(\.name) == ["SYST", "BOOT", "GUEST"])
         #expect(try disc.entries(in: "$").map(\.name) == ["BOOT", "GUEST", "LIBRARY", "PASSWORDS"])
         let rig = EconetRig([(.modelB, 254), (.modelB, 1)])
-        try rig.startLevel2FileServer(0, disc: disc)
+        // (As many stations as the Studio asks for.)
+        try rig.startLevel2FileServer(0, disc: disc, stations: Level2FileServerDisc.maxStations)
+        #expect(rig.screen(0).contains("Ready"), "\(rig.screen(0))")
         rig.shiftNBreak(1)
         #expect(rig.run(until: { rig.screen(1).contains("Option 03 (Exec)") && rig.screen(1).contains("!BOOT") }),
                 "\(rig.screen(1))")
@@ -321,5 +323,26 @@ struct EconetLevel2Tests {
             #expect(rig.screen(1).contains("\n\(name)\n"), "\(rig.screen(1))")
         }
         #expect(try rig.level2Disc(0).entries(in: "$.ALICE").map(\.name) == ["ONE", "THREE", "TWO"])
+    }
+}
+
+/// The Studio's side: a file server node's level in the manifest.
+struct FileServerLevelTests {
+    /// Networks saved before levels existed have Level 1 servers; a Level
+    /// 2 one is saved as such.
+    @Test func levelInTheManifest() throws {
+        var node = NetworkNode(kind: .fileServer, name: "File Server", stationNumber: 254, setup: MachineSetup())
+        let old = try JSONEncoder().encode(node)
+        #expect(!String(decoding: old, as: UTF8.self).contains("fileServerLevel"))
+        #expect(try JSONDecoder().decode(NetworkNode.self, from: old).level == .level1)
+        node.fileServerLevel = .level2
+        node.setup = FileServerLevel.level2.setup
+        let new = try JSONDecoder().decode(NetworkNode.self, from: JSONEncoder().encode(node))
+        #expect(new.level == .level2 && new.setup?.secondProcessor == true)
+    }
+
+    @Test func startup() {
+        #expect(Level2FileServerDisc.startup(stations: 12, date: EconetRig.level2Date) == "*RUN :1.FS\n23/10/88\n1\nS\n12\n")
+        #expect(Level2FileServerDisc.startup(stations: 500).hasSuffix("\n30\n"))
     }
 }

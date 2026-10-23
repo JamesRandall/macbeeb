@@ -55,9 +55,18 @@ the hardware and no software yet.
   arrives (MAME's 24 bits), so a frame's last byte arrives with its closing
   flag and FV together. DNFS's scout handler requires exactly that.
 - **Idle**: 15 bit-times with nothing on the line, counted from the later of
-  the last symbol's end and the receiver leaving reset. The line is busy
-  from a symbol's first bit (a flag starts with a 0), though its byte is
-  only in at its last.
+  the last symbol's end and the receiver leaving reset **plus the line's
+  delay** (32 cycles). The line is busy from a symbol's first bit (a flag
+  starts with a 0), though its byte is only in at its last. Everything
+  received arrives a delay late, so gaps between symbols are true, but a
+  reply prompt on the line reaches a just-enabled receiver a delay late:
+  counting from the enable alone made a reply look late. That broke the
+  Level 2 file server. After the client's data frame, the server (through
+  the Tube) has flags on the line 100 cycles after the client's last bit
+  (inside the 150-cycle window), but 164 as delivered. The client then saw
+  idle while waiting for the final acknowledgement. DNFS's handler
+  (&9E5C) takes any NMI without AP there as a failure, so it retransmitted
+  a command the server had already taken, and the two deadlocked.
 - **FV** shows when the frame's last byte is at the head of the FIFO (or the
   frame's been read). New bytes wait until FV/ERR is cleared.
 
@@ -129,6 +138,32 @@ the hardware and no software yet.
   file for `*EXEC` ("Bad command"), so a station can't run a `!BOOT` from
   it. `*name` runs `name` from the station's directory or the library
   (`&`).
+- Acorn's **Level 2 file server** (bundled utilities disc, `*RUN :1.FS`)
+  on a Model B with a 6502 Second Processor at station 254, with its own
+  disc in drive 0: users and passwords (`*I AM`, `*PASS`, "Wrong
+  password"), hierarchical directories (`*CDIR`, `*DIR`, paths from `$`),
+  access (`*ACCESS`, "Insufficient access"), `SAVE`/`CHAIN`/`*SAVE`/`*LOAD`
+  between DNFS and ANFS clients, `$.LIBRARY` and `*LIB`, and boot options:
+  `*OPT 4,3` EXECs the user's `!BOOT` at log-on. Shift-Break logs on as
+  BOOT (DNFS's "I .BOOT", ANFS's "i .Boot") when NFS is the filing system
+  the Break starts. On a Model B that means holding N: DNFS starts DFS
+  otherwise, even after `*NET`. On a Master it means after `*NET`, or with
+  N held (from power on, its configured filing system, DFS). The server
+  takes its start-up answers typed ahead (date, 1 drive, `S`, stations).
+  It accepts 30 stations and refuses 50. "Bad Command" is capitalised.
+- **Level 2's disc** (`Level2FileServerDisc`): Acorn's "AFS0" format, 80
+  tracks double-sided (1600 sectors). DSCMGR formats it through the 8271
+  (OSWORD &7F format, verify and write) and initialises it, and the disc
+  made in Swift matches DSCMGR's byte for byte (a test runs DSCMGR). The
+  server writes the map after every change, to the two copies in turn:
+  the later sequence number (in a copy's first and last bytes) is
+  current. It caches directories, so the disc mustn't be changed under a
+  running server. Map entries: W &8000, E &4000 (with the last sector's
+  byte count, 0 for 256), S &2000, next sector; an empty file's sector is
+  &7000. Access bits: 1 public R, 2 public W, 4 owner R, 8 owner W, &10 L,
+  &20 D. Password entries are 17 bytes (name, password, flags: &80 in
+  use, &40 system, boot option in bits 0-1), and the server reads a
+  password file of several sectors (EXTENDPWF's).
 - DNFS: OSWORD &13 function 8 reads the station number, functions 0 and 2
   the file and printer servers'. A transmission to a station that isn't
   listening fails in about 4 centiseconds. About eight receive blocks can
@@ -139,5 +174,6 @@ the hardware and no software yet.
 
 - Loop mode, address extension, logical control fields, NRZI, CRC values,
   flag-detect status timing (FD's set on every flag when enabled).
-- Level 2 file server (needs a 6502 Second Processor and a double-sided
-  master disc) isn't tested.
+- Level 2 with two drives, `*SDISC`, `*NEWUSER`/`*PRIV` (not tried, though
+  SYST is created with system privilege), and Disc Contents for AFS discs
+  (Show Files can't read them).

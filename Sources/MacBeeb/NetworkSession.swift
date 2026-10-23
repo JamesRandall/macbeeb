@@ -160,19 +160,25 @@ final class NetworkSession: StationOwner {
 
     func node(_ id: UUID) -> NetworkNode? { project[id] }
 
-    /// Adds a machine (or the clock) at a canvas point, switched on.
+    /// Adds a machine (or the clock) at a canvas point, switched on. A
+    /// Level 2 file server is a Model B with a 6502 Second Processor.
     @discardableResult
-    func add(_ kind: NetworkNode.Kind, model: BBCMicro.Model = .modelB, at point: CanvasPoint) -> UUID? {
+    func add(_ kind: NetworkNode.Kind, model: BBCMicro.Model = .modelB, level: FileServerLevel = .level1,
+             at point: CanvasPoint) -> UUID? {
         var node: NetworkNode
         if kind == .clock {
             guard !project.hasClock else { return nil }
             node = .clock(at: point)
         } else {
-            let preferred = kind.conventionalStation.flatMap { project.stationNumberProblem($0, for: UUID()) == nil ? $0 : nil }
+            let level2 = kind == .fileServer && level == .level2
+            let conventional = level2 ? level.conventionalStations : kind.conventionalStation.map { [$0] } ?? []
+            let preferred = conventional.first { project.stationNumberProblem($0, for: UUID()) == nil }
             guard let number = preferred ?? project.freeStationNumber() else { return nil }
-            let base = kind == .station ? (model == .modelB ? "BBC" : model.displayName) : kind.displayName
+            let base = kind == .station ? (model == .modelB ? "BBC" : model.displayName) : level2 ? "Level 2 File Server" : kind.displayName
             let name = kind == .station ? project.freeName("\(base) \(number)") : project.freeName(base)
-            node = NetworkNode(kind: kind, name: name, stationNumber: number, setup: MachineSetup(model: model), position: point)
+            node = NetworkNode(kind: kind, name: name, stationNumber: number, setup: level2 ? level.setup : MachineSetup(model: model),
+                               position: point)
+            if level2 { node.fileServerLevel = .level2 }
         }
         update { $0.nodes.append(node) }
         if node.isMachine {
@@ -432,6 +438,10 @@ final class NetworkSession: StationOwner {
     /// reset, and the start-up is typed, as the server's manual says.
     func startFileServer(_ id: UUID) {
         readyServers.remove(id)
+        if project[id]?.level == .level2 {
+            startLevel2FileServer(id)
+            return
+        }
         if !isOn(id) { powerOn(id, startingServer: false) }
         guard let controller = controllers[id] else { return }
         if project[id]?.discs[0] == nil, let image = try? FileServerDisc.image() {
@@ -446,6 +456,58 @@ final class NetworkSession: StationOwner {
             try? await Task.sleep(for: .seconds(1.5))
             controller.host.send(.type(startup))
         }
+    }
+
+    /// Starts Acorn's Level 2 file server: the network's copy of its disc
+    /// goes in drive 0 and the utilities disc in drive 1 (if they're
+    /// empty), and the start-up is typed: *RUN FS from drive 1, the date,
+    /// one drive, start, and how many stations may log on.
+    private func startLevel2FileServer(_ id: UUID) {
+        if !isOn(id) { powerOn(id, startingServer: false) }
+        guard let controller = controllers[id] else { return }
+        let staging = FileManager.default.temporaryDirectory
+        if project[id]?.discs[0] == nil, let disc = try? Level2FileServerDisc.standard() {
+            let staged = staging.appendingPathComponent("Level 2 File Server.dsd")
+            try? Data(disc.image).write(to: staged)
+            controller.insertDisc(staged, drive: 0, boot: false)
+        }
+        let drive = Level2FileServerDisc.utilitiesDrive
+        if project[id]?.discs[drive] == nil {
+            let utilities = Level2FileServerDisc.utilities
+            let staged = staging.appendingPathComponent("Level 2 Utilities.\(utilities.format.rawValue)")
+            try? Data(utilities.data).write(to: staged)
+            controller.insertDisc(staged, drive: drive, boot: false)
+        }
+        controller.host.send(.pressBreak)
+        let stations = project.stations.filter { $0.id != id }.count
+        let startup = Level2FileServerDisc.startup(stations: max(stations, 10))
+        Task { @MainActor in
+            // After Break's banner.
+            try? await Task.sleep(for: .seconds(1.5))
+            controller.host.send(.type(startup))
+        }
+    }
+
+    /// Makes a file server Level 1 or Level 2: its hardware changes to
+    /// suit (a power cycle, if it's on), and a disc of the other level's
+    /// format comes out, so starting puts in a fresh one of its own.
+    func setFileServerLevel(_ id: UUID, _ level: FileServerLevel) {
+        guard let node = project[id], node.kind == .fileServer, node.level != level else { return }
+        let wasOn = isOn(id)
+        powerOff(id)
+        update { project in
+            project[id]?.fileServerLevel = level == .level1 ? nil : level
+            project[id]?.setup?.model = .modelB
+            project[id]?.setup?.secondProcessor = level == .level2
+            for (drive, media) in project[id]?.discs ?? [:] {
+                let image = (try? Data(contentsOf: NetworkPackage.url(of: media, in: url))).map { [UInt8]($0.prefix(4)) } ?? []
+                if Level2FileServerDisc.isLevel2(image) != (level == .level2) || drive == Level2FileServerDisc.utilitiesDrive {
+                    project[id]?.discs[drive] = nil
+                }
+            }
+        }
+        removeUnusedMedia()
+        if wasOn { powerOn(id) }
     }
 
     /// Starts MacBeeb's printer server on a machine: the server disc goes
@@ -466,6 +528,10 @@ final class NetworkSession: StationOwner {
     /// station shares, while it serves (it sees them at once). Named and
     /// addressed by .inf files beside them; BASIC text (.bas) is tokenised.
     func addFilesToServer(_ id: UUID, _ urls: [URL]) {
+        if project[id]?.level == .level2 {
+            addFilesToLevel2Server(id, urls)
+            return
+        }
         guard let controller = controllers[id], project[id]?.discs[0] != nil else {
             let alert = NSAlert()
             alert.messageText = "The file server isn’t running"
@@ -494,10 +560,50 @@ final class NetworkSession: StationOwner {
         }
     }
 
+    /// Puts Mac files in a Level 2 server's $.LIBRARY, for every user, with
+    /// the server switched off: it keeps its disc's map and directories in
+    /// memory while it serves, so a change underneath it would be lost.
+    private func addFilesToLevel2Server(_ id: UUID, _ urls: [URL]) {
+        do {
+            guard !isOn(id) else {
+                let alert = NSAlert()
+                alert.messageText = "Switch the Level 2 file server off first"
+                alert.informativeText = "It keeps its disc’s map and directories in memory while it serves. Switch it off, add the files, and switch it on again."
+                alert.runModal()
+                return
+            }
+            var disc: Level2FileServerDisc
+            if let media = project[id]?.discs[0] {
+                disc = try Level2FileServerDisc(image: [UInt8](Data(contentsOf: NetworkPackage.url(of: media, in: url))))
+            } else {
+                disc = try Level2FileServerDisc.standard()
+            }
+            if (try? disc.entry(at: "$.LIBRARY")) == nil {
+                try disc.createDirectory("$.LIBRARY")
+            }
+            try disc.add(urls)
+            if let media = project[id]?.discs[0] {
+                try Data(disc.image).write(to: NetworkPackage.url(of: media, in: url))
+            } else {
+                let staged = FileManager.default.temporaryDirectory.appendingPathComponent("Level 2 File Server.dsd")
+                try Data(disc.image).write(to: staged)
+                let media = try NetworkPackage.importMedia(staged, into: url)
+                update { $0[id]?.discs[0] = media }
+            }
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Couldn’t add the files to the file server"
+            alert.informativeText = (error as? DiscEditError).map { "\($0)" } ?? error.localizedDescription
+            alert.runModal()
+        }
+    }
+
     func chooseFilesForServer(_ id: UUID) {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
-        panel.message = "Choose files for the file server. Each goes in directory A, where every station can load it."
+        panel.message = project[id]?.level == .level2
+            ? "Choose files for the file server. Each goes in $.LIBRARY, where every user can load it."
+            : "Choose files for the file server. Each goes in directory A, where every station can load it."
         guard panel.runModal() == .OK else { return }
         addFilesToServer(id, panel.urls)
     }

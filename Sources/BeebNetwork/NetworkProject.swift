@@ -219,6 +219,11 @@ public struct NetworkNode: Codable, Sendable, Equatable, Identifiable {
     /// ready: logs on and runs the server's !BOOT. (Level 1 has no boot
     /// options, so the Studio types what the !BOOT says.)
     public var bootsNetwork: Bool?
+    /// A file server: which of Acorn's servers it runs (nil, the default
+    /// and what networks saved before had, is Level 1).
+    public var fileServerLevel: FileServerLevel?
+
+    public var level: FileServerLevel { fileServerLevel ?? .level1 }
 
     public var isMachine: Bool { kind != .clock }
 
@@ -239,6 +244,35 @@ public struct NetworkNode: Codable, Sendable, Equatable, Identifiable {
 
     /// A typical school network's clock: 200 kbit/s.
     public static let defaultClockRate = 200_000
+}
+
+/// Acorn's file servers. Level 1 runs on a plain Model B from a DFS disc;
+/// Level 2 needs a 6502 Second Processor and its own disc format, and has
+/// users, passwords, directories and boot options.
+public enum FileServerLevel: Int, Codable, Sendable, CaseIterable {
+    case level1 = 1
+    case level2 = 2
+
+    public var displayName: String {
+        switch self {
+        case .level1: "Level 1"
+        case .level2: "Level 2"
+        }
+    }
+
+    /// Its station numbers, in order of preference: 254 is the one the
+    /// network filing systems log on to by default, 253 the next server's.
+    public var conventionalStations: [Int] {
+        switch self {
+        case .level1: [254]
+        case .level2: [254, 253]
+        }
+    }
+
+    /// The hardware it needs (on the Model B).
+    public var setup: MachineSetup {
+        MachineSetup(model: .modelB, secondProcessor: self == .level2)
+    }
 }
 
 /// A disc a station's drive holds: a copy kept in the network's package
