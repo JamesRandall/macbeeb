@@ -58,8 +58,9 @@ enum NetworkSelfTest {
     /// works whatever windows the app restores).
     static func runIfRequested() {
         guard let path else { return }
-        if UserDefaults.standard.string(forKey: "MacBeebNetworkSelfTestTemplate") == "distributedMandelbrot" {
-            runMandelbrot(path)
+        if let name = UserDefaults.standard.string(forKey: "MacBeebNetworkSelfTestTemplate"),
+           let template = NetworkTemplate(rawValue: name), template == .distributedMandelbrot || template == .mandelbrotInColour {
+            runMandelbrot(path, template: template)
             return
         }
         NSLog("MacBeeb: network self-test starting")
@@ -113,17 +114,17 @@ enum NetworkSelfTest {
         }
     }
 
-    /// With `-MacBeebNetworkSelfTestTemplate distributedMandelbrot`: opens
-    /// the Distributed Mandelbrot network, waits for the workers to boot
+    /// With `-MacBeebNetworkSelfTestTemplate distributedMandelbrot` (or
+    /// mandelbrotInColour, with *MANDEL2): opens the Mandelbrot network, waits for the workers to boot
     /// from the network, types *CLUSTER and *MANDEL on the Guide as its
     /// screen says, waits for the picture, and saves the canvas, the
     /// Mandelbrot view and every machine's screen text (path.txt).
-    static func runMandelbrot(_ path: String) {
+    static func runMandelbrot(_ path: String, template: NetworkTemplate) {
         NSLog("MacBeeb: Mandelbrot self-test starting")
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("macbeeb-network-selftest-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let url = folder.appendingPathComponent("Distributed Mandelbrot.\(NetworkPackage.fileExtension)")
-        guard (try? NetworkPackage.create(.distributedMandelbrot, at: url)) != nil,
+        let url = folder.appendingPathComponent("\(template.title).\(NetworkPackage.fileExtension)")
+        guard (try? NetworkPackage.create(template, at: url)) != nil,
               let session = try? NetworkSession.session(for: url) else {
             NSLog("MacBeeb: Mandelbrot self-test: can't open the network")
             NSApp.terminate(nil)
@@ -167,7 +168,7 @@ enum NetworkSelfTest {
             let launched = await waitFor(90) { $0.first { $0.0 == guide.name }?.1.contains("failed.") == true }
             report += "CLUSTER finished: \(launched)\n"
             capture(canvas, to: path.replacingOccurrences(of: ".png", with: "-cluster.png"))
-            controller.host.send(.type("*MANDEL\n"))
+            controller.host.send(.type(template == .mandelbrotInColour ? "*MANDEL2\n" : "*MANDEL\n"))
             let start = Date()
             let complete = await waitFor(240) { screens in
                 screens.filter { workers.contains($0.0) }.allSatisfy { $0.1.contains("run complete") }

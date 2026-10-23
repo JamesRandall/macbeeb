@@ -25,7 +25,8 @@ them as `*` commands.
 | `CLUSTER` | cluster.asm → launcher.asm | &3000, any mode | On the BBC that's to be the coordinator. It probes stations 1–16, except itself and the servers, then STARTs each waiting bootstrap, waits to hear it's running, and adopts any worker already running. |
 | `WORKERS` | workers.asm → launcher.asm | &3000 | Lists the bootstraps and workers. |
 | `STOPWK` | stopwk.asm → launcher.asm | &3000 | Stops every worker, sending it back to its bootstrap. (Level 1's DFS-style names have at most 7 letters, so not STOPWORK.) |
-| `MANDEL` | mandel.asm | &3000–&57FF, MODE 5 | The coordinator. It registers workers, keeps the queue of 320 tiles with an epoch for each assignment, reassigns a tile out for more than 20 emulated seconds, rejects stale results, and draws accepted tiles straight into screen memory. While drawing, it recruits bootstraps that appear: one candidate station a second gets a DISCOVER, and a bootstrap that answers gets a START. When the picture's done, it sends COMPLETE and keeps the picture until a key is pressed, then shows a MODE 7 summary. |
+| `MANDEL` | mandel.asm → coordinator.asm | &3000–&57FF, MODE 5 | The coordinator. It registers workers, keeps the queue of 320 tiles with an epoch for each assignment, reassigns a tile out for more than 20 emulated seconds, rejects stale results, and draws accepted tiles straight into screen memory. While drawing, it recruits bootstraps that appear: one candidate station a second gets a DISCOVER, and a bootstrap that answers gets a START. When the picture's done, it sends COMPLETE and keeps the picture until a key is pressed, then shows a MODE 7 summary. |
+| `MANDEL2` | mandel2.asm → coordinator.asm | &1B00–&2FFF, MODE 2 | The same coordinator in MODE 2, for a BBC with VideoNuLA. It sets NuLA to direct palette (`&FE22=&11`) with sixteen of its 4,096 colours: black inside the set, then fifteen that go round (blues, cyan, white, yellow, orange, red, purple), coloured `1 + (n − 1) MOD 15`. When the picture's complete it **cycles** them, the classic way: every third frame, at the vertical sync (`*FX19`), each colour takes the next one's shade, so the bands flow. Only NuLA's palette changes, not screen memory. A key resets NuLA (`&40`) for the summary. Without VideoNuLA the colours are wrong, as with any NuLA program on a stock BBC. |
 
 `common.asm` has the shared definitions: ports, message types, zero page and
 where each program lives. `lib.asm` has the Econet and printing routines
@@ -53,10 +54,14 @@ for the whole picture at 64 iterations a pixel.
 - **Model B with DNFS:**
   - PAGE is &1900, and every program loads at &3000 or above.
   - MODE 7's screen is at &7C00, and MODE 5's at &5800, which MANDEL's `GUARD` keeps it below.
+  - MODE 2's screen fills &3000–&7FFF, so MANDEL2 loads at PAGE: &1B00 on a Model B with DNFS (not &1900: DNFS keeps &1900–&1AFF).
+    - It must fit in 5K, so it works out its colours as it draws, without a table.
+    - It has three receive blocks and room for twelve workers.
+    - Page &0C is no good for data: NFS uses it.
   - WBOOT is at &6000, clear of WORKER (code below &4000, with its table at &4000–&4FFF).
 - **Zero page:** the programs use only &70–&8F, BASIC's user area. NFS keeps &90 up.
 - **WBOOT to WORKER:** WBOOT leaves WORKER the coordinator's station (&70), the launcher's nonce (&71–&74) and station (&75), and a mark (&76 = 'W').
-- **Receive blocks:** NFS has room for eight. MANDEL uses six on its own port and one for recruiting; a worker uses two; a launcher uses two.
+- **Receive blocks:** NFS has room for eight. MANDEL uses six on its own port (MANDEL2 three) and one for recruiting; a worker uses two; a launcher uses two.
 
 ## Building
 

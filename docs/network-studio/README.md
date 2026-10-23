@@ -23,6 +23,7 @@ of one.
 | --- | --- |
 | Econet Demo | A classroom ready to try: a Welcome machine with instructions, two Model Bs, a Master, and demo programs on the file server |
 | Distributed Mandelbrot | Eight worker BBCs and a Guide machine draw the Mandelbrot set between them over Econet |
+| Mandelbrot in Colour | The same in MODE 2, the Guide's VideoNuLA giving it sixteen colours, which cycle when it's done |
 | Two BBCs | Two Model Bs, stations 1 and 2, and a clock: the smallest network |
 | School Classroom | Four Model Bs (stations 1–4), a file server (254), a printer server (235) and a clock |
 | BBC and Master | A Model B and a Master 128, a file server and a clock |
@@ -87,6 +88,14 @@ the protocol they speak.
 
 On Acorn's Level 1 file server, a station can't run a boot file at log-on,
 so the Studio types the worker's log-on and `*WBOOT` for it, once.
+
+### Mandelbrot in Colour
+
+The same network, but the Guide has a **VideoNuLA** and the picture is in
+MODE 2: sixteen colours chosen from VideoNuLA's 4,096. Type `*CLUSTER`, then
+`*MANDEL2`. When the picture's complete its colours **cycle**, the bands
+flowing outwards from the set, until you press a key. (`*MANDEL2` on a BBC
+without VideoNuLA draws in the wrong colours, as a real one would.)
 
 ### The Mandelbrot view
 
