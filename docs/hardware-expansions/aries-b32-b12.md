@@ -135,7 +135,10 @@ Unlike most sideways RAM, the B32's RAM is **write-protected** until you say
 otherwise. `*RWRITE 14` sends every write to &8000–&BFFF to bank 14, whichever
 bank is being read: BASIC can still run from bank 11 while it writes into
 bank 14. `*RWRITE OFF` protects it again. `*RWRITE 0` writes to the B12's RAM,
-and `*RWRITE EXTERNAL` to sideways RAM on other boards. Ctrl-Break, `*XON` and
+and `*RWRITE EXTERNAL` to sideways RAM elsewhere: with the B32 alone, a
+sideways RAM module in a motherboard socket (bank 12 or 9), which takes the
+writes while its bank is selected. See
+[Sideways RAM](sideways-ram.md#with-a-shadow-ram-board). Ctrl-Break, `*XON` and
 `*XOFF` set it back to OFF.
 
 You can also use the Hardware Expansions window to load an image into bank
@@ -146,7 +149,8 @@ it while shadow RAM is on corrupts the program in shadow RAM.
 ## The B12
 
 With **Aries B32 + B12**, bank 0 is 16K of RAM and banks 1 to 12 are ROM
-sockets:
+sockets. Its cable takes all four motherboard sockets, so there's no sideways
+RAM module with the B12:
 
 ![With the B12, *XSTATUS S: 0 RAM 16K Unused, 11 DFS, 12 BASIC, 14 RAM 12K, 15 ARIES-B32](images/aries-b12-xstatus.png)
 

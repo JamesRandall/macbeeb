@@ -196,7 +196,7 @@ extension BeebROMs {
             configuration.sidewaysROMs = renumbered
         }
         // A board's controller ROM: the bundled one, or the user's own.
-        if let bank = configuration.fittedExpansions.board.controllerROMBank,
+        if let bank = configuration.fittedExpansions.controllerROMBank,
            let firmware = Firmware.standard(for: configuration.fittedExpansions.board) {
             configuration.sidewaysROMs[bank] = controllerROM ?? firmware.bundledData
         }

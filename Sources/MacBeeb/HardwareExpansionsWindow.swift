@@ -39,7 +39,7 @@ struct HardwareExpansionsWindow: View {
         .toolbar {
             ToolbarItem {
                 Button("Guide", systemImage: "questionmark.circle") {
-                    openWindow(id: GuideWindow.windowID, value: draft.expansions.board.guidePage)
+                    openWindow(id: GuideWindow.windowID, value: draft.expansions.guidePage)
                 }
                 .help("Open the Hardware Expansion Guide")
             }
@@ -148,7 +148,8 @@ struct HardwareExpansionsWindow: View {
             VStack(alignment: .leading, spacing: 22) {
                 header
                 boardSection
-                if draft.expansions.board.controllerROMBank != nil {
+                moduleSection
+                if draft.expansions.controllerROMBank != nil {
                     firmwareSection
                 }
                 memorySection
@@ -184,31 +185,32 @@ struct HardwareExpansionsWindow: View {
     }
 
     private func memorySummary(_ e: BBCMicro.Expansions) -> String {
+        var parts = ["32K main RAM"]
         switch e.board {
-        case .none: "32K of RAM, four ROM sockets"
-        case .sidewaysRAM16, .sidewaysRAM32: "32K main RAM + \(e.board.extraRAM / 1024)K of sideways RAM"
-        case .watford32K: "32K main RAM + 32K of shadow RAM"
-        case .ariesB32: "32K main RAM + 32K for shadow and sideways RAM"
-        case .ariesB32B12: "32K main RAM + 32K for shadow and sideways RAM + 16K sideways RAM"
+        case .none: break
+        case .watford32K: parts.append("32K of shadow RAM")
+        case .ariesB32: parts.append("32K for shadow and sideways RAM")
+        case .ariesB32B12: parts.append(contentsOf: ["32K for shadow and sideways RAM", "16K sideways RAM"])
         }
+        if e.sidewaysRAM != .none { parts.append("\(e.sidewaysRAM.extraRAM / 1024)K sideways RAM module") }
+        return parts.count == 1 ? "32K of RAM, four ROM sockets" : parts.joined(separator: " + ")
     }
 
     // MARK: Board
 
     private var boardSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionTitle("Memory Board", detail: "One board at a time: they all plug into the same place.",
+            SectionTitle("In the 6502’s Socket", detail: "A shadow RAM board fits between the 6502 and its socket. One at a time.",
                          guide: expansions.board.guidePage)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 12)], spacing: 12) {
                 ForEach(BBCMicro.MemoryBoard.allCases, id: \.self) { board in
-                    BoardCard(board: board, selected: expansions.board == board, fitted: machine.expansions.board == board) {
+                    BoardCard(symbol: board.symbolName, name: board.displayName, blurb: board.blurb, extraRAM: board.extraRAM,
+                              selected: expansions.board == board, fitted: machine.expansions.board == board) {
                         draft.expansions.board = board
+                        // The B12 takes the module's socket.
+                        if !board.takesSidewaysModule { draft.expansions.sidewaysRAM = .none }
                     }
                 }
-            }
-            if expansions.board.isSidewaysRAM {
-                wiring
-                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
             if expansions.board.isAries {
                 ariesOptions
@@ -217,28 +219,59 @@ struct HardwareExpansionsWindow: View {
         }
     }
 
+    // MARK: Sideways RAM module
+
+    private var moduleSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionTitle("In a ROM Socket", detail: "A sideways RAM module plugs into a free motherboard ROM socket, with or without a board.",
+                         guide: "sideways-ram")
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 12)], spacing: 12) {
+                ForEach(BBCMicro.SidewaysModule.allCases, id: \.self) { module in
+                    BoardCard(symbol: module.symbolName, name: module.displayName, blurb: module.blurb, extraRAM: module.extraRAM,
+                              selected: expansions.sidewaysRAM == module, fitted: machine.expansions.sidewaysRAM == module,
+                              disabledReason: !expansions.board.takesSidewaysModule && module != .none
+                                  ? "The B12’s cable plugs into all four ROM sockets" : nil) {
+                        draft.expansions.sidewaysRAM = module
+                    }
+                }
+            }
+            if expansions.sidewaysRAM != .none {
+                wiring
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            } else if !expansions.board.takesSidewaysModule {
+                Label("With the B12 there’s no free ROM socket for a module, but the B12 has 16K of sideways RAM of its own (bank 0).",
+                      systemImage: "info.circle")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private var wiring: some View {
-        Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 10) {
+        let first = expansions.bank(ofSocket: expansions.sidewaysRAMSocket)
+        return Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 12, verticalSpacing: 10) {
             GridRow {
                 Text("Socket:")
                     .gridColumnAlignment(.trailing)
                 Picker("Socket", selection: $draft.expansions.sidewaysRAMSocket) {
-                    Text("Bank 12").tag(12)
-                    Text("Bank 13").tag(13)
+                    Text("Leftmost · bank \(expansions.bank(ofSocket: 12))").tag(12)
+                    Text("Next · bank \(expansions.bank(ofSocket: 13))").tag(13)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .fixedSize()
-                .help("The free motherboard socket the module plugs into, which is its first bank (14 and 15 hold DFS and BASIC)")
-                Text("The module’s first bank")
+                .help("The free motherboard socket the module plugs into, which is its first bank (the other two hold DFS and BASIC)")
+                Text(expansions.board == .watford32K ? "The Watford ROM goes in the other: bank \(expansions.controllerROMBank ?? 13)"
+                     : expansions.board == .ariesB32 ? "The B32 renumbers the sockets 12, 9, 10, 11"
+                     : "The module’s first bank")
                     .foregroundStyle(.secondary)
             }
-            if expansions.board == .sidewaysRAM32 {
+            if expansions.sidewaysRAM == .ram32 {
                 GridRow {
                     Text("Second bank:")
                     Picker("Second bank", selection: $draft.expansions.secondBankBelow) {
-                        Text("Bank \(expansions.sidewaysRAMSocket - 4)").tag(4)
-                        Text("Bank \(expansions.sidewaysRAMSocket - 8)").tag(8)
+                        Text("Bank \(first - 4)").tag(4)
+                        Text("Bank \(first - 8)").tag(8)
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
@@ -246,6 +279,25 @@ struct HardwareExpansionsWindow: View {
                     .help("Where the module’s flying lead goes: IC76 pin 12 makes the second bank four below the first, pin 11 eight below")
                     Text(expansions.secondBankBelow == 4 ? "Lead on IC76 pin 12" : "Lead on IC76 pin 11")
                         .foregroundStyle(.secondary)
+                }
+            }
+            if expansions.secondBankIsAssumed {
+                GridRow {
+                    Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                    Label("With the B32’s renumbering, where the second bank lands isn’t documented: MacBeeb assumes it moves with the first.",
+                          systemImage: "questionmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .gridCellColumns(2)
+                }
+            }
+            if expansions.board == .ariesB32 {
+                GridRow {
+                    Color.clear.gridCellUnsizedAxes([.horizontal, .vertical])
+                    Label("The B32 write-protects it until *RWRITE EXTERNAL.", systemImage: "lock")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .gridCellColumns(2)
                 }
             }
         }
@@ -278,7 +330,7 @@ struct HardwareExpansionsWindow: View {
 
     private var firmwareSection: some View {
         let choice = firmwareChoice
-        let bank = expansions.board.controllerROMBank ?? 0
+        let bank = expansions.controllerROMBank ?? 0
         return VStack(alignment: .leading, spacing: 10) {
             SectionTitle("Controller ROM", detail: "The board does nothing without its ROM: it switches the memory and adds the commands.",
                          guide: expansions.board.guidePage)
@@ -435,7 +487,7 @@ struct HardwareExpansionsWindow: View {
                 return PlannedSlot(bank: bank, kind: .ram, title: header?.name ?? "Sideways RAM", detail: owner.name,
                                    hasImage: header != nil)
             }
-            if expansions.board.controllerROMBank == bank {
+            if expansions.controllerROMBank == bank {
                 return PlannedSlot(bank: bank, kind: .rom, title: firmwareTitle, detail: "The board’s ROM", hasImage: true)
             }
             if let rom = plan.sidewaysROMs[bank] {
@@ -588,8 +640,6 @@ extension BBCMicro.MemoryBoard {
     var symbolName: String {
         switch self {
         case .none: "rectangle.dashed"
-        case .sidewaysRAM16: "memorychip"
-        case .sidewaysRAM32: "memorychip.fill"
         case .watford32K: "square.2.layers.3d"
         case .ariesB32: "square.3.layers.3d"
         case .ariesB32B12: "square.grid.3x3"
@@ -598,9 +648,7 @@ extension BBCMicro.MemoryBoard {
 
     var blurb: String {
         switch self {
-        case .none: "The Model B as it came: 32K, BASIC and DFS in two of its four ROM sockets."
-        case .sidewaysRAM16: "A 16K bank of RAM in a ROM socket. Load ROM images from disc instead of fitting chips."
-        case .sidewaysRAM32: "Two 16K banks on one module, wired like BeebMaster’s: room for two ROM images."
+        case .none: "Just the 6502. The Model B as it came: 32K, BASIC and DFS in two of its four ROM sockets."
         case .watford32K: "Shadow RAM: programs keep 28K in every screen mode. Its own ROM switches the screen in and out."
         case .ariesB32: "32K shared between shadow and sideways RAM: 20K + 12K, 16K + 16K or none + 32K, with *XON and *XOFF."
         case .ariesB32B12: "The B32 with Aries’ ROM board: twelve ROM sockets and 16K more sideways RAM, sixteen banks in all."
@@ -611,30 +659,59 @@ extension BBCMicro.MemoryBoard {
     var guidePage: String {
         switch self {
         case .none: "README"
-        case .sidewaysRAM16, .sidewaysRAM32: "sideways-ram"
         case .watford32K: "watford-shadow-ram"
         case .ariesB32, .ariesB32B12: "aries-b32-b12"
         }
     }
 }
 
+extension BBCMicro.SidewaysModule {
+    var symbolName: String {
+        switch self {
+        case .none: "rectangle.dashed"
+        case .ram16: "memorychip"
+        case .ram32: "memorychip.fill"
+        }
+    }
+
+    var blurb: String {
+        switch self {
+        case .none: "The ROM sockets hold ROMs only."
+        case .ram16: "A 16K bank of RAM in a ROM socket. Load ROM images from disc instead of fitting chips."
+        case .ram32: "Two 16K banks on one module, wired like BeebMaster’s: room for two ROM images."
+        }
+    }
+}
+
+extension BBCMicro.Expansions {
+    /// The guide page for what's fitted: the board's, else sideways RAM's.
+    var guidePage: String {
+        board != .none ? board.guidePage : sidewaysRAM != .none ? "sideways-ram" : "README"
+    }
+}
+
 private struct BoardCard: View {
-    let board: BBCMicro.MemoryBoard
+    let symbol: String
+    let name: String
+    let blurb: String
+    let extraRAM: Int
     let selected: Bool
     let fitted: Bool
+    /// Why it can't be chosen with the rest, if it can't.
+    var disabledReason: String?
     let choose: () -> Void
 
     var body: some View {
         Button(action: choose) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top) {
-                    Image(systemName: board.symbolName)
+                    Image(systemName: symbol)
                         .font(.system(size: 24, weight: .regular))
                         .foregroundStyle(selected ? Color.accentColor : .secondary)
                         .frame(height: 28)
                     Spacer()
-                    if board.extraRAM > 0 {
-                        Text("+\(board.extraRAM / 1024)K")
+                    if extraRAM > 0 {
+                        Text("+\(extraRAM / 1024)K")
                             .font(.caption.weight(.semibold).monospacedDigit())
                             .padding(.horizontal, 7)
                             .padding(.vertical, 2)
@@ -642,10 +719,10 @@ private struct BoardCard: View {
                             .foregroundStyle(.green)
                     }
                 }
-                Text(board.displayName)
+                Text(name)
                     .font(.headline)
                     .foregroundStyle(.primary)
-                Text(board.blurb)
+                Text(disabledReason ?? blurb)
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -667,9 +744,11 @@ private struct BoardCard: View {
             .contentShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
+        .disabled(disabledReason != nil)
+        .opacity(disabledReason != nil ? 0.5 : 1)
         .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityHint(fitted ? "Fitted now" : "")
-        .help(board.blurb)
+        .accessibilityHint(fitted ? "Fitted now" : disabledReason ?? "")
+        .help(disabledReason ?? blurb)
     }
 }
 
@@ -703,12 +782,15 @@ private struct PhysicalMemoryBar: View {
     }
 
     private var caption: String {
-        switch expansions.board {
+        var text = switch expansions.board {
         case .none: "Main RAM is &0000–&7FFF, for programs and the screen."
-        case .sidewaysRAM16, .sidewaysRAM32: "Main RAM is &0000–&7FFF. Sideways RAM appears at &8000–&BFFF, one bank at a time."
         case .watford32K: "The board’s RAM stands in for main RAM at the same addresses; the screen is always in main RAM."
         case .ariesB32, .ariesB32B12: "The B32’s 32K is banks 13 and 14, and what shadow RAM takes comes out of them; the screen is always in main RAM."
         }
+        if !expansions.sidewaysRAMBanks.isEmpty {
+            text += " Sideways RAM appears at &8000–&BFFF, one bank at a time."
+        }
+        return text
     }
 
     var body: some View {

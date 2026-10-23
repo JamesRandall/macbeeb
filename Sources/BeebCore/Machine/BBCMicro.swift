@@ -427,7 +427,7 @@ public final class BBCMicro {
         public var expansionProblem: String? {
             let e = fittedExpansions
             if let problem = e.problem { return problem }
-            if let bank = e.board.controllerROMBank {
+            if let bank = e.controllerROMBank {
                 guard let rom = sidewaysROMs[bank], ROMHeader(Array(rom.prefix(0x100))) != nil else {
                     return "The \(e.board.displayName) needs its ROM in bank \(bank)"
                 }
@@ -908,12 +908,20 @@ public final class BBCMicro {
     /// ROMSEL is reading ("write-through"). 13 and 14 are the B32's RAM; 15
     /// is its ROM socket, so writes are lost (the ROM's *RWRITE OFF writes
     /// 15); 0-12 pass the write on to the BBC's bus (*RWRITE EXTERNAL writes
-    /// 0), where the B12's RAM takes every write, as its manual says.
+    /// 0), where the B12's RAM takes every write, as its manual says, and a
+    /// sideways RAM module takes them while its bank is selected.
     func ariesWriteTarget() -> UnsafeMutablePointer<UInt8>? {
         switch Int(aries.ramsel & 0x0F) {
-        case 13, 14: ariesStorage(bank: Int(aries.ramsel & 0x0F))
-        case 15: nil
-        default: ariesB12Fitted ? sidewaysBanks[0] : nil
+        case 13, 14:
+            return ariesStorage(bank: Int(aries.ramsel & 0x0F))
+        case 15:
+            return nil
+        default:
+            // On the bus: the B12's RAM takes every write; a module in a
+            // motherboard socket takes them while its bank is selected.
+            if ariesB12Fitted { return sidewaysBanks[0] }
+            let bank = Int(romsel & 0x0F)
+            return configuration.fittedExpansions.moduleBanks.contains(bank) ? sidewaysBanks[bank] : nil
         }
     }
 

@@ -186,9 +186,29 @@ Checked against the ROM and the manual:
   manual says.
 
 Not emulated: the B20, the B12 without a B32, a RAM chip in the B32's ROM
-socket, other sideways RAM alongside (`*RWRITE EXTERNAL` writes go nowhere
-without the B12), and reads of the board's registers (the ROM never reads
-them).
+socket, and reads of the board's registers (the ROM never reads them).
+
+## Boards with a sideways RAM module
+
+Boards and modules are separate (`Expansions.board`, `Expansions.sidewaysRAM`),
+as on the real machine: the boards take the 6502's socket, a module a free
+ROM socket. Older configurations with `"board": "sidewaysRAM16"/"sidewaysRAM32"`
+decode as no board and that module.
+
+- **Watford + module**: the board's ROM goes in the free socket the module
+  doesn't take (13, or 12 with the module in 13); the module is written
+  whenever selected, as without a board.
+- **Aries B32 + module**: the B32 renumbers the motherboard sockets 12, 9,
+  10, 11, so the module's first bank is 12 or 9. The B32 decodes every write
+  to &8000-&BFFF through RAMSEL: 13 and 14 its own RAM, 15 nowhere, 0-12 on
+  to the bus (`*RWRITE EXTERNAL`), where the module takes the write if
+  ROMSEL selects it (`WritePolicy.whenSelectedAndPassedOn`). The B12's RAM
+  takes every bus write, as its manual says.
+- **Assumed, not documented**: where a 32K module's second bank (wired from
+  IC76) lands with the B32's renumbering. MacBeeb moves it with the first,
+  4 or 8 below; the window and `get_hardware` say it's an assumption.
+- **B12 + module**: refused (`Expansions.problem`); the B12's cable takes all
+  four motherboard sockets.
 
 ## Phase 4 findings: VideoNuLA
 

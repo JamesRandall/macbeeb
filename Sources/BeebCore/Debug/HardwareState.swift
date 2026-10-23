@@ -195,9 +195,11 @@ extension BBCMicro {
     /// The Model B's expansion board, if one's fitted.
     var expansionState: HardwareSection? {
         let expansions = configuration.fittedExpansions
-        guard expansions.board != .none else { return nil }
+        guard !expansions.isStock else { return nil }
         var rows = [("Board", expansions.board.displayName),
-                    ("ROMSEL (read and write)", "\(hex(romsel)) (bank \(romsel & 0x0F))")]
+                    ("Sideways RAM module", expansions.sidewaysRAM == .none ? "none"
+                        : "\(expansions.sidewaysRAM.displayName), banks \(expansions.moduleBanks.map(String.init).joined(separator: " and "))"),
+                    ("ROMSEL (\(ariesFitted ? "read" : "read and write"))", "\(hex(romsel)) (bank \(romsel & 0x0F))")]
         if watfordFitted {
             rows.append(("Watford latch", watfordMapping.description))
             rows.append(("Writes to &FFFD", "\(watfordFFFDWrites) (no known effect)"))
@@ -214,14 +216,14 @@ extension BBCMicro {
         if !controllerWrites.isEmpty {
             rows.append(("Last register writes", controllerWrites.suffix(6).map { "\(hex($0.address, 4))=\(hex($0.value))" }.joined(separator: " ")))
         }
-        if let bank = expansions.board.controllerROMBank {
+        if let bank = expansions.controllerROMBank {
             rows.append(("Controller ROM", sidewaysSlots[bank].header.map { "\($0.name), bank \(bank)" } ?? "missing (bank \(bank))"))
         }
         for bank in expansions.sidewaysRAMBanks {
             let slot = sidewaysSlots[bank]
             rows.append(("Bank \(bank) (RAM)", slot.header.map { "ROM image: \($0.name)" } ?? "no ROM image"))
         }
-        return HardwareSection("Expansion board", rows)
+        return HardwareSection("Expansions", rows)
     }
 
     var tubeState: HardwareSection {

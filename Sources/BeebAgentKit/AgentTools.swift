@@ -200,22 +200,34 @@ public final class AgentTools: Sendable {
                                  "disc_interface": ["type": "string", "enum": ["intel8271", "acorn1770", "watfordDDB2", "watfordDDB3", "opus"],
                                                     "description": "Model B only: the disc interface and its filing system (default: keep as is)"] as JSONValue,
                                  "memory_board": ["type": "string", "enum": .array(agentBoards.keys.sorted().map { .string($0) }),
-                                                  "description": "Model B only: the memory expansion board (default: keep as is). none is the stock Model B; sideways_ram_16 and sideways_ram_32 are a 16K or 32K sideways RAM module in a motherboard socket; watford_32k is Watford Electronics' 32K shadow RAM board with its ROM (Shadow RAM OS 2.40) in bank 13; aries_b32 is the Aries B32 (32K shared between shadow RAM and sideways RAM banks 13 and 14, its ROM in bank 15, BASIC in 11 and DFS in 10; *XON, *XOFF, *XSTATUS, *RLOAD, *RWRITE, *XTEST) and aries_b32_b12 adds the B12 (sockets 1-12, 16K RAM in bank 0; BASIC in 12, DFS in 11). get_hardware shows what's fitted"] as JSONValue,
-                                 "sideways_ram_socket": prop("integer", "Sideways RAM boards: the socket (bank) the module's in, 12 or 13 (default 13)"),
+                                                  "description": "Model B only: the board in the 6502's socket (default: keep as is). none: no board; watford_32k is Watford Electronics' 32K shadow RAM board with its ROM (Shadow RAM OS 2.40) in bank 13; aries_b32 is the Aries B32 (32K shared between shadow RAM and sideways RAM banks 13 and 14, its ROM in bank 15, BASIC in 11 and DFS in 10; *XON, *XOFF, *XSTATUS, *RLOAD, *RWRITE, *XTEST) and aries_b32_b12 adds the B12 (sockets 1-12, 16K RAM in bank 0; BASIC in 12, DFS in 11). (sideways_ram_16 and sideways_ram_32 still work: no board and that module.) get_hardware shows what's fitted"] as JSONValue,
+                                 "sideways_ram": ["type": "string", "enum": ["none", "16k", "32k"],
+                                                  "description": "Model B only: a sideways RAM module in a motherboard ROM socket, with or without a board (default: keep as is). Not with aries_b32_b12, whose cable uses all four sockets. With aries_b32 it's written while *RWRITE EXTERNAL is set"] as JSONValue,
+                                 "sideways_ram_socket": prop("integer", "The module's socket by its stock bank number: 12 (leftmost) or 13 (default). With aries_b32 they answer as banks 12 and 9; with watford_32k the board's ROM takes the other"),
                                  "second_bank_below": prop("integer", "sideways_ram_32: the second bank is 4 (default) or 8 below the first, as the module's lead is wired"),
                                  "aries_start_up_link": prop("boolean", "Aries B32: the start-up link is fitted (default true: shadow RAM on at power on and Ctrl-Break)"),
                                  "video_nula": prop("boolean", "Fit VideoNuLA in place of the Video ULA (16 programmable 12-bit colours; any model), or take it out (default: keep as is). video_nula shows its state")])
         )) { context, args in
             var expansionChange: (@Sendable (BBCMicro.Expansions) throws -> BBCMicro.Expansions)?
-            if args["memory_board"] != nil || args["sideways_ram_socket"] != nil || args["second_bank_below"] != nil
-                || args["aries_start_up_link"] != nil {
+            if args["memory_board"] != nil || args["sideways_ram"] != nil || args["sideways_ram_socket"] != nil
+                || args["second_bank_below"] != nil || args["aries_start_up_link"] != nil {
                 var board: BBCMicro.MemoryBoard?
+                var module: BBCMicro.SidewaysModule?
                 if let name = args["memory_board"]?.stringValue {
-                    guard let named = agentBoards[name] else {
+                    if let alias = agentModuleAliases[name] {
+                        board = BBCMicro.MemoryBoard.none
+                        module = alias
+                    } else if let named = agentBoards[name] {
+                        board = named
+                    } else {
                         throw ToolFailure("memory_board must be one of \(agentBoards.keys.sorted().joined(separator: ", "))")
                     }
-                    board = named
                 }
+                if let name = args["sideways_ram"]?.stringValue {
+                    guard let named = agentModules[name] else { throw ToolFailure("sideways_ram must be none, 16k or 32k") }
+                    module = named
+                }
+                let newModule = module
                 let socket = args["sideways_ram_socket"]?.intValue
                 let below = args["second_bank_below"]?.intValue
                 let link = args["aries_start_up_link"]?.boolValue
@@ -223,6 +235,7 @@ public final class AgentTools: Sendable {
                 expansionChange = { current in
                     var e = current
                     if let newBoard { e.board = newBoard }
+                    if let newModule { e.sidewaysRAM = newModule }
                     if let socket { e.sidewaysRAMSocket = socket }
                     if let below { e.secondBankBelow = below }
                     if let link { e.ariesStartUpLink = link }

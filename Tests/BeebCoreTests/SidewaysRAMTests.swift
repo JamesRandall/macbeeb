@@ -7,10 +7,10 @@ import Testing
 @testable import BeebCore
 import BeebROMs
 
-func sidewaysRAMMachine(_ board: BBCMicro.MemoryBoard, socket: Int = 13, below: Int = 4,
+func sidewaysRAMMachine(_ module: BBCMicro.SidewaysModule, board: BBCMicro.MemoryBoard = .none, socket: Int = 13, below: Int = 4,
                         discInterface: BBCMicro.DiscInterface = .intel8271,
                         images: [Int: [UInt8]] = [:]) -> BBCMicro {
-    let expansions = BBCMicro.Expansions(board: board, sidewaysRAMSocket: socket, secondBankBelow: below)
+    let expansions = BBCMicro.Expansions(board: board, sidewaysRAM: module, sidewaysRAMSocket: socket, secondBankBelow: below)
     return BBCMicro(configuration: BeebROMs.configuration(for: .modelB, discInterface: discInterface,
                                                           expansions: expansions, sidewaysImages: images))
 }
@@ -55,7 +55,7 @@ struct SidewaysRAMTests {
     }
 
     @Test func sixteenKIsOneBankInItsSocket() {
-        let m = sidewaysRAMMachine(.sidewaysRAM16, socket: 12)
+        let m = sidewaysRAMMachine(.ram16, socket: 12)
         #expect(m.sidewaysRAMBanks == [12])
         let slots = m.sidewaysSlots
         #expect(slots[12].kind == .ram && slots[12].writePolicy == .whenSelected && slots[12].owner == "16K sideways RAM module")
@@ -64,7 +64,7 @@ struct SidewaysRAMTests {
 
     @Test(arguments: [(13, 4, [13, 9]), (13, 8, [13, 5]), (12, 4, [12, 8]), (12, 8, [12, 4])])
     func thirtyTwoKFollowsTheWiring(socket: Int, below: Int, banks: [Int]) {
-        let m = sidewaysRAMMachine(.sidewaysRAM32, socket: socket, below: below)
+        let m = sidewaysRAMMachine(.ram32, socket: socket, below: below)
         #expect(m.sidewaysRAMBanks == Set(banks))
         #expect(m.configuration.expansions.sidewaysRAMBanks == banks)
     }
@@ -72,7 +72,7 @@ struct SidewaysRAMTests {
     /// Exactly &8000-&BFFF, distinct banks, nothing leaking into main RAM
     /// or a ROM, and the ROMs and empty sockets unwritable.
     @Test func banksAreSeparateAndWritableOnlyWhenRAM() {
-        let m = sidewaysRAMMachine(.sidewaysRAM32)
+        let m = sidewaysRAMMachine(.ram32)
         let mainBefore = (0..<0x8000).map { m.peekMainRAM(UInt16($0)) }
         for (bank, base) in [(13, UInt8(0x10)), (9, UInt8(0x90))] {
             for (i, offset) in [0x0000, 0x1FFF, 0x3FFF].enumerated() {
@@ -99,7 +99,7 @@ struct SidewaysRAMTests {
     }
 
     @Test func imagesLoadClearAndRefuseROM() throws {
-        let m = sidewaysRAMMachine(.sidewaysRAM16)
+        let m = sidewaysRAMMachine(.ram16)
         let rom = try testResource("expansions/hello.rom")
         try m.loadSidewaysImage(rom, bank: 13)
         #expect(m.sidewaysSlots[13].header?.name == "MacBeeb Hello 1.00")
@@ -117,7 +117,7 @@ struct SidewaysRAMTests {
     /// it, and its command runs from the RAM bank.
     @Test func romImageAtPowerOnRuns() throws {
         let rom = try testResource("expansions/hello.rom")
-        let m = sidewaysRAMMachine(.sidewaysRAM16, images: [13: rom])
+        let m = sidewaysRAMMachine(.ram16, images: [13: rom])
         #expect(m.runUntilIdle())
         m.paste("*HELP\n*HELLO\n")
         #expect(m.runUntilIdle())
@@ -129,7 +129,7 @@ struct SidewaysRAMTests {
     /// The BBC writing its own sideways RAM: BASIC with a little machine
     /// code that selects a bank in ROMSEL and stores, as loaders do.
     @Test func inGuestWritesFollowTheHardware() {
-        let m = sidewaysRAMMachine(.sidewaysRAM32)
+        let m = sidewaysRAMMachine(.ram32)
         #expect(m.runUntilIdle())
         m.paste("""
         10 DIM C% 60
@@ -159,7 +159,7 @@ struct SidewaysRAMTests {
     /// Acorn's own loader: DFS 2.26's *SRLOAD (SRAM 1.05) puts a ROM image
     /// from disc into the module, and after Ctrl-Break it's a working ROM.
     @Test func srloadFromDiscThenCtrlBreak() throws {
-        let m = sidewaysRAMMachine(.sidewaysRAM32, discInterface: .acorn1770)
+        let m = sidewaysRAMMachine(.ram32, discInterface: .acorn1770)
         m.insertDisc(try Disc.fromSSD(testResource("expansions/hello-rom.ssd")))
         #expect(m.runUntilIdle())
         m.paste("*SRLOAD HELLO 8000 9\n")
@@ -180,11 +180,11 @@ struct SidewaysRAMTests {
 
     /// Save states keep the RAM's contents and the board.
     @Test func saveStateKeepsTheBanks() throws {
-        let m = sidewaysRAMMachine(.sidewaysRAM32)
+        let m = sidewaysRAMMachine(.ram32)
         try m.loadSidewaysImage(try testResource("expansions/hello.rom"), bank: 9)
         let file = SaveStateFile(m)
         let restored = try SaveStateFile(data: try file.data()).makeMachine()
-        #expect(restored.configuration.expansions.board == .sidewaysRAM32)
+        #expect(restored.configuration.expansions.sidewaysRAM == .ram32)
         #expect(restored.sidewaysBankContents(9) == m.sidewaysBankContents(9))
         #expect(restored.sidewaysSlots[9].header?.title == "MacBeeb Hello")
     }
@@ -200,8 +200,8 @@ struct SidewaysRAMTests {
     }
 
     @Test func problemsAreExplained() {
-        #expect(BBCMicro.Expansions(board: .sidewaysRAM16, sidewaysRAMSocket: 14).problem != nil)
-        #expect(BBCMicro.Expansions(board: .sidewaysRAM32, secondBankBelow: 3).problem != nil)
-        #expect(BBCMicro.Expansions(board: .sidewaysRAM32).problem == nil)
+        #expect(BBCMicro.Expansions(sidewaysRAM: .ram16, sidewaysRAMSocket: 14).problem != nil)
+        #expect(BBCMicro.Expansions(sidewaysRAM: .ram32, secondBankBelow: 3).problem != nil)
+        #expect(BBCMicro.Expansions(sidewaysRAM: .ram32).problem == nil)
     }
 }

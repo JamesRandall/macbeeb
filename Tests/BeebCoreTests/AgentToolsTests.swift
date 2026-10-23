@@ -268,7 +268,7 @@ struct AgentHardwareToolsTests {
         let fitted = tools.call("power_cycle", arguments: ["memory_board": "sideways_ram_32", "second_bank_below": 8])
         #expect(!fitted.isError, "\(support.text(fitted))")
         let hardware = support.text(tools.call("get_hardware", arguments: [:]))
-        #expect(hardware.contains("32K of sideways RAM in banks 13 and 5"), "\(hardware)")
+        #expect(hardware.contains("sideways RAM module: 32k (Sideways RAM 32K) in socket 13, second bank 8 below; banks 13 and 5"), "\(hardware)")
         #expect(hardware.contains("13  RAM, 32K sideways RAM module, writable when selected: no ROM image"), "\(hardware)")
 
         let rom = Bundle.module.resourceURL!.appendingPathComponent("Resources/expansions/hello.rom").path
@@ -285,7 +285,7 @@ struct AgentHardwareToolsTests {
 
         // Power cycling keeps the board (and clears its RAM, as switching off would).
         _ = tools.call("power_cycle", arguments: [:])
-        #expect(session.machine.configuration.expansions.board == .sidewaysRAM32)
+        #expect(session.machine.configuration.expansions.sidewaysRAM == .ram32)
         #expect(session.machine.sidewaysSlots[5].header == nil)
     }
 
@@ -339,6 +339,27 @@ struct AgentHardwareToolsTests {
         #expect(support.text(tools.call("run_command", arguments: ["text": "*XSTATUS X"])).contains("Start-up link: OFF"))
     }
 
+    /// A board and a module together; the B12 refuses one.
+    @Test func boardAndModuleOverMCP() {
+        let (tools, session) = modelBTools()
+        let fitted = tools.call("power_cycle", arguments: ["memory_board": "watford_32k", "sideways_ram": "16k", "sideways_ram_socket": 12])
+        #expect(!fitted.isError, "\(support.text(fitted))")
+        let hardware = support.text(tools.call("get_hardware", arguments: [:]))
+        for text in ["memory board: watford_32k", "sideways RAM module: 16k (Sideways RAM 16K) in socket 12; bank 12",
+                     "memory: 32K main RAM + 48K on expansions", "in bank 13"] {
+            #expect(hardware.contains(text), "\(text) in \(hardware)")
+        }
+        let aries = tools.call("power_cycle", arguments: ["memory_board": "aries_b32", "sideways_ram": "32k", "sideways_ram_socket": 13])
+        #expect(!aries.isError, "\(support.text(aries))")
+        let ariesHardware = support.text(tools.call("get_hardware", arguments: [:]))
+        #expect(ariesHardware.contains("banks 9 and 5 (with the Aries B32's renumbering"), "\(ariesHardware)")
+        #expect(ariesHardware.contains("writable when selected while *RWRITE EXTERNAL is set"), "\(ariesHardware)")
+        let b12 = tools.call("power_cycle", arguments: ["memory_board": "aries_b32_b12"])
+        #expect(b12.isError && support.text(b12).contains("all four motherboard ROM sockets"), "\(support.text(b12))")
+        #expect(session.machine.configuration.expansions.board == .ariesB32)
+        #expect(!tools.call("power_cycle", arguments: ["memory_board": "aries_b32_b12", "sideways_ram": "none"]).isError)
+    }
+
     @Test func errorsExplainThemselves() throws {
         let (tools, _) = modelBTools()
         let rom = Bundle.module.resourceURL!.appendingPathComponent("Resources/expansions/hello.rom").path
@@ -348,7 +369,7 @@ struct AgentHardwareToolsTests {
         let rom15 = tools.call("load_sideways_bank", arguments: ["bank": 15, "path": .string(rom)])
         #expect(rom15.isError && support.text(rom15).contains("Bank 15 isn't sideways RAM. Sideways RAM: banks 13"), "\(support.text(rom15))")
         let badSocket = tools.call("power_cycle", arguments: ["sideways_ram_socket": 15])
-        #expect(badSocket.isError && support.text(badSocket).contains("bank 12 or 13"))
+        #expect(badSocket.isError && support.text(badSocket).contains("the leftmost (12) or the next (13)"))
         let master = tools.call("power_cycle", arguments: ["model": "master_128", "memory_board": "sideways_ram_16"])
         #expect(master.isError && support.text(master).contains("model_b only"))
         let file = FileManager.default.temporaryDirectory.appendingPathComponent("bank-\(UUID().uuidString).rom")

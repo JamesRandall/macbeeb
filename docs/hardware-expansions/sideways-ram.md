@@ -7,8 +7,8 @@ game's levels.
 
 ## Quick start
 
-1. **Machine ▸ Hardware Expansions…** (⌥⌘E), click **Sideways RAM 32K**,
-   then **Restart BBC**.
+1. **Machine ▸ Hardware Expansions…** (⌥⌘E). Under **In a ROM Socket**, click
+   **Sideways RAM 32K**, then **Restart BBC**.
 2. Under **Sideways Banks**, click **Load ROM Image…** beside bank 13 and
    choose a ROM image (a `.rom` file, up to 16K).
 3. Press **Break** (⌘B). Type `*HELP`: your ROM is listed.
@@ -39,15 +39,35 @@ bank shows the one ROMSEL has selected as the BBC runs. It's mostly BASIC's,
 
 1. Choose **Machine ▸ Hardware Expansions…**. If the BBC isn't a Model B,
    click **Switch to a Model B**.
-2. Under **Memory Board**, click **Sideways RAM 16K** or **Sideways RAM 32K**.
+2. Under **In a ROM Socket**, click **Sideways RAM 16K** or **Sideways RAM
+   32K**.
 3. Choose where it goes:
-   - **Socket**: **Bank 12** or **Bank 13**, the module's first bank.
+   - **Socket**: **Leftmost** (bank 12) or **Next** (bank 13), the module's
+     first bank.
    - **Second bank** (32K only): four or eight below the first, for example
      bank 9 or bank 5 with the module in bank 13.
 4. Click **Restart BBC**.
 
 The window's title bar then says, for example, "BBC Model B + Sideways RAM
 32K".
+
+## With a shadow RAM board
+
+A module goes with a board in the 6502's socket, as on a real BBC: choose one
+of each.
+
+- **Watford Electronics 32K Shadow RAM**: the board's ROM needs a socket too,
+  so it goes in whichever of 12 and 13 the module doesn't. The module works
+  as above.
+- **Aries B32**: the B32 renumbers the motherboard's sockets 12, 9, 10 and
+  11, so the module's first bank is 12 (leftmost) or 9 (next). The B32
+  write-protects everything at &8000–&BFFF until `*RWRITE EXTERNAL`, which
+  passes writes on to the module while its bank is selected; `*RWRITE OFF`
+  protects it again. Where a 32K module's second bank lands with the
+  renumbering isn't documented: MacBeeb assumes it moves with the first
+  (bank 5 or 1 from bank 9, for example), and the window says so.
+- **Aries B32 + B12**: no module. The B12's cable plugs into all four ROM
+  sockets, but the B12 has 16K of sideways RAM of its own, bank 0.
 
 ## First example: a ROM image from the Mac
 
@@ -124,7 +144,7 @@ loaded afresh each time. Save states keep the RAM exactly as it was.
 
 ## How to undo it
 
-Choose **None (stock Model B)** in the Hardware Expansions window and click
+Choose **No Sideways RAM** in the Hardware Expansions window and click
 **Restart BBC**. The Model B is then exactly as before, with its ROMs in banks
 14 and 15.
 

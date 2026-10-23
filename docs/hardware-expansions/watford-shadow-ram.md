@@ -57,6 +57,10 @@ Electronics 32k Shadow RAM 2.40".
 
 The ROM takes a page of workspace, so PAGE is &1A00 instead of &1900.
 
+A sideways RAM module can go in too (under **In a ROM Socket**): the board's
+ROM then goes in whichever of banks 12 and 13 the module doesn't take. See
+[Sideways RAM](sideways-ram.md#with-a-shadow-ram-board).
+
 ## First example: a program too big for MODE 1
 
 `Examples/shadow-ram/shadow.bas` sets MODE 1, makes a 10K array and draws on

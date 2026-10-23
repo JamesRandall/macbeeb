@@ -14,22 +14,33 @@ on any model, and **Restart BBC**. See [VideoNuLA](videonula.md).
 
 1. Choose **Machine ▸ Hardware Expansions…** (⌥⌘E), or **Hardware
    Expansions…** in the toolbar's Model menu.
-2. Click a board, such as **Sideways RAM 32K**.
-3. Click **Restart BBC**. The BBC restarts with the board fitted, as if you'd
+2. Click a board under **In the 6502's Socket**, such as **Watford
+   Electronics 32K Shadow RAM**, a module under **In a ROM Socket**, such as
+   **Sideways RAM 32K**, or one of each.
+3. Click **Restart BBC**. The BBC restarts with them fitted, as if you'd
    switched it off and on again. Discs stay in their drives.
 
-To take it out again, choose **None (stock Model B)** and restart.
+To take them out again, choose **None** and **No Sideways RAM**, and restart.
 
 ## What's available
+
+In the 6502's socket, a shadow RAM board (one at a time; the board plugs in
+where the 6502 was, and the 6502 into the board):
 
 | Board | What it adds | Guide |
 | --- | --- | --- |
 | None (stock Model B) | Nothing: the Model B as it came | |
-| Sideways RAM 16K | One 16K bank of RAM in a ROM socket | [Sideways RAM](sideways-ram.md) |
-| Sideways RAM 32K | Two 16K banks on one module | [Sideways RAM](sideways-ram.md) |
 | Watford Electronics 32K Shadow RAM | 32K of shadow RAM, with its ROM (Shadow RAM OS 2.40) | [Watford Shadow RAM](watford-shadow-ram.md) |
 | Aries B32 | 32K shared between shadow and sideways RAM (20K + 12K, 16K + 16K or 0 + 32K), with its ROM (ARIES-B32 1.00) | [Aries B32 and B12](aries-b32-b12.md) |
 | Aries B32 + B12 | The B32, plus twelve ROM sockets and 16K of sideways RAM | [Aries B32 and B12](aries-b32-b12.md) |
+
+In a free motherboard ROM socket, a sideways RAM module, with or without a
+board:
+
+| Module | What it adds | Guide |
+| --- | --- | --- |
+| Sideways RAM 16K | One 16K bank of RAM in a ROM socket | [Sideways RAM](sideways-ram.md) |
+| Sideways RAM 32K | Two 16K banks on one module | [Sideways RAM](sideways-ram.md) |
 
 And for video, on any model:
 
@@ -37,8 +48,11 @@ And for video, on any model:
 | --- | --- | --- |
 | VideoNuLA | Each of the 16 colours any of 4,096 | [VideoNuLA](videonula.md) |
 
-Only one memory board can be fitted at a time: on a real BBC they all plug
-into the same places. VideoNuLA is separate: it goes with any board, or none. Expansion boards are for the Model B. The B+ and the
+A module goes with no board, the Watford board (its ROM takes the other free
+socket) or the Aries B32 (which renumbers the sockets, and passes writes on to
+the module after `*RWRITE EXTERNAL`). It can't go with the B12, whose cable
+plugs into all four ROM sockets; the B12 has 16K of sideways RAM of its own.
+VideoNuLA is separate: it goes with any of them, or none. Expansion boards are for the Model B. The B+ and the
 Masters have shadow and sideways RAM built in, and the Model A can't take
 them.
 
@@ -90,7 +104,8 @@ its RAM. Games from the Game Library always start on a stock Model B.
 The debugger's memory view, the `peek` MCP tool and others can read a bank
 directly, without paging it in: see the [developer reference](developer-reference.md).
 AI agents can fit boards and load sideways RAM with MacBeeb's MCP tools
-(`get_hardware`, `power_cycle` with `memory_board`, `load_sideways_bank`).
+(`get_hardware`, `power_cycle` with `memory_board` and `sideways_ram`,
+`load_sideways_bank`).
 
 ## What is and isn't emulated
 

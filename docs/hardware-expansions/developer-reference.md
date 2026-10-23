@@ -8,19 +8,34 @@ Internal evidence and open questions are in
 ## Configuration
 
 A Model B's expansions are part of its configuration
-(`BBCMicro.Configuration.expansions`, a `BBCMicro.Expansions`): the memory
-board, and for sideways RAM its socket and second-bank wiring. Other models
+(`BBCMicro.Configuration.expansions`, a `BBCMicro.Expansions`): the board in
+the 6502's socket (`board`), the sideways RAM module in a ROM socket
+(`sidewaysRAM`), and the module's socket and second-bank wiring. One of each
+can be fitted, except a module with the B12 (`Expansions.problem` explains).
+Configurations saved when sideways RAM was a board (`"board": "sidewaysRAM32"`)
+decode as no board and that module. Other models
 ignore them. Save states carry the whole configuration, ROMs included, and
 older save states without expansions load as a stock Model B.
 
 | Board | `MemoryBoard` | MCP `memory_board` | Extra RAM |
 | --- | --- | --- | --- |
 | None (stock Model B) | `none` | `none` | 0 |
-| Sideways RAM 16K | `sidewaysRAM16` | `sideways_ram_16` | 16K |
-| Sideways RAM 32K | `sidewaysRAM32` | `sideways_ram_32` | 32K |
 | Watford Electronics 32K Shadow RAM | `watford32K` | `watford_32k` | 32K |
 | Aries B32 | `ariesB32` | `aries_b32` | 32K |
 | Aries B32 + B12 | `ariesB32B12` | `aries_b32_b12` | 48K |
+
+| Module | `SidewaysModule` | MCP `sideways_ram` | Extra RAM |
+| --- | --- | --- | --- |
+| None | `none` | `none` | 0 |
+| Sideways RAM 16K | `ram16` | `16k` | 16K |
+| Sideways RAM 32K | `ram32` | `32k` | 32K |
+
+| With | Module's banks | Writes reach it | Controller ROM |
+| --- | --- | --- | --- |
+| No board | socket 12 or 13 (and 4 or 8 below) | whenever selected | none |
+| Watford | the same | whenever selected | the other of 12 and 13 |
+| Aries B32 | 12 or 9 (the B32's numbering; the second bank assumed 4 or 8 below) | while selected and RAMSEL is 0–12 (`*RWRITE EXTERNAL`) | 15 |
+| Aries B32 + B12 | not allowed | | 15 |
 
 ## Sideways RAM
 
@@ -252,7 +267,7 @@ ROMSEL and each RAM bank's contents.
 | Tool | What it does |
 | --- | --- |
 | `get_hardware` | The model, second processor, disc interface, memory board and its wiring, the controller ROM (name, version, bundled or not, SHA-256), the Watford latch, any problem, and all sixteen banks: kind, owner, when writable, ROM title, which is selected |
-| `power_cycle` | With `memory_board` (`none`, `sideways_ram_16`, `sideways_ram_32`, `watford_32k`, `aries_b32`, `aries_b32_b12`), `aries_start_up_link`, `sideways_ram_socket` (12 or 13) and `second_bank_below` (4 or 8), fits a board (Model B only) and restarts. Without them, the board is kept |
+| `power_cycle` | With `memory_board` (`none`, `watford_32k`, `aries_b32`, `aries_b32_b12`), `sideways_ram` (`none`, `16k`, `32k`), `aries_start_up_link`, `sideways_ram_socket` (12 or 13) and `second_bank_below` (4 or 8), fits a board, a module or both (Model B only) and restarts. Without them, what's fitted is kept. `memory_board` `sideways_ram_16` and `sideways_ram_32` still mean no board and that module |
 | `load_sideways_bank` | `bank` and `path`: puts a ROM image (up to 16K) in a sideways RAM bank from outside the BBC. `clear: true` empties it. The OS finds a new ROM at the next Break |
 | `save_sideways_bank` | `bank` and `path`: saves a bank's 16K, ROM or RAM |
 | `press_break` | `ctrl: true` for Ctrl-Break, a hard reset that keeps RAM |
@@ -263,10 +278,10 @@ Errors say what's wrong and what to do: loading a bank that isn't RAM lists
 the RAM banks; asking for a board on another model says boards fit the
 Model B only.
 
-Example, fitting a 32K board and running a ROM from it:
+Example, fitting a 32K module and running a ROM from it:
 
 ```
-power_cycle        {"memory_board": "sideways_ram_32"}
+power_cycle        {"sideways_ram": "32k"}
 load_sideways_bank {"bank": 13, "path": "Examples/sideways-ram/hello.rom"}
 press_break        {}
 run_command        {"text": "*HELLO"}       -> Hello from sideways RAM bank 13

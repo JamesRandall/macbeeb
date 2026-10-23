@@ -6,11 +6,17 @@ import Foundation
 /// The machine's hardware: what's fitted, the sideways banks, and loading
 /// sideways RAM.
 extension AgentTools {
-    /// Agents' names for the memory boards.
+    /// Agents' names for the boards in the 6502's socket.
     static let agentBoards: [String: BBCMicro.MemoryBoard] = [
-        "none": .none, "sideways_ram_16": .sidewaysRAM16, "sideways_ram_32": .sidewaysRAM32, "watford_32k": .watford32K,
-        "aries_b32": .ariesB32, "aries_b32_b12": .ariesB32B12,
+        "none": .none, "watford_32k": .watford32K, "aries_b32": .ariesB32, "aries_b32_b12": .ariesB32B12,
     ]
+
+    /// And for the sideways RAM modules.
+    static let agentModules: [String: BBCMicro.SidewaysModule] = ["none": .none, "16k": .ram16, "32k": .ram32]
+
+    /// Earlier names, when a module was a board of its own: no board, and
+    /// that module.
+    static let agentModuleAliases: [String: BBCMicro.SidewaysModule] = ["sideways_ram_16": .ram16, "sideways_ram_32": .ram32]
 
     static func agentName(_ board: BBCMicro.MemoryBoard) -> String {
         agentBoards.first { $0.value == board }!.key
@@ -26,6 +32,7 @@ extension AgentTools {
             case .never: break
             case .whenSelected: line += ", writable when selected"
             case .whenWriteSelected: line += ", written while *RWRITE (&FE32) selects it"
+            case .whenSelectedAndPassedOn: line += ", writable when selected while *RWRITE EXTERNAL is set"
             }
             if let header = slot.header {
                 line += ": \(header.name)\(header.isLanguage ? " (language)" : "")"
@@ -54,15 +61,17 @@ extension AgentTools {
                 if m.model == .modelB {
                     lines.append("disc interface: \(c.discInterface.displayName)")
                     let e = c.expansions
-                    var board = "memory board: \(agentName(e.board)) (\(e.board.displayName))"
-                    if e.board.isSidewaysRAM {
-                        board += ", in socket \(e.sidewaysRAMSocket)"
-                        if e.board == .sidewaysRAM32 { board += ", second bank \(e.secondBankBelow) below" }
-                        board += "; \(e.board.extraRAM / 1024)K of sideways RAM in bank\(e.sidewaysRAMBanks.count > 1 ? "s" : "") \(e.sidewaysRAMBanks.map(String.init).joined(separator: " and "))"
+                    lines.append("memory board: \(agentName(e.board)) (\(e.board.displayName))")
+                    var module = "sideways RAM module: \(agentModules.first { $0.value == e.sidewaysRAM }!.key)"
+                    if e.sidewaysRAM != .none {
+                        module += " (\(e.sidewaysRAM.displayName)) in socket \(e.sidewaysRAMSocket)"
+                        if e.sidewaysRAM == .ram32 { module += ", second bank \(e.secondBankBelow) below" }
+                        module += "; bank\(e.moduleBanks.count > 1 ? "s" : "") \(e.moduleBanks.map(String.init).joined(separator: " and "))"
+                        if e.secondBankIsAssumed { module += " (with the Aries B32's renumbering, the second bank's number is MacBeeb's assumption)" }
                     }
-                    lines.append(board)
-                    lines.append("memory: 32K main RAM\(e.board.extraRAM > 0 ? " + \(e.board.extraRAM / 1024)K on the board" : "")")
-                    if let bank = e.board.controllerROMBank {
+                    lines.append(module)
+                    lines.append("memory: 32K main RAM\(e.extraRAM > 0 ? " + \(e.extraRAM / 1024)K on expansions" : "")")
+                    if let bank = e.controllerROMBank {
                         let rom = m.sidewaysBankContents(bank).map { Array($0.prefix(Firmware.standard(for: e.board)?.size ?? 0x4000)) }
                         let identity = rom.map { Firmware.identify($0, for: e.board) }
                         let described: String = switch identity {
@@ -119,7 +128,7 @@ extension AgentTools {
                         try m.clearSidewaysBank(bank)
                     }
                 } catch let error as BBCMicro.SidewaysImageError {
-                    throw ToolFailure("\(error)" + (m.sidewaysRAMBanks.isEmpty ? " (there's no sideways RAM: power_cycle with memory_board sideways_ram_16 or sideways_ram_32)" : ". Sideways RAM: banks \(m.sidewaysRAMBanks.sorted().map(String.init).joined(separator: ", "))"))
+                    throw ToolFailure("\(error)" + (m.sidewaysRAMBanks.isEmpty ? " (there's no sideways RAM: power_cycle with sideways_ram 16k or 32k)" : ". Sideways RAM: banks \(m.sidewaysRAMBanks.sorted().map(String.init).joined(separator: ", "))"))
                 }
                 let slot = m.sidewaysSlots[bank]
                 if let loaded {
