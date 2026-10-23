@@ -21,10 +21,27 @@ of one.
 
 | Template | What's in it |
 | --- | --- |
+| Econet Demo | A classroom ready to try: a Welcome machine with instructions, two Model Bs, a Master, and demo programs on the file server |
 | Two BBCs | Two Model Bs, stations 1 and 2, and a clock: the smallest network |
 | School Classroom | Four Model Bs (stations 1–4), a file server (254), a printer server (235) and a clock |
 | BBC and Master | A Model B and a Master 128, a file server and a clock |
 | Empty Network | Just the clock |
+
+## The Econet Demo
+
+The quickest way to see what a network does. **File ▸ New Network…**, then
+**Econet Demo**. The **Welcome** machine (station 1) boots into a screen of
+instructions. On any machine, type `*NET`, then:
+
+| Program | What it shows |
+| --- | --- |
+| `CHAIN "HELLO"` | A program loaded over the network from the file server |
+| `CHAIN "CHAT"` | Two BBCs talking: run it on two machines, give each the other's station number, and type. It uses the network filing system's own transmit and receive calls (OSWORD &10 and &11) on port &77 |
+| `CHAIN "GUESTS"` | A visitors' book kept in a file on the server: sign it on one BBC, and the name's there on another |
+| `CHAIN "PRINTME"` | A page printed on the network printer (station 235): see it in Window ▸ Print Centre |
+| `CHAIN "WELCOME"` | The instructions again |
+
+Watch the **Traffic** view while they run to see the frames each one sends.
 
 ## The canvas
 

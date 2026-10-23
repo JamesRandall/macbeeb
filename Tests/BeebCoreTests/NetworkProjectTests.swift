@@ -141,3 +141,23 @@ struct NetworkPlacingTests {
         #expect(!project.nodes.contains { abs($0.position.x - station.x) < 236 && abs($0.position.y - station.y) < 230 })
     }
 }
+
+struct DemoTemplateTests {
+    /// The demo's discs go in its package: the Welcome machine's, which
+    /// it boots, and the file server's, with the programs in directory A.
+    @Test func demoNetworkHasItsDiscs() throws {
+        let url = temporaryPackage()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let project = try NetworkPackage.create(.econetDemo, at: url)
+        #expect(try NetworkPackage.load(from: url) == project)
+        let welcome = try #require(project.nodes.first { $0.bootsDisc == true })
+        let server = try #require(project.nodes.first { $0.kind == .fileServer })
+        for (node, name) in [(welcome, "WELCOME"), (server, "A.CHAT")] {
+            let media = try #require(node.discs[0])
+            let data = try Data(contentsOf: NetworkPackage.url(of: media, in: url))
+            let volume = try DiscVolume(disc: Disc.fromImage([UInt8](data), format: .ssd))
+            #expect(try volume.items(at: .init()).contains { $0.name == name }, "\(name)")
+        }
+        #expect(project.nodes.contains { $0.setup?.model == .master128 })
+    }
+}

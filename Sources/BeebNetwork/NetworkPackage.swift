@@ -38,6 +38,21 @@ public enum NetworkPackage {
         try encoder.encode(project).write(to: url.appendingPathComponent(manifestName), options: .atomic)
     }
 
+    /// A new network from a template, saved at `url` with its discs.
+    @discardableResult
+    public static func create(_ template: NetworkTemplate, named name: String? = nil, at url: URL) throws -> NetworkProject {
+        var project = template.makeProject()
+        if let name, !name.isEmpty { project.name = name }
+        try save(project, to: url)
+        for disc in try template.discs(for: project) {
+            let stored = UUID().uuidString.prefix(8) + "-" + disc.name
+            try Data(disc.image).write(to: mediaURL(in: url).appendingPathComponent(String(stored)), options: .atomic)
+            project[disc.node]?.discs[disc.drive] = MediaReference(storedName: String(stored), displayName: disc.name)
+        }
+        try save(project, to: url)
+        return project
+    }
+
     public static func mediaURL(in package: URL) -> URL {
         package.appendingPathComponent(mediaFolder, isDirectory: true)
     }

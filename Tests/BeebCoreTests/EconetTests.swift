@@ -204,7 +204,7 @@ extension EconetRig {
         run(seconds: 1.5)
         type(index, "CH.\"FS\"\n")
         run(until: { screen(index).contains("files per user") })
-        type(index, "3\n")
+        type(index, "20\n")
         run(until: { screen(index).contains("Manual?") })
         type(index, "Y\n")
         for (n, station) in clients.enumerated() {
@@ -373,5 +373,51 @@ struct EconetTraceTests {
         rig.run(until: { rig.screen(0).contains("RESULT") })
         let frames = trace.frames(after: nil)
         #expect(!frames.isEmpty && frames.allSatisfy { $0.kind == .scout && $0.destinationStation == 3 })
+    }
+}
+
+/// The Econet Demo network's programs, run as a visitor would.
+struct EconetDemoTests {
+    @Test func everyProgramWorks() throws {
+        let rig = EconetRig([(.modelB, 254), (.modelB, 235), (.modelB, 1), (.modelB, 2), (.modelB, 3)])
+        try rig.startLevel1FileServer(0, clients: [1, 2, 3], directories: ["A", "A", "A"],
+                                      disc: Disc.fromImage(DemoNetwork.fileServerDisc(), format: .ssd))
+        let printed = try rig.startPrinterServer(1)
+
+        // The Welcome machine boots its disc into the instructions.
+        rig.machines[2].insertDisc(try Disc.fromImage(DemoNetwork.welcomeDisc(), format: .ssd), drive: 0)
+        rig.machines[2].shiftBreak()
+        #expect(rig.run(until: { rig.screen(2).contains("ECONET DEMONSTRATION") && rig.screen(2).contains(">") }), "\(rig.screen(2))")
+        #expect(rig.screen(2).contains("sign the visitors' book"))
+
+        for client in [3, 4] { rig.type(client, "*NET\n") }
+        rig.type(3, "CHAIN \"HELLO\"\n")
+        #expect(rig.run(until: { rig.screen(3).contains("Hello from the file server!") }), "\(rig.screen(3))")
+
+        // The visitors' book: signed on one BBC, read on another.
+        rig.type(3, "CHAIN \"GUESTS\"\n")
+        #expect(rig.run(until: { rig.screen(3).contains("Your name:") }), "\(rig.screen(3))")
+        rig.type(3, "ALICE\n")
+        #expect(rig.run(until: { rig.screen(3).contains("Thank you!") }), "\(rig.screen(3))")
+        rig.type(4, "CHAIN \"GUESTS\"\n")
+        #expect(rig.run(until: { rig.screen(4).contains("Your name:") }), "\(rig.screen(4))")
+        #expect(rig.screen(4).contains("ALICE") && rig.screen(4).contains("1 so far"), "\(rig.screen(4))")
+        rig.type(4, "\n")
+
+        // Chat: station 2 to station 3.
+        rig.type(4, "CHAIN \"CHAT\"\n")
+        #expect(rig.run(until: { rig.screen(4).contains("Chat to station") }), "\(rig.screen(4))")
+        rig.type(4, "2\n")
+        rig.type(3, "CHAIN \"CHAT\"\n")
+        #expect(rig.run(until: { rig.screen(3).contains("Chat to station") }), "\(rig.screen(3))")
+        rig.type(3, "3\n")
+        rig.type(3, "HI THERE\n")
+        #expect(rig.run(until: { rig.screen(4).contains("Station 2:") && rig.screen(4).contains("HI THERE") }), "\(rig.screen(4))")
+        #expect(rig.screen(3).contains("(sent)"), "\(rig.screen(3))")
+
+        // Printing, from the welcome machine.
+        rig.type(2, "CHAIN \"PRINTME\"\n")
+        #expect(rig.run(until: { printed.text.contains("PRINTED OVER ECONET") && rig.screen(2).contains("Print Centre") }, seconds: 90),
+                "\(printed.text.debugDescription) \(rig.screen(2))")
     }
 }

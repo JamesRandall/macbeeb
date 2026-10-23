@@ -213,6 +213,8 @@ public struct NetworkNode: Codable, Sendable, Equatable, Identifiable {
     public var startsServer: Bool?
 
     public var startsServerWhenOn: Bool { kind != .station && kind != .clock && startsServer != false }
+    /// Boots the disc in its drive 0 when it's switched on (Shift-Break).
+    public var bootsDisc: Bool?
 
     public var isMachine: Bool { kind != .clock }
 

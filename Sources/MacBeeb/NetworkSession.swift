@@ -242,6 +242,9 @@ final class NetworkSession: StationOwner {
             ? "\(node.name) · station \(node.stationNumber ?? 0)"
             : "\(node.name)'s printer port"
         guard let host = runtime.powerOn(node, printer: (printerName, PrintCentre.receiver())) else { return }
+        if node.bootsDisc == true {
+            host.send(.shiftBreak)
+        }
         let controller = MachineController(station: id, host: host, setup: setup, owner: self)
         controller.watchesConsole = node.kind != .station
         for (drive, media) in node.discs {
@@ -375,12 +378,16 @@ final class NetworkSession: StationOwner {
     /// on the network the class's shared directory, A.
     func fileServerStartup(for id: UUID) -> String {
         let clients = project.stations.filter { $0.id != id && $0.kind == .station }.compactMap(\.stationNumber)
-        var text = "CH.\"FS\"\n3\nY\n"
+        // Files per user is the most each directory holds: the stations
+        // share one, so it's room for theirs and any put there from the Mac.
+        var text = "CH.\"FS\"\n\(Self.filesPerUser)\nY\n"
         for station in clients.prefix(30) {
             text += "A\n\(station)\n"
         }
         return text + "\n"
     }
+
+    static let filesPerUser = 20
 
     /// Starts Acorn's Level 1 file server on a machine: the network's copy
     /// of the server disc goes in its drive 0 (if it hasn't one), it's

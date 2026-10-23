@@ -65,10 +65,9 @@ struct NetworkStartView: View {
     }
 
     private func create(_ template: NetworkTemplate) {
-        let project = template.makeProject()
-        let url = RecentNetworks.newURL(named: project.name)
+        let url = RecentNetworks.newURL(named: template.title)
         do {
-            try NetworkPackage.save(project, to: url)
+            try NetworkPackage.create(template, at: url)
             NetworkStudioCommands.open(url, openWindow: openWindow)
             dismissWindow(id: Self.windowID)
         } catch {

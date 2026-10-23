@@ -61,8 +61,8 @@ enum NetworkSelfTest {
         NSLog("MacBeeb: network self-test starting")
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("macbeeb-network-selftest-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let url = folder.appendingPathComponent("School Classroom.\(NetworkPackage.fileExtension)")
-        try? NetworkPackage.save(NetworkTemplate.schoolClassroom.makeProject(), to: url)
+        let url = folder.appendingPathComponent("Econet Demo.\(NetworkPackage.fileExtension)")
+        try? NetworkPackage.create(.econetDemo, at: url)
         guard let session = try? NetworkSession.session(for: url) else {
             NSLog("MacBeeb: network self-test: can't open the network")
             NSApp.terminate(nil)
@@ -84,12 +84,12 @@ enum NetworkSelfTest {
                 "*FX5,4\nVDU 2:PRINT \"HELLO FROM STATION 3, OVER ECONET\":FOR I%=1 TO 12:PRINT \"LINE \";I%:NEXT:VDU 3\n",
                 "10 PRINT \"STATION 4 \";:GOTO 10\nRUN\n",
             ]
-            for (node, program) in zip(session.project.stations.filter { $0.kind == .station }, programs) {
+            for (node, program) in zip(session.project.stations.filter { $0.kind == .station && $0.bootsDisc != true }, programs) {
                 session.controllers[node.id]?.host.send(.type(program))
             }
             try? await Task.sleep(for: .seconds(8))
             // Station 2 runs what station 1 saved.
-            if let second = session.project.stations.filter({ $0.kind == .station }).dropFirst().first {
+            if let second = session.project.stations.filter({ $0.kind == .station && $0.bootsDisc != true }).dropFirst().first {
                 session.controllers[second.id]?.host.send(.type("*NET\nCHAIN \"HELLO\"\n"))
             }
             try? await Task.sleep(for: .seconds(4))

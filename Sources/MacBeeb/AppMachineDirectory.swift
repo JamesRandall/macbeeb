@@ -236,16 +236,16 @@ final class AppMachineDirectory: MachineDirectory, @unchecked Sendable {
     private func open(_ name: String, _ arguments: JSONValue) -> ToolResult {
         let url: URL
         if name == "network_create" {
-            let templates: [String: NetworkTemplate] = ["two_bbcs": .twoBBCs, "school_classroom": .schoolClassroom,
+            let templates: [String: NetworkTemplate] = ["econet_demo": .econetDemo, "two_bbcs": .twoBBCs,
+                                                        "school_classroom": .schoolClassroom,
                                                         "bbc_and_master": .bbcAndMaster, "empty": .empty]
             guard let template = arguments["template"]?.stringValue.flatMap({ templates[$0] }) else {
                 return .error("invalid_value: template must be one of \(templates.keys.sorted().joined(separator: ", "))")
             }
-            var project = template.makeProject()
-            if let given = arguments["name"]?.stringValue, !given.isEmpty { project.name = given }
-            url = RecentNetworks.newURL(named: project.name)
+            let given = arguments["name"]?.stringValue
+            url = RecentNetworks.newURL(named: given.flatMap { $0.isEmpty ? nil : $0 } ?? template.title)
             do {
-                try NetworkPackage.save(project, to: url)
+                try NetworkPackage.create(template, named: given, at: url)
             } catch {
                 return .error("write_failed: \(error.localizedDescription)")
             }
