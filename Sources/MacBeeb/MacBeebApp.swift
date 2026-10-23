@@ -446,6 +446,7 @@ struct MachineWindow: View {
             .toolbar(id: "machine") {
                 MachineToolbar(machine: machine)
             }
+            .bringsLibraryForwardOnArrival()
             .toolbarRole(.editor)
     }
 

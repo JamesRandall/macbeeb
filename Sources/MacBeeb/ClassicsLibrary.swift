@@ -3,6 +3,7 @@ import BeebCore
 import BeebLibrary
 import BeebROMs
 import Observation
+import SwiftUI
 
 /// The BBC Micro Classics bookshelf's state, shared by every window: the
 /// library of imported games, downloads being waited for, the Downloads
@@ -449,9 +450,16 @@ final class ClassicsLibrary {
     private func addUnresolved(_ candidate: DiskCandidate) {
         guard !unresolved.contains(where: { $0.digest == candidate.digest }) else { return }
         unresolved.append(candidate)
+        arrivals += 1
     }
 
+    /// Counts downloads found in the watched folder that were added, or
+    /// need the user to say what they are: the Game Library comes to the
+    /// front for each (see `bringsLibraryForwardOnArrival`).
+    private(set) var arrivals = 0
+
     private func celebrate(_ gameID: String) {
+        arrivals += 1
         justInstalled = gameID
         Task {
             try? await Task.sleep(for: .seconds(4))
@@ -683,4 +691,34 @@ struct GameDraft: Identifiable {
     var hasDisc: Bool { disc != nil || existingDiscName != nil }
     /// The cover to show: the new one, or the one it has.
     var shownCover: URL? { newCover ?? existingCover }
+}
+
+/// Brings the Game Library to the front when a download arrives, opening it
+/// if need be. On every window that can open it, so it works whichever are
+/// open; opening an already-open window just raises it.
+struct BringsLibraryForwardOnArrival: ViewModifier {
+    @Environment(\.openWindow) private var openWindow
+
+    func body(content: Content) -> some View {
+        content.onChange(of: ClassicsLibrary.shared.arrivals) {
+            openWindow(id: BookshelfView.windowID)
+            Task { @MainActor in
+                // The window may only just exist.
+                try? await Task.sleep(for: .milliseconds(100))
+                // The user's probably in their browser: activating may be
+                // refused, so the window is also put in front regardless.
+                NSApp.activate()
+                if let window = NSApp.windows.first(where: { $0.identifier?.rawValue.hasPrefix(BookshelfView.windowID) == true }) {
+                    window.orderFrontRegardless()
+                    window.makeKey()
+                }
+            }
+        }
+    }
+}
+
+extension View {
+    func bringsLibraryForwardOnArrival() -> some View {
+        modifier(BringsLibraryForwardOnArrival())
+    }
 }

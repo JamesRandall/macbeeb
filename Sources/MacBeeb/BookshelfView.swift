@@ -153,6 +153,9 @@ struct BookshelfView: View {
         .onChange(of: classics.drafts.count) { old, new in
             if new > old { tab = .myGames }
         }
+        // A download arriving brings the library to the front (when no
+        // machine window is open, it's the one watching).
+        .bringsLibraryForwardOnArrival()
         .onAppear {
             gridFocused = true
             // When it's the only window at launch, it's the one that says
