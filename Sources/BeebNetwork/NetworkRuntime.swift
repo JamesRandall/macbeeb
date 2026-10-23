@@ -1,5 +1,6 @@
 import BeebCore
 import BeebHost
+import BeebPrint
 import Foundation
 
 /// A network project's machines, running: a `NetworkHost` with a station
@@ -38,11 +39,13 @@ public final class NetworkRuntime: @unchecked Sendable {
     /// Switches a machine on: a new machine, as at power on, with the
     /// node's discs in its drives. If it's already on, its station.
     @discardableResult
-    public func powerOn(_ node: NetworkNode, discDriveSoundsOn: Bool = false) -> EmulatorHost? {
+    public func powerOn(_ node: NetworkNode, discDriveSoundsOn: Bool = false,
+                        printer: (name: String, jobs: @Sendable (PrintJob) -> Void)? = nil) -> EmulatorHost? {
         guard node.isMachine, let setup = node.setup else { return nil }
         if let running = stations[node.id] { return running }
         let configuration = setup.configuration(econetStation: node.stationNumber)
-        let host = network.addStation(id: node.id, discDriveSounds: discDriveSounds, discDriveSoundsOn: discDriveSoundsOn) {
+        let host = network.addStation(id: node.id, discDriveSounds: discDriveSounds, discDriveSoundsOn: discDriveSoundsOn,
+                                      printer: printer) {
             BBCMicro(configuration: configuration)
         }
         for (drive, media) in node.discs {

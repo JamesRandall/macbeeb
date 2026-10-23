@@ -1,4 +1,5 @@
 import BeebCore
+import BeebPrint
 import Foundation
 import Synchronization
 
@@ -65,7 +66,30 @@ public final class NetworkHost: @unchecked Sendable {
     public var lineObserver: ((EconetLineEvent) -> Void)?
     private var traffic: [UInt8: Traffic] = [:]
 
+    /// The frames on the line, as the inspector and agents read them.
+    private let trace = EconetTrace()
+    private let traceLock = NSLock()
+
+    /// Frames after `id` (all kept, if nil), newest last.
+    public func frames(after id: Int? = nil, limit: Int = .max) -> [EconetFrame] {
+        traceLock.withLock { trace.frames(after: id, limit: limit) }
+    }
+
+    /// Frames seen since the trace began (including any no longer kept).
+    public var frameCount: Int { traceLock.withLock { trace.count } }
+
+    public var isTracing: Bool { traceLock.withLock { trace.recording } }
+
+    public func setTracing(_ on: Bool) {
+        traceLock.withLock { trace.recording = on }
+    }
+
+    public func clearTrace() {
+        traceLock.withLock { trace.clear() }
+    }
+
     private func observe(_ event: EconetLineEvent) {
+        traceLock.withLock { trace.observe(event) }
         switch event.symbol {
         case .byte: traffic[event.station, default: Traffic()].bytes += 1
         case .check: traffic[event.station, default: Traffic()].checkBytes += 1
@@ -103,9 +127,14 @@ public final class NetworkHost: @unchecked Sendable {
     /// `start` it: the network runs it.
     public func addStation(id: UUID, discDriveSounds: (@Sendable (BBCMicro.Model) -> DiscDriveSounds?)? = nil,
                            discDriveSoundsOn: Bool = true, keepsRewind: Bool = false,
+                           printer: (name: String, jobs: @Sendable (PrintJob) -> Void)? = nil,
                            makeMachine: @escaping @Sendable () -> BBCMicro) -> EmulatorHost {
         let host = EmulatorHost(sampleRate: sampleRate, discDriveSounds: discDriveSounds,
                                 discDriveSoundsOn: discDriveSoundsOn, makeMachine: makeMachine)
+        if let printer {
+            host.printerName = printer.name
+            host.printJobs = printer.jobs
+        }
         host.isNetworkStation = true
         host.keepsRewind = keepsRewind
         commands.withLock { $0.append(.add(id, host)) }

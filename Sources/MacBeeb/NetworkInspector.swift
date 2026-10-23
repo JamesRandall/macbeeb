@@ -179,6 +179,25 @@ struct MachineInspector: View {
                 }
             }
 
+            if node.kind == .printServer {
+                InspectorSection("Printer Server") {
+                    if let line = controller?.consoleLine {
+                        LabeledContent("Console", value: line)
+                            .font(.callout.monospaced())
+                    }
+                    let jobs = PrintCentre.shared.jobs.filter { $0.printer.hasSuffix("station \(node.stationNumber ?? 0)") }
+                    LabeledContent("Jobs", value: "\(jobs.count)")
+                    HStack {
+                        Button("Start Printer Server") { session.startPrinterServer(node.id) }
+                        OpenPrintCentreButton()
+                    }
+                    Text("MacBeeb's printer server runs on this BBC and prints to its printer port; what it prints appears in the Print Centre. On the other machines, *FX5,4 chooses the network printer, then VDU 2 starts printing and VDU 3 stops.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             InspectorSection("Machine") {
                 LabeledContent("Model") {
                     Picker("Model", selection: Binding(get: { node.setup?.model ?? .modelB }, set: { setModel($0) })) {

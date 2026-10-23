@@ -1,5 +1,6 @@
 import BeebCapture
 import BeebCore
+import BeebPrint
 import Foundation
 import Synchronization
 
@@ -125,6 +126,11 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
     /// Whether a `NetworkHost` drives this machine (so it has no thread of
     /// its own).
     public internal(set) var isNetworkStation = false
+    /// Where what the machine prints goes: a printer on its printer port,
+    /// whose jobs go here (on the emulation thread). Set before it starts.
+    public var printJobs: (@Sendable (PrintJob) -> Void)?
+    /// The printer's name in its jobs.
+    public var printerName = "Printer"
     /// Whether the machine keeps rewind snapshots. A network's stations
     /// don't by default: each keeps its own, and they add up.
     public internal(set) var keepsRewind = true
@@ -449,8 +455,16 @@ final class HostSession: MachineSession {
         attach()
     }
 
+    private var spooler: PrintSpooler?
+
     private func attach() {
         machine.tv = tv
+        spooler?.machineStopped()
+        if let printJobs = host.printJobs {
+            let spooler = PrintSpooler(printer: host.printerName, onJob: printJobs)
+            self.spooler = spooler
+            machine.printer = ParallelPrinter { byte, cycle in spooler.receive(byte, at: cycle) }
+        }
         if machine.rewinder == nil && host.keepsRewind {
             machine.enableRewind()
         }
@@ -496,6 +510,7 @@ final class HostSession: MachineSession {
         if cyclesSincePublished >= 2_000 {
             cyclesSincePublished = 0
             host.didAdvance(self)
+            spooler?.idle(at: machine.cycles)
         }
     }
 

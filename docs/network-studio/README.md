@@ -74,6 +74,40 @@ network.
 To start the server by hand (after Break, for example), choose **Start File
 Server** in its inspector or right-click menu.
 
+## Printing
+
+**Window ▸ Print Centre** (⌥⌘P) shows everything the BBCs have printed, on
+paper as the printer would have put it, and keeps it after MacBeeb quits.
+
+- **On a network**: the printer server (station 235) runs MacBeeb's printer
+  server on its BBC, with a printer on its printer port. On any other
+  machine, `*FX5,4` chooses the network printer; then `VDU 2` starts
+  printing and `VDU 3` stops, and `CTRL-B` and `CTRL-C` do the same. In
+  between, whatever the BBC prints goes to the printer server, and from it
+  to its printer. The job appears in the Print Centre as it prints.
+- **On its own**: every MacBeeb BBC has a printer on its printer port.
+  `*FX5,1` chooses it (it's the default on a Model B), then `VDU 2` and
+  `VDU 3`.
+- **One job at a time**: the printer server prints one station's job at a
+  time. Another station printing at once gets its network filing system's
+  "No reply", as with a real server; print again when the first is done.
+- **A job ends** when the printer's been quiet for three seconds of BBC
+  time.
+- **On paper**: Clean or Dot Matrix (the dots in the BBC's own characters),
+  on A4, US Letter or fanfold. 66 lines a page, 10 characters an inch.
+  Carriage returns, line feeds, tabs, form feeds, and Epson's bold and
+  underline are understood. Other printer codes are kept in the job, but not
+  drawn: the Print Centre lists them.
+- **Export PDF**, **Print** (on the Mac's printer) and **Raw Bytes** (exactly
+  what the BBC sent) are in the toolbar. PDFs have their text, so they can
+  be searched.
+
+MacBeeb's printer server is a BBC BASIC program (on the printer server's
+disc, `PSERV`), written for MacBeeb because Acorn's own printer server
+isn't included. It speaks the printer server protocol Acorn's network
+filing systems use: status enquiries on port &9F, answered on &9E, and the
+job's data on port &D1.
+
 ## Tiles
 
 Click **Tiles** in the toolbar to see the machines that are on side by

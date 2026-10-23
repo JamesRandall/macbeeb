@@ -11,7 +11,9 @@ public final class ParallelPrinter {
     /// Gets each byte, with the machine's cycle count when it was strobed.
     public var onByte: (UInt8, UInt64) -> Void
 
-    var lastStrobe: UInt8 = 1
+    /// (Low to start with: CA2 is until the OS sets the VIA up, which
+    /// isn't a strobe.)
+    var lastStrobe: UInt8 = 0
     /// Counts down to /ACK.
     var acknowledgeIn = 0
     /// How long /ACK is held low (1MHz ticks).

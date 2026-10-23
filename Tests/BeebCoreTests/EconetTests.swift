@@ -308,3 +308,39 @@ struct EconetFileServerTests {
         #expect(rig.run(until: { rig.screen(1).contains("KEPT\n") }), "\(rig.screen(1))")
     }
 }
+
+/// The trace: frames put back together from the line, and read as the
+/// four-way handshake.
+struct EconetTraceTests {
+    @Test func oneTransmissionIsOneTransaction() {
+        let rig = EconetRig([(.modelB, 1), (.modelB, 2)])
+        let trace = EconetTrace()
+        rig.bus.observer = { trace.observe($0) }
+        rig.run(seconds: 1.5)
+        rig.runProgram(1, econetReceiver)
+        rig.run(until: { rig.screen(1).contains("OPEN") })
+        trace.clear()
+        rig.runProgram(0, econetSender(to: 2))
+        #expect(rig.run(until: { rig.screen(0).contains("RESULT") }))
+        let frames = trace.frames(after: nil)
+        #expect(frames.map(\.kind) == [.scout, .acknowledgement, .data, .acknowledgement], "\(frames.map(\.summary))")
+        #expect(Set(frames.compactMap(\.transaction)).count == 1)
+        #expect(frames.allSatisfy { $0.status == .valid })
+        #expect(frames[0].port == 0x77 && frames[0].control == 0x80)
+        #expect(frames[0].transmitter == 1 && frames[1].transmitter == 2)
+        #expect(Array(frames[2].payload) == Array("HELLO ECONET\r".utf8))
+        #expect(frames[0].summary == "Scout · control &80 · port &77")
+    }
+
+    /// Nobody listening: a scout, and no acknowledgement.
+    @Test func unansweredScout() {
+        let rig = EconetRig([(.modelB, 1), (.modelB, 2)])
+        let trace = EconetTrace()
+        rig.bus.observer = { trace.observe($0) }
+        rig.run(seconds: 1.5)
+        rig.runProgram(0, econetSender(to: 3))
+        rig.run(until: { rig.screen(0).contains("RESULT") })
+        let frames = trace.frames(after: nil)
+        #expect(!frames.isEmpty && frames.allSatisfy { $0.kind == .scout && $0.destinationStation == 3 })
+    }
+}

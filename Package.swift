@@ -45,11 +45,14 @@ let package = Package(
         .target(name: "BeebCapture", dependencies: ["BeebCore"]),
 
         // Runs a machine on its own thread, paced by audio or the wall clock.
-        .target(name: "BeebHost", dependencies: ["BeebCore", "BeebCapture"]),
+        .target(name: "BeebHost", dependencies: ["BeebCore", "BeebCapture", "BeebPrint"]),
+
+        // Printing: jobs as the BBC sent them, laid out on pages, and PDFs.
+        .target(name: "BeebPrint"),
 
         // Networks of machines: the saved project, templates, and the
         // network that runs them.
-        .target(name: "BeebNetwork", dependencies: ["BeebCore", "BeebHost", "BeebROMs"]),
+        .target(name: "BeebNetwork", dependencies: ["BeebCore", "BeebHost", "BeebROMs", "BeebPrint"]),
 
         .executableTarget(name: "beeb", dependencies: ["BeebCore", "BeebCapture", "BeebROMs"]),
 
@@ -63,7 +66,7 @@ let package = Package(
         .executableTarget(
             name: "MacBeeb",
             dependencies: ["BeebCore", "BeebHost", "BeebCapture", "BeebROMs", "BeebAgentKit", "BeebDAP", "BeebLibrary",
-                           "BeebNetwork", .product(name: "Sparkle", package: "Sparkle")],
+                           "BeebNetwork", "BeebPrint", .product(name: "Sparkle", package: "Sparkle")],
             // Sparkle.framework is embedded in Contents/Frameworks.
             linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
@@ -88,7 +91,7 @@ let package = Package(
         .testTarget(
             name: "BeebCoreTests",
             dependencies: ["BeebCore", "BeebROMs", "BeebCapture", "BeebHost", "BeebAgentKit", "BeebDAP", "BeebLibrary",
-                           "BeebNetwork", "M6502GenKit"],
+                           "BeebNetwork", "BeebPrint", "M6502GenKit"],
             resources: [.copy("Resources")]
         ),
 

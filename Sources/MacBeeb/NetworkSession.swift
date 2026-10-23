@@ -234,8 +234,11 @@ final class NetworkSession: StationOwner {
 
     /// Switches a machine on: a fresh machine, as at power on.
     func powerOn(_ id: UUID, remember: Bool = true, startingServer: Bool = true) {
-        guard controllers[id] == nil, let node = project[id], node.isMachine, let setup = node.setup,
-              let host = runtime.powerOn(node) else { return }
+        guard controllers[id] == nil, let node = project[id], node.isMachine, let setup = node.setup else { return }
+        let printerName = node.kind == .printServer
+            ? "\(node.name) · station \(node.stationNumber ?? 0)"
+            : "\(node.name)'s printer port"
+        guard let host = runtime.powerOn(node, printer: (printerName, PrintCentre.receiver())) else { return }
         let controller = MachineController(station: id, host: host, setup: setup, owner: self)
         controller.watchesConsole = node.kind != .station
         for (drive, media) in node.discs {
@@ -247,6 +250,9 @@ final class NetworkSession: StationOwner {
         }
         if startingServer && node.kind == .fileServer && node.startsServerWhenOn {
             startFileServer(id)
+        }
+        if startingServer && node.kind == .printServer && node.startsServerWhenOn {
+            startPrinterServer(id)
         }
         if focused == nil {
             focus(id)
@@ -392,6 +398,20 @@ final class NetworkSession: StationOwner {
             try? await Task.sleep(for: .seconds(1.5))
             controller.host.send(.type(startup))
         }
+    }
+
+    /// Starts MacBeeb's printer server on a machine: the server disc goes
+    /// in its drive 0 (if it hasn't one), and it boots it (Shift-Break).
+    /// Its printer's jobs go to the Print Centre.
+    func startPrinterServer(_ id: UUID) {
+        if !isOn(id) { powerOn(id, startingServer: false) }
+        guard let controller = controllers[id] else { return }
+        if project[id]?.discs[0] == nil, let image = try? PrinterServer.disc() {
+            let staged = FileManager.default.temporaryDirectory.appendingPathComponent("Printer Server.ssd")
+            try? Data(image).write(to: staged)
+            controller.insertDisc(staged, drive: 0, boot: false)
+        }
+        controller.host.send(.shiftBreak)
     }
 
     /// What a server's console says: its last non-blank line.

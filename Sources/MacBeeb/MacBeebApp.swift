@@ -175,6 +175,7 @@ struct MacBeebApp: App {
             }
             CommandGroup(before: .windowList) {
                 NetworkStudioMenuItem()
+                PrintCentreMenuItem()
                 Divider()
             }
             CommandMenu("Debug") {
@@ -271,6 +272,11 @@ struct MacBeebApp: App {
         }
         .defaultSize(width: 800, height: 640)
         .restorationBehavior(.disabled)
+
+        Window("Print Centre", id: PrintCentre.windowID) {
+            PrintCentreWindow()
+        }
+        .defaultSize(width: 1000, height: 760)
 
         Window("New Network", id: NetworkStartView.windowID) {
             NetworkStartView()

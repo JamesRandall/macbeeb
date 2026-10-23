@@ -154,6 +154,9 @@ final class MachineController {
         let host = EmulatorHost(discDriveSounds: Self.discDriveSounds(for:), discDriveSoundsOn: discDriveSounds) {
             BBCMicro(configuration: configuration)
         }
+        // A printer on its printer port, for *FX5,1 and VDU 2.
+        host.printerName = setup.model.displayName
+        host.printJobs = PrintCentre.receiver()
         self.init(setup: setup, host: host, discDriveSounds: discDriveSounds, station: nil)
     }
 

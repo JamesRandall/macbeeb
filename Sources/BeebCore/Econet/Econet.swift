@@ -53,6 +53,7 @@ public final class Econet {
     /// Master): INTOFF, and the links.
     func readStation(now: UInt64) -> UInt8 {
         advance(to: now)
+        if nmiEnabled { accessObserver?("\(now) INTOFF (station)") }
         nmiEnabled = false
         updateNMI()
         return station
@@ -68,6 +69,7 @@ public final class Econet {
     /// waiting raises NMI straight away.
     func inton(now: UInt64) {
         advance(to: now)
+        if !nmiEnabled { accessObserver?("\(now) INTON") }
         nmiEnabled = true
         updateNMI()
     }

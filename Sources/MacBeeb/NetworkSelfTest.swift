@@ -37,7 +37,7 @@ enum NetworkSelfTest {
                 "*NET\n10 PRINT \"SAVED ON THE FILE SERVER\"\nSAVE \"HELLO\"\n*CAT\n",
                 "MODE 2:FOR I%=0 TO 7:GCOL0,I%:X%=I%*160:MOVE X%,0:MOVE X%,1023:PLOT 85,X%+159,0:PLOT 85,X%+159,1023:NEXT\n",
                 "MODE 1:FOR I%=0 TO 300 STEP 10:GCOL0,1+I% MOD 3:MOVE 640,512:DRAW 640+I%*COS(I%),512+I%*SIN(I%):NEXT\n",
-                "MODE 7:FOR I%=1 TO 20:PRINT CHR$(129+I% MOD 7);\"STATION 3 SAYS HELLO\":NEXT\n",
+                "*FX5,4\nVDU 2:PRINT \"HELLO FROM STATION 3, OVER ECONET\":FOR I%=1 TO 12:PRINT \"LINE \";I%:NEXT:VDU 3\n",
                 "10 PRINT \"STATION 4 \";:GOTO 10\nRUN\n",
             ]
             for (node, program) in zip(session.project.stations.filter { $0.kind == .station }, programs) {
@@ -53,6 +53,14 @@ enum NetworkSelfTest {
             session.selection = [session.project.stations[0].id]
             try? await Task.sleep(for: .seconds(1))
             capture(window, to: path.replacingOccurrences(of: ".png", with: "-selected.png"))
+            // The Print Centre, with what station 3 printed.
+            try? await Task.sleep(for: .seconds(8))
+            let prints = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 1000, height: 760),
+                                  styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+            prints.contentViewController = NSHostingController(rootView: PrintCentreWindow().frame(width: 1000, height: 760))
+            prints.orderBack(nil)
+            try? await Task.sleep(for: .seconds(2))
+            capture(prints, to: path.replacingOccurrences(of: ".png", with: "-print.png"))
             NSApp.terminate(nil)
         }
     }

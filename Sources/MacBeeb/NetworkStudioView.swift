@@ -57,7 +57,7 @@ struct NetworkStudioView: View {
     @Environment(\.openWindow) private var openWindow
 
     enum Mode: String, CaseIterable {
-        case canvas, tiles
+        case canvas, tiles, traffic
     }
 
     var body: some View {
@@ -68,6 +68,8 @@ struct NetworkStudioView: View {
                     NetworkCanvas(session: session, openStation: openStation, openDebugger: openDebugger, openHardware: openHardware)
                 case .tiles:
                     NetworkTiles(session: session, openStation: openStation)
+                case .traffic:
+                    NetworkTrafficView(session: session)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -106,7 +108,7 @@ struct NetworkStudioView: View {
         switch mode {
         case .tiles:
             return session.focused.flatMap { session.controllers[$0] }
-        case .canvas:
+        case .canvas, .traffic:
             guard session.selection.count == 1, let id = session.selection.first else { return nil }
             return session.controllers[id]
         }
@@ -132,6 +134,7 @@ struct NetworkStudioView: View {
             Picker("View", selection: $mode) {
                 Label("Canvas", systemImage: "point.3.connected.trianglepath.dotted").tag(Mode.canvas)
                 Label("Tiles", systemImage: "square.grid.2x2").tag(Mode.tiles)
+                Label("Traffic", systemImage: "waveform.path").tag(Mode.traffic)
             }
             .pickerStyle(.segmented)
             .help("Arrange the network, or use its machines side by side")

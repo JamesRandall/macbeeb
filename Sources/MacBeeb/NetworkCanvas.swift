@@ -228,6 +228,11 @@ struct NetworkCanvas: View {
                 Divider()
                 Button("Start File Server") { session.startFileServer(node.id) }
             }
+            if node.kind == .printServer {
+                Divider()
+                Button("Start Printer Server") { session.startPrinterServer(node.id) }
+                OpenPrintCentreButton()
+            }
             Divider()
             Button("Duplicate") { session.duplicate(node.id) }
         }
@@ -502,7 +507,7 @@ struct MachineCard: View {
                 }
                 StateIndicator(state: state(controller))
             }
-            if node.kind == .fileServer, let controller {
+            if node.kind != .station, let controller {
                 Label(controller.consoleLine ?? "Starting…", systemImage: "text.alignleft")
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
