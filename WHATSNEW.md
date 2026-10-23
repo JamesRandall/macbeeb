@@ -9,6 +9,12 @@ release's section for the GitHub release and Sparkle's update window, and
 won't build a release without one.
 -->
 
+## 1.4.1
+
+- **Double-click to play:** in the Game Library, double-click a game you've got to start it.
+- **Break with a second processor:** the 6502s now disable interrupts on reset, as the real chips do (and the 65C02s clear decimal mode). Before, a Tube interrupt pending when you pressed Break could leave the co-processor stuck at a `*` prompt.
+- **For AI agents (MCP):** `screenshot` can show the picture as far as the beam has drawn it, frame-exact at a breakpoint, or screen memory as it is now, and no longer comes back black straight after `restore_snapshot`. `peek` can write up to 64K to a file. New tools: `measure_cycles`, a stopwatch between two addresses, and `key_sequence`, for keys down and up on a timeline in one call. `load_symbols` with `clear` only clears the CPU it's loading for, and `start_recording` makes the folder it records into.
+
 ## 1.4
 
 - **Green and amber screens:** View ▸ Monitor puts the picture on a monochrome monitor with a green (P1) or amber (P3) phosphor, with any display style. Like the real thing, there's no colour grille, colours become shades by their brightness, and the phosphor glows on briefly.
