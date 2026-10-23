@@ -315,6 +315,30 @@ struct AgentHardwareToolsTests {
         #expect(support.text(tools.call("memory_regions", arguments: [:])).contains("Watford board RAM"))
     }
 
+    @Test func ariesOverMCP() {
+        let (tools, session) = modelBTools()
+        #expect(!tools.call("power_cycle", arguments: ["memory_board": "aries_b32_b12"]).isError)
+        let hardware = support.text(tools.call("get_hardware", arguments: [:]))
+        for text in ["controller ROM: ARIES-B32 1.00 (bundled) in bank 15", "aries: 20K shadow (&3000–&7FFF) + 12K sideways RAM",
+                     "13  RAM, Aries B32 RAM (shared with shadow RAM), written while *RWRITE (&FE32) selects it",
+                     " 0  RAM, Aries B12 RAM (0L and 0H)", "12  ROM, Aries B12 socket: BASIC (language)"] {
+            #expect(hardware.contains(text), "\(text) in \(hardware)")
+        }
+        let status = support.text(tools.call("run_command", arguments: ["text": "*XSTATUS X"]))
+        #expect(status.contains("Current shadow RAM: 20K"), "\(status)")
+        // The B32's RAM can be loaded from outside too, and read physically.
+        let rom = Bundle.module.resourceURL!.appendingPathComponent("Resources/expansions/hello.rom").path
+        #expect(!tools.call("load_sideways_bank", arguments: ["bank": 14, "path": .string(rom)]).isError)
+        #expect(support.text(tools.call("peek", arguments: ["address": "&8009", "length": 7, "space": "bankE"])).contains("MacBeeb"))
+        #expect(support.text(tools.call("peek", arguments: ["address": "&4009", "length": 7, "space": "board"])).contains("MacBeeb"))
+        _ = tools.call("press_break", arguments: [:])
+        #expect(support.text(tools.call("run_command", arguments: ["text": "*HELLO"])).contains("bank 14"))
+        // Without the link.
+        #expect(!tools.call("power_cycle", arguments: ["aries_start_up_link": false]).isError)
+        #expect(session.machine.configuration.expansions.ariesStartUpLink == false)
+        #expect(support.text(tools.call("run_command", arguments: ["text": "*XSTATUS X"])).contains("Start-up link: OFF"))
+    }
+
     @Test func errorsExplainThemselves() throws {
         let (tools, _) = modelBTools()
         let rom = Bundle.module.resourceURL!.appendingPathComponent("Resources/expansions/hello.rom").path

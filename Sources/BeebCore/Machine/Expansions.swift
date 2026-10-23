@@ -27,6 +27,13 @@ extension BBCMicro {
         /// (or the whole 32K), switched by writes to &FFFC-&FFFF, with its
         /// ROM (Shadow RAM OS) in a motherboard socket.
         case watford32K
+        /// Aries B32: 32K shared between shadow RAM (&3000-&7FFF) and
+        /// sideways RAM banks 13 and 14, with its ROM in bank 15 and the
+        /// motherboard's sockets renumbered 12, 9, 10, 11.
+        case ariesB32
+        /// Aries B32 with the Aries B12 ROM board: sockets 1-12 and 16K of
+        /// RAM in bank 0, in place of the motherboard's sockets.
+        case ariesB32B12
 
         public var displayName: String {
             switch self {
@@ -34,6 +41,8 @@ extension BBCMicro {
             case .sidewaysRAM16: "Sideways RAM 16K"
             case .sidewaysRAM32: "Sideways RAM 32K"
             case .watford32K: "Watford Electronics 32K Shadow RAM"
+            case .ariesB32: "Aries B32"
+            case .ariesB32B12: "Aries B32 + B12"
             }
         }
 
@@ -44,8 +53,12 @@ extension BBCMicro {
             case .sidewaysRAM16: 0x4000
             case .sidewaysRAM32: 0x8000
             case .watford32K: 0x8000
+            case .ariesB32: 0x8000
+            case .ariesB32B12: 0xC000
             }
         }
+
+        public var isAries: Bool { self == .ariesB32 || self == .ariesB32B12 }
 
         public var isSidewaysRAM: Bool { self == .sidewaysRAM16 || self == .sidewaysRAM32 }
 
@@ -56,12 +69,14 @@ extension BBCMicro {
             // The manual: the DFS in the lowest-priority socket and the
             // board's ROM next to it, BASIC in the highest.
             case .watford32K: 13
+            // The B32's own socket.
+            case .ariesB32, .ariesB32B12: 15
             }
         }
     }
 
     /// The Model B's expansions. On other models it's ignored.
-    public struct Expansions: Codable, Sendable, Equatable {
+    public struct Expansions: Codable, Sendable, Hashable {
         public var board: MemoryBoard
         /// Sideways RAM boards: the socket the module's in, as a bank: 12
         /// or 13, the standard Model B's free sockets.
@@ -72,19 +87,50 @@ extension BBCMicro {
 
         public static let none = Expansions()
 
-        public init(board: MemoryBoard = .none, sidewaysRAMSocket: Int = 13, secondBankBelow: Int = 4) {
+        /// Aries B32: the start-up link is fitted (shadow RAM on at power
+        /// on and Ctrl-Break), as the board comes.
+        public var ariesStartUpLink: Bool
+
+        public init(board: MemoryBoard = .none, sidewaysRAMSocket: Int = 13, secondBankBelow: Int = 4,
+                    ariesStartUpLink: Bool = true) {
             self.board = board
             self.sidewaysRAMSocket = sidewaysRAMSocket
             self.secondBankBelow = secondBankBelow
+            self.ariesStartUpLink = ariesStartUpLink
         }
 
         /// The sideways RAM banks the board provides.
         public var sidewaysRAMBanks: [Int] {
             switch board {
-            case .none, .watford32K: []
+            case .none, .watford32K, .ariesB32: []
+            // The B12's RAM sockets, 0L and 0H.
+            case .ariesB32B12: [0]
             case .sidewaysRAM16: [sidewaysRAMSocket]
             case .sidewaysRAM32: [sidewaysRAMSocket, sidewaysRAMSocket - secondBankBelow]
             }
+        }
+
+        /// What a bank is on a Model B with these expansions: its owner,
+        /// and whether it's a socket (so empty when nothing's in it) rather
+        /// than not fitted at all.
+        public func owner(of bank: Int) -> (name: String, isSocket: Bool) {
+            if board.isAries {
+                switch bank {
+                case 13, 14: return ("Aries B32 RAM (shared with shadow RAM)", true)
+                case 15: return ("Aries B32 socket", true)
+                case 0 where board == .ariesB32B12: return ("Aries B12 RAM (0L and 0H)", true)
+                case 1...12 where board == .ariesB32B12: return ("Aries B12 socket", true)
+                case 9...12: return ("Motherboard socket", true)
+                default: return ("Not fitted", false)
+                }
+            }
+            if sidewaysRAMBanks.contains(bank) {
+                return (board == .sidewaysRAM32 ? "32K sideways RAM module" : "16K sideways RAM module", true)
+            }
+            if board.controllerROMBank == bank {
+                return ("\(board == .watford32K ? "Watford board" : "Board")'s ROM, in a motherboard socket", true)
+            }
+            return (12...15).contains(bank) ? ("Motherboard socket", true) : ("Not fitted", false)
         }
 
         /// Problems with the settings, if any (e.g. a socket outside 12-15).
@@ -99,7 +145,7 @@ extension BBCMicro {
         }
 
         enum CodingKeys: CodingKey {
-            case board, sidewaysRAMSocket, secondBankBelow
+            case board, sidewaysRAMSocket, secondBankBelow, ariesStartUpLink
         }
 
         public init(from decoder: Decoder) throws {
@@ -107,6 +153,7 @@ extension BBCMicro {
             board = try c.decodeIfPresent(MemoryBoard.self, forKey: .board) ?? .none
             sidewaysRAMSocket = try c.decodeIfPresent(Int.self, forKey: .sidewaysRAMSocket) ?? 13
             secondBankBelow = try c.decodeIfPresent(Int.self, forKey: .secondBankBelow) ?? 4
+            ariesStartUpLink = try c.decodeIfPresent(Bool.self, forKey: .ariesStartUpLink) ?? true
         }
     }
 
@@ -139,6 +186,58 @@ extension BBCMicro {
         /// Writes to &FFFD seen (the Watford board decodes it, but what it
         /// does isn't known).
         var watfordFFFDWrites: Int?
+        var aries: AriesState?
+    }
+
+    /// The Aries B32's latches, as its ROM uses them (see
+    /// docs/development/expansion-hardware-notes.md for the evidence).
+    public struct AriesState: Codable, Sendable, Equatable {
+        /// &FE32: the bank writes to &8000-&BFFF go to: 13 or 14 the B32's
+        /// RAM, 15 nowhere (its ROM socket), 0-12 the BBC's bus.
+        public var ramsel: UInt8 = 0
+        /// &FE3F on, &FE3E off: the CPU sees shadow RAM.
+        public var shadow = false
+        /// &FE3A on, &FE3C off: &3000-&3FFF is shadowed (20K).
+        public var shadowLow = false
+        /// &FE36 on, &FE34 off: &7000-&7FFF is shadowed.
+        public var shadowHigh = false
+
+        /// The shadow RAM the switches give: 20K (&3000-&7FFF), 16K
+        /// (&4000-&7FFF), 0K as the ROM uses them, or the combination the
+        /// ROM never sets (&3000-&6FFF).
+        public var shadowAllocation: String {
+            switch (shadowLow, shadowHigh) {
+            case (true, true): "20K shadow (&3000–&7FFF) + 12K sideways RAM"
+            case (false, true): "16K shadow (&4000–&7FFF) + 16K sideways RAM"
+            case (false, false): "no shadow RAM + 32K sideways RAM"
+            case (true, false): "16K shadow (&3000–&6FFF)"
+            }
+        }
+
+        /// The shadow RAM in K, for showing (0, 16 or 20).
+        public var shadowK: Int {
+            switch (shadowLow, shadowHigh) {
+            case (true, true): 20
+            case (false, false): 0
+            default: 16
+            }
+        }
+
+        /// What *RWRITE has set.
+        public var writeTarget: String {
+            switch ramsel & 0x0F {
+            case 13, 14: "bank \(ramsel & 0x0F) (*RWRITE \(ramsel & 0x0F))"
+            case 15: "nowhere: write-protected (*RWRITE OFF)"
+            default: "the BBC's bus: external sideways RAM, or the B12's bank 0 (*RWRITE \(ramsel & 0x0F) or EXTERNAL)"
+            }
+        }
+    }
+
+    /// A write to an expansion board's register, for the debugger.
+    public struct ControllerWrite: Sendable, Equatable, Codable {
+        public var cycle: UInt64
+        public var address: UInt16
+        public var value: UInt8
     }
 
     /// One of the sixteen sideways banks, as the hardware has it.
@@ -155,6 +254,9 @@ extension BBCMicro {
             case never
             /// Whenever its bank is selected in ROMSEL (&FE30).
             case whenSelected
+            /// While the Aries B32's write register (&FE32, *RWRITE) selects
+            /// it, whichever bank ROMSEL reads.
+            case whenWriteSelected
         }
 
         public var bank: Int
@@ -208,23 +310,20 @@ extension BBCMicro {
     /// The sixteen sideways banks.
     public var sidewaysSlots: [SidewaysSlot] {
         let board = configuration.fittedExpansions.board
-        let boardBanks = Set(configuration.fittedExpansions.sidewaysRAMBanks)
         return (0..<16).map { bank in
-            let ram = sidewaysRAMBanks.contains(bank)
-            let kind: SidewaysSlot.Kind = sidewaysBanks[bank] == nil ? .empty : ram ? .ram : .rom
+            let ram = isSidewaysRAM(bank)
+            let kind: SidewaysSlot.Kind = sidewaysStorage(bank) == nil ? .empty : ram ? .ram : .rom
             let owner: String
-            if boardBanks.contains(bank) {
-                owner = board == .sidewaysRAM32 ? "32K sideways RAM module" : "16K sideways RAM module"
-            } else if board.controllerROMBank == bank && kind == .rom {
-                owner = "\(board == .watford32K ? "Watford board" : "Board")'s ROM, in a motherboard socket"
-            } else if model == .modelB || model == .modelA {
+            if model == .modelB {
+                owner = configuration.fittedExpansions.owner(of: bank).name
+            } else if model == .modelA {
                 owner = (12...15).contains(bank) ? "Motherboard socket" : "Not fitted"
             } else {
                 owner = kind == .empty ? "Not fitted" : ram ? "Built-in sideways RAM" : "Built-in ROM"
             }
-            let header = sidewaysBanks[bank].flatMap { ROMHeader(Array(UnsafeBufferPointer(start: $0, count: 0x100))) }
+            let header = sidewaysStorage(bank).flatMap { ROMHeader(Array(UnsafeBufferPointer(start: $0, count: 0x100))) }
             return SidewaysSlot(bank: bank, kind: kind, owner: owner,
-                                writePolicy: ram ? .whenSelected : .never, header: header)
+                                writePolicy: !ram ? .never : board.isAries ? .whenWriteSelected : .whenSelected, header: header)
         }
     }
 
@@ -246,7 +345,7 @@ extension BBCMicro {
     /// loaded by a utility), at &8000; the rest of the bank is left as it
     /// was. The MOS sees a new ROM after the next Break.
     public func loadSidewaysImage(_ image: [UInt8], bank: Int) throws {
-        guard (0..<16).contains(bank), sidewaysRAMBanks.contains(bank), let storage = sidewaysBanks[bank] else {
+        guard (0..<16).contains(bank), isSidewaysRAM(bank), let storage = sidewaysStorage(bank) else {
             throw SidewaysImageError.notRAM(bank)
         }
         guard !image.isEmpty else { throw SidewaysImageError.empty }
@@ -257,7 +356,7 @@ extension BBCMicro {
 
     /// Clears a sideways RAM bank to zeros, as at power on.
     public func clearSidewaysBank(_ bank: Int) throws {
-        guard (0..<16).contains(bank), sidewaysRAMBanks.contains(bank), let storage = sidewaysBanks[bank] else {
+        guard (0..<16).contains(bank), isSidewaysRAM(bank), let storage = sidewaysStorage(bank) else {
             throw SidewaysImageError.notRAM(bank)
         }
         storage.update(repeating: 0, count: 0x4000)
@@ -266,7 +365,7 @@ extension BBCMicro {
 
     /// A sideways bank's 16K, ROM or RAM.
     public func sidewaysBankContents(_ bank: Int) -> [UInt8]? {
-        guard (0..<16).contains(bank), let storage = sidewaysBanks[bank] else { return nil }
+        guard (0..<16).contains(bank), let storage = sidewaysStorage(bank) else { return nil }
         return Array(UnsafeBufferPointer(start: storage, count: 0x4000))
     }
 }

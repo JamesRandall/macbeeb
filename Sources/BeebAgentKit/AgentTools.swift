@@ -200,12 +200,14 @@ public final class AgentTools: Sendable {
                                  "disc_interface": ["type": "string", "enum": ["intel8271", "acorn1770", "watfordDDB2", "watfordDDB3", "opus"],
                                                     "description": "Model B only: the disc interface and its filing system (default: keep as is)"] as JSONValue,
                                  "memory_board": ["type": "string", "enum": .array(agentBoards.keys.sorted().map { .string($0) }),
-                                                  "description": "Model B only: the memory expansion board (default: keep as is). none is the stock Model B; sideways_ram_16 and sideways_ram_32 are a 16K or 32K sideways RAM module in a motherboard socket; watford_32k is Watford Electronics' 32K shadow RAM board with its ROM (Shadow RAM OS 2.40) in bank 13. get_hardware shows what's fitted"] as JSONValue,
+                                                  "description": "Model B only: the memory expansion board (default: keep as is). none is the stock Model B; sideways_ram_16 and sideways_ram_32 are a 16K or 32K sideways RAM module in a motherboard socket; watford_32k is Watford Electronics' 32K shadow RAM board with its ROM (Shadow RAM OS 2.40) in bank 13; aries_b32 is the Aries B32 (32K shared between shadow RAM and sideways RAM banks 13 and 14, its ROM in bank 15, BASIC in 11 and DFS in 10; *XON, *XOFF, *XSTATUS, *RLOAD, *RWRITE, *XTEST) and aries_b32_b12 adds the B12 (sockets 1-12, 16K RAM in bank 0; BASIC in 12, DFS in 11). get_hardware shows what's fitted"] as JSONValue,
                                  "sideways_ram_socket": prop("integer", "Sideways RAM boards: the socket (bank) the module's in, 12 or 13 (default 13)"),
-                                 "second_bank_below": prop("integer", "sideways_ram_32: the second bank is 4 (default) or 8 below the first, as the module's lead is wired")])
+                                 "second_bank_below": prop("integer", "sideways_ram_32: the second bank is 4 (default) or 8 below the first, as the module's lead is wired"),
+                                 "aries_start_up_link": prop("boolean", "Aries B32: the start-up link is fitted (default true: shadow RAM on at power on and Ctrl-Break)")])
         )) { context, args in
             var expansionChange: (@Sendable (BBCMicro.Expansions) throws -> BBCMicro.Expansions)?
-            if args["memory_board"] != nil || args["sideways_ram_socket"] != nil || args["second_bank_below"] != nil {
+            if args["memory_board"] != nil || args["sideways_ram_socket"] != nil || args["second_bank_below"] != nil
+                || args["aries_start_up_link"] != nil {
                 var board: BBCMicro.MemoryBoard?
                 if let name = args["memory_board"]?.stringValue {
                     guard let named = agentBoards[name] else {
@@ -215,12 +217,14 @@ public final class AgentTools: Sendable {
                 }
                 let socket = args["sideways_ram_socket"]?.intValue
                 let below = args["second_bank_below"]?.intValue
+                let link = args["aries_start_up_link"]?.boolValue
                 let newBoard = board
                 expansionChange = { current in
                     var e = current
                     if let newBoard { e.board = newBoard }
                     if let socket { e.sidewaysRAMSocket = socket }
                     if let below { e.secondBankBelow = below }
+                    if let link { e.ariesStartUpLink = link }
                     if let problem = e.problem { throw ToolFailure(problem) }
                     return e
                 }

@@ -9,6 +9,7 @@ extension AgentTools {
     /// Agents' names for the memory boards.
     static let agentBoards: [String: BBCMicro.MemoryBoard] = [
         "none": .none, "sideways_ram_16": .sidewaysRAM16, "sideways_ram_32": .sidewaysRAM32, "watford_32k": .watford32K,
+        "aries_b32": .ariesB32, "aries_b32_b12": .ariesB32B12,
     ]
 
     static func agentName(_ board: BBCMicro.MemoryBoard) -> String {
@@ -24,6 +25,7 @@ extension AgentTools {
             switch slot.writePolicy {
             case .never: break
             case .whenSelected: line += ", writable when selected"
+            case .whenWriteSelected: line += ", written while *RWRITE (&FE32) selects it"
             }
             if let header = slot.header {
                 line += ": \(header.name)\(header.isLanguage ? " (language)" : "")"
@@ -69,6 +71,10 @@ extension AgentTools {
                         default: "missing"
                         }
                         lines.append("controller ROM: \(described) in bank \(bank), SHA-256 \(rom.map(Firmware.sha256) ?? "-")")
+                    }
+                    if m.ariesFitted {
+                        lines.append("aries: \(m.aries.shadowAllocation); shadow now \(m.aries.shadow ? "on" : "off"); writes to &8000-&BFFF go to \(m.aries.writeTarget); start-up link \(e.ariesStartUpLink ? "fitted" : "removed"); the ROM's state byte &27F = &\(hex(m.peek(0x27F))) (*XSTATUS shows any pending change, applied at the next MODE or Break)")
+                        lines.append("aries pool: peek space bankD and bankE (or \"board\", 32K: bank 13 then 14); shadow &4000-&7FFF is bank 13, &3000-&3FFF the top 4K of bank 14")
                     }
                     if m.watfordFitted {
                         lines.append("watford latch: \(m.watfordMapping.description); board RAM is peek space \"board\" (&0000-&7FFF); the video always shows main RAM")

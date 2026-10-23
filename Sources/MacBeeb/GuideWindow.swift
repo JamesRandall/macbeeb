@@ -86,6 +86,7 @@ enum Guide {
         ("README", "book"),
         ("sideways-ram", "memorychip"),
         ("watford-shadow-ram", "square.2.layers.3d"),
+        ("aries-b32-b12", "square.3.layers.3d"),
         ("developer-reference", "chevron.left.forwardslash.chevron.right"),
     ]
 

@@ -181,6 +181,20 @@ extension BeebROMs {
                 configuration.startupDisc = .init(name: disc.rawValue, image: disc.data, format: disc.format)
             }
         }
+        // The Aries boards renumber the four ROM sockets. The B32 alone: the
+        // motherboard's sockets, 12-15 from left to right, become 12, 9,
+        // 10, 11. With the B12, its manual says to move them to its
+        // sockets 9-12 in the same order. Either way BASIC (the rightmost)
+        // is still the highest-numbered language and the DFS next to it.
+        if configuration.fittedExpansions.board.isAries {
+            let mapping: [Int: Int] = configuration.fittedExpansions.board == .ariesB32B12
+                ? [12: 9, 13: 10, 14: 11, 15: 12] : [12: 12, 13: 9, 14: 10, 15: 11]
+            var renumbered: [Int: [UInt8]] = [:]
+            for (bank, image) in configuration.sidewaysROMs {
+                renumbered[mapping[bank] ?? bank] = image
+            }
+            configuration.sidewaysROMs = renumbered
+        }
         // A board's controller ROM: the bundled one, or the user's own.
         if let bank = configuration.fittedExpansions.board.controllerROMBank,
            let firmware = Firmware.standard(for: configuration.fittedExpansions.board) {

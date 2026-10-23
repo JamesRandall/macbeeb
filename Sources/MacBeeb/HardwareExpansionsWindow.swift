@@ -97,7 +97,7 @@ struct HardwareExpansionsWindow: View {
                     firmwareSection
                 }
                 memorySection
-                if draft.expansions.board == .watford32K {
+                if draft.expansions.board == .watford32K || draft.expansions.board.isAries {
                     shadowSection
                 }
                 banksSection
@@ -132,6 +132,8 @@ struct HardwareExpansionsWindow: View {
         case .none: "32K of RAM, four ROM sockets"
         case .sidewaysRAM16, .sidewaysRAM32: "32K main RAM + \(e.board.extraRAM / 1024)K of sideways RAM"
         case .watford32K: "32K main RAM + 32K of shadow RAM"
+        case .ariesB32: "32K main RAM + 32K for shadow and sideways RAM"
+        case .ariesB32B12: "32K main RAM + 32K for shadow and sideways RAM + 16K sideways RAM"
         }
     }
 
@@ -149,6 +151,10 @@ struct HardwareExpansionsWindow: View {
             }
             if expansions.board.isSidewaysRAM {
                 wiring
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+            if expansions.board.isAries {
+                ariesOptions
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
@@ -281,9 +287,59 @@ struct HardwareExpansionsWindow: View {
 
     private var shadowSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionTitle("Shadow RAM", detail: "Two views of &3000–&7FFF: programs use the board’s RAM while the screen stays in main RAM.")
-            ShadowMapView(mapping: pending ? nil : snapshot?.watfordMapping)
+            SectionTitle("Shadow RAM", detail: "Two views of the screen’s memory: programs use the board’s RAM while the screen stays in main RAM.")
+            if expansions.board.isAries {
+                AriesPoolView(state: pending ? nil : snapshot?.aries)
+                ShadowMapView(shadowStartK: (pending ? nil : snapshot?.aries).map { $0.shadowK == 20 ? 12 : $0.shadowK == 16 ? 16 : 32 } ?? 12,
+                              status: ariesStatus, statusColour: snapshot?.aries?.shadow == true && !pending ? .purple : .blue,
+                              help: "The B32’s ROM turns shadow RAM on (&FE3F) for programs and off (&FE3E) to draw on the screen.")
+            } else {
+                ShadowMapView(shadowStartK: 12, status: watfordStatus,
+                              statusColour: snapshot?.watfordMapping == .upper || snapshot?.watfordMapping == .all ? .purple : .blue,
+                              help: "The board’s latch is set by writing to &FFFF (board RAM at &3000), &FFFE (BBC RAM) or &FFFC (board RAM everywhere). Its ROM switches it as the BBC draws on the screen.")
+            }
         }
+    }
+
+    private var watfordStatus: String {
+        guard !pending, let mapping = snapshot?.watfordMapping else { return "Restart the BBC to fit the board" }
+        return switch mapping {
+        case .upper: "Now: programs see the board’s RAM at &3000–&7FFF"
+        case .all: "Now: the CPU sees the board’s RAM everywhere (&FFFC)"
+        case .bbc: "Now: the CPU sees main RAM (the ROM switches to it to draw, and when the board is off)"
+        }
+    }
+
+    private var ariesStatus: String {
+        guard !pending, let aries = snapshot?.aries else { return "Restart the BBC to fit the board" }
+        if aries.shadowK == 0 { return "Shadow RAM is off (*XOFF): programs and the screen share main RAM" }
+        return aries.shadow ? "Now: programs see the B32’s RAM" : "Now: the CPU sees main RAM (the ROM switches to it to draw, and at the prompt)"
+    }
+
+    private var ariesOptions: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(isOn: $draft.expansions.ariesStartUpLink) {
+                Text("Start-up link fitted")
+            }
+            .help("The link by the 6502 on the B32: fitted, shadow RAM is on at power on and Ctrl-Break")
+            Text(expansions.ariesStartUpLink
+                 ? "Shadow RAM starts on (20K) at power on and Ctrl-Break, as the board comes."
+                 : "Shadow RAM starts off: *XON turns it on.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            if expansions.board == .ariesB32B12 {
+                Text("With the B12, the BBC’s four ROMs move to its sockets 9–12 (BASIC in 12, DFS in 11) and bank 0 is 16K of RAM.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("The B32 renumbers the motherboard’s sockets 12, 9, 10, 11: BASIC is in bank 11 and DFS in 10.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
     }
 
     // MARK: Memory
@@ -297,24 +353,38 @@ struct HardwareExpansionsWindow: View {
 
     // MARK: Banks
 
+    /// The configuration the draft would build, for the bank strip (cached:
+    /// it reads the ROMs).
+    private static var planCache: [BBCMicro.Expansions: BBCMicro.Configuration] = [:]
+
+    private static func plan(_ e: BBCMicro.Expansions) -> BBCMicro.Configuration {
+        if let cached = planCache[e] { return cached }
+        let configuration = BeebROMs.configuration(for: .modelB, expansions: e)
+        planCache[e] = configuration
+        return configuration
+    }
+
     private var plannedSlots: [PlannedSlot] {
-        let ramBanks = Set(expansions.sidewaysRAMBanks)
+        let plan = Self.plan(expansions)
+        let ramBanks = plan.sidewaysRAMBanks.union(expansions.sidewaysRAMBanks).union(expansions.board.isAries ? [13, 14] : [])
         return (0..<16).map { bank in
-            let running = snapshot?.slots[bank]
+            let owner = expansions.owner(of: bank)
+            let running = pending ? nil : snapshot?.slots[bank]
             if ramBanks.contains(bank) {
                 // Its contents only carry over if it's RAM now too.
-                let header = running?.kind == .ram && !pending ? running?.header : nil
-                return PlannedSlot(bank: bank, kind: .ram, title: header?.name ?? "Sideways RAM",
-                                   detail: expansions.board == .sidewaysRAM32 ? "32K module" : "16K module", hasImage: header != nil)
+                let header = running?.kind == .ram ? running?.header : nil
+                return PlannedSlot(bank: bank, kind: .ram, title: header?.name ?? "Sideways RAM", detail: owner.name,
+                                   hasImage: header != nil)
             }
             if expansions.board.controllerROMBank == bank {
                 return PlannedSlot(bank: bank, kind: .rom, title: firmwareTitle, detail: "The board’s ROM", hasImage: true)
             }
-            if let running, running.kind == .rom {
-                return PlannedSlot(bank: bank, kind: .rom, title: running.header?.name ?? "ROM", detail: running.owner, hasImage: true)
+            if let rom = plan.sidewaysROMs[bank] {
+                let header = BBCMicro.ROMHeader(Array(rom.prefix(0x100)))
+                return PlannedSlot(bank: bank, kind: .rom, title: header?.name ?? "ROM", detail: owner.name, hasImage: true)
             }
-            if (12...15).contains(bank) {
-                return PlannedSlot(bank: bank, kind: .emptySocket, title: "Empty socket", detail: "Motherboard socket", hasImage: false)
+            if owner.isSocket {
+                return PlannedSlot(bank: bank, kind: .emptySocket, title: "Empty socket", detail: owner.name, hasImage: false)
             }
             return PlannedSlot(bank: bank, kind: .notFitted, title: "Not fitted", detail: "", hasImage: false)
         }
@@ -342,7 +412,7 @@ struct HardwareExpansionsWindow: View {
             } else {
                 ForEach(Array(banks.enumerated()), id: \.element.bank) { index, slot in
                     if index > 0 { Divider() }
-                    RAMBankRow(slot: slot, powerOnImage: machine.powerOnImagePaths[slot.bank],
+                    RAMBankRow(slot: slot, note: ariesNote(slot.bank), powerOnImage: machine.powerOnImagePaths[slot.bank],
                                load: { url in run { try await machine.loadSidewaysImage(url, bank: slot.bank) } },
                                save: { url in run { try await machine.saveSidewaysBank(slot.bank, to: url) } },
                                clear: { clearing = slot.bank },
@@ -351,6 +421,16 @@ struct HardwareExpansionsWindow: View {
             }
         }
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// How much of an Aries bank shadow RAM is using.
+    private func ariesNote(_ bank: Int) -> String? {
+        guard let aries = snapshot?.aries else { return nil }
+        switch (bank, aries.shadowK) {
+        case (13, 16), (13, 20): return "Used for shadow RAM (&4000–&7FFF) while it’s on"
+        case (14, 20): return "12K free (&8000–&AFFF): the top 4K is shadow RAM for &3000–&3FFF"
+        default: return nil
+        }
     }
 
     // MARK: Restart
@@ -429,6 +509,8 @@ extension BBCMicro.MemoryBoard {
         case .sidewaysRAM16: "memorychip"
         case .sidewaysRAM32: "memorychip.fill"
         case .watford32K: "square.2.layers.3d"
+        case .ariesB32: "square.3.layers.3d"
+        case .ariesB32B12: "square.grid.3x3"
         }
     }
 
@@ -438,6 +520,8 @@ extension BBCMicro.MemoryBoard {
         case .sidewaysRAM16: "A 16K bank of RAM in a ROM socket. Load ROM images from disc instead of fitting chips."
         case .sidewaysRAM32: "Two 16K banks on one module, wired like BeebMaster’s: room for two ROM images."
         case .watford32K: "Shadow RAM: programs keep 28K in every screen mode. Its own ROM switches the screen in and out."
+        case .ariesB32: "32K shared between shadow and sideways RAM: 20K + 12K, 16K + 16K or none + 32K, with *XON and *XOFF."
+        case .ariesB32B12: "The B32 with Aries’ ROM board: twelve ROM sockets and 16K more sideways RAM, sixteen banks in all."
         }
     }
 
@@ -447,6 +531,7 @@ extension BBCMicro.MemoryBoard {
         case .none: "README"
         case .sidewaysRAM16, .sidewaysRAM32: "sideways-ram"
         case .watford32K: "watford-shadow-ram"
+        case .ariesB32, .ariesB32B12: "aries-b32-b12"
         }
     }
 }
@@ -528,6 +613,10 @@ private struct PhysicalMemoryBar: View {
             blocks.append(Block(name: "Watford board", size: 32, colour: .purple,
                                 help: "32K on the Watford board, in place of main RAM at &3000–&7FFF (or all of &0000–&7FFF)"))
         }
+        if expansions.board.isAries {
+            blocks.append(Block(name: "Aries B32", size: 32, colour: .purple,
+                                help: "32K on the B32: banks 13 and 14, less what shadow RAM takes"))
+        }
         return blocks
     }
 
@@ -536,6 +625,7 @@ private struct PhysicalMemoryBar: View {
         case .none: "Main RAM is &0000–&7FFF, for programs and the screen."
         case .sidewaysRAM16, .sidewaysRAM32: "Main RAM is &0000–&7FFF. Sideways RAM appears at &8000–&BFFF, one bank at a time."
         case .watford32K: "The board’s RAM stands in for main RAM at the same addresses; the screen is always in main RAM."
+        case .ariesB32, .ariesB32B12: "The B32’s 32K is banks 13 and 14, and what shadow RAM takes comes out of them; the screen is always in main RAM."
         }
     }
 
@@ -575,52 +665,41 @@ private struct PhysicalMemoryBar: View {
 }
 
 /// Shadow RAM's two views of memory: what programs see, and what the
-/// video shows, to scale from &0000 to &8000; the latch as the BBC runs.
+/// video shows, to scale from &0000 to &8000; the board's state as the BBC
+/// runs.
 private struct ShadowMapView: View {
-    /// The Watford latch now (nil: not running yet).
-    let mapping: BBCMicro.WatfordMapping?
+    /// Where the board's RAM starts for programs, in K: 12 (&3000), 16
+    /// (&4000), or 32 for none.
+    let shadowStartK: Int
+    let status: String
+    let statusColour: Color
+    let help: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            row("Programs", detail: "The CPU, with the board on", segments: [
-                ("Main RAM", "&0000", 3, .blue),
-                ("Board RAM", "&3000", 5, .purple),
-            ])
+            row("Programs", detail: "The CPU, with shadow RAM on", segments: shadowStartK >= 32
+                ? [("Main RAM", "&0000", 32, .blue)]
+                : [("Main RAM", "&0000", shadowStartK, .blue),
+                   ("Board RAM", String(format: "&%04X", shadowStartK * 1024), 32 - shadowStartK, .purple)])
             row("Screen", detail: "The video, always", segments: [
-                ("", "&0000", 3, .clear),
-                ("Main RAM: the screen", "&3000", 5, .blue),
+                ("", "&0000", 12, .clear),
+                ("Main RAM: the screen", "&3000", 20, .blue),
             ])
             HStack(spacing: 8) {
                 Circle()
-                    .fill(colour)
+                    .fill(statusColour)
                     .frame(width: 8, height: 8)
                 Text(status)
                     .contentTransition(.opacity)
             }
             .font(.callout)
             .foregroundStyle(.secondary)
-            .help("The board’s latch is set by writing to &FFFF (board RAM at &3000), &FFFE (BBC RAM) or &FFFC (board RAM everywhere). Its ROM switches it as the BBC draws on the screen.")
+            .help(help)
         }
         .padding(14)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
         .accessibilityElement(children: .combine)
-    }
-
-    private var colour: Color {
-        switch mapping {
-        case .upper, .all: .purple
-        case .bbc: .blue
-        case nil: .secondary
-        }
-    }
-
-    private var status: String {
-        switch mapping {
-        case .upper: "Now: programs see the board’s RAM at &3000–&7FFF"
-        case .all: "Now: the CPU sees the board’s RAM everywhere (&FFFC)"
-        case .bbc: "Now: the CPU sees main RAM (the ROM switches to it to draw, and when the board is off)"
-        case nil: "Restart the BBC to fit the board"
-        }
+        .animation(.snappy(duration: 0.3), value: shadowStartK)
     }
 
     private func row(_ title: String, detail: String, segments: [(String, String, Int, Color)]) -> some View {
@@ -640,18 +719,90 @@ private struct ShadowMapView: View {
                             Text(name)
                                 .font(.callout.weight(.semibold))
                                 .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                             Text(start)
                                 .font(.system(size: 9, design: .monospaced))
                                 .foregroundStyle(colour == .clear ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.white.opacity(0.8)))
                                 .padding(4)
                         }
-                        .frame(width: (geometry.size.width - 2) * CGFloat(size) / 8)
+                        .frame(width: max(0, (geometry.size.width - CGFloat(segments.count - 1) * 2) * CGFloat(size) / 32))
                     }
                 }
             }
             .frame(height: 34)
         }
+    }
+}
+
+/// The Aries B32's 32K, as banks 13 and 14: how much is shadow RAM and how
+/// much sideways RAM, and where writes go, as the BBC runs.
+private struct AriesPoolView: View {
+    let state: BBCMicro.AriesState?
+
+    private struct Piece: Identifiable {
+        var id: String { label + range }
+        var label: String
+        var range: String
+        var size: Int
+        var shadow: Bool
+    }
+
+    private var pieces: [Piece] {
+        let k = state?.shadowK ?? 20
+        let bank13 = k > 0
+            ? Piece(label: "Shadow", range: "Bank 13 = &4000–&7FFF", size: 16, shadow: true)
+            : Piece(label: "Sideways RAM", range: "Bank 13 · &8000–&BFFF", size: 16, shadow: false)
+        if k == 20 {
+            return [bank13,
+                    Piece(label: "Sideways RAM", range: "Bank 14 · &8000–&AFFF", size: 12, shadow: false),
+                    Piece(label: "Shadow", range: "= &3000–&3FFF", size: 4, shadow: true)]
+        }
+        return [bank13, Piece(label: "Sideways RAM", range: "Bank 14 · &8000–&BFFF", size: 16, shadow: false)]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(state.map { $0.shadowAllocation.prefix(1).capitalized + $0.shadowAllocation.dropFirst() } ?? "20K shadow (&3000–&7FFF) + 12K sideways RAM")
+                .font(.headline)
+                .contentTransition(.opacity)
+            GeometryReader { geometry in
+                HStack(spacing: 3) {
+                    ForEach(pieces) { piece in
+                        VStack(spacing: 2) {
+                            Text(piece.label).font(.callout.weight(.semibold))
+                            Text(piece.range).font(.system(size: 10, design: .monospaced)).opacity(0.85)
+                        }
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                        .padding(.horizontal, 4)
+                        .frame(width: max(0, (geometry.size.width - CGFloat(pieces.count - 1) * 3) * CGFloat(piece.size) / 32),
+                               height: 44)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(piece.shadow ? Color.purple.gradient : Color.green.gradient))
+                    }
+                }
+            }
+            .frame(height: 44)
+            if let state {
+                HStack(spacing: 18) {
+                    Label(state.shadow ? "Shadow on (&FE3F)" : "Shadow off (&FE3E)", systemImage: state.shadow ? "eye" : "eye.slash")
+                    Label("Writes: \(state.writeTarget)", systemImage: "square.and.pencil")
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            Text("*XON, *XON 16 and *XOFF choose the split; it changes at the next MODE or Break.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+        .animation(.snappy(duration: 0.3), value: state)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -735,6 +886,7 @@ private struct BankStrip: View {
 /// saving and clearing it.
 private struct RAMBankRow: View {
     let slot: BBCMicro.SidewaysSlot
+    var note: String?
     let powerOnImage: String?
     let load: (URL) -> Void
     let save: (URL) -> Void
@@ -760,6 +912,11 @@ private struct RAMBankRow: View {
                 }
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                if let note {
+                    Label(note, systemImage: "square.2.layers.3d")
+                        .font(.caption)
+                        .foregroundStyle(.purple)
+                }
                 if let powerOnImage {
                     Label("At power on: \((powerOnImage as NSString).lastPathComponent)", systemImage: "power")
                         .font(.caption)

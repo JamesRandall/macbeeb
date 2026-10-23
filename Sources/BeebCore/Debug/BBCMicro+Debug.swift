@@ -228,8 +228,11 @@ extension BBCMicro {
         if watfordFitted {
             regions.append(MemoryRegion(space: .boardRAM, name: "Watford board RAM", base: 0, size: 0x8000, isROM: false))
         }
-        for bank in 0..<16 where sidewaysBanks[bank] != nil {
-            let ram = sidewaysRAMBanks.contains(bank)
+        if ariesFitted {
+            regions.append(MemoryRegion(space: .boardRAM, name: "Aries B32 RAM (bank 13, then 14)", base: 0, size: 0x8000, isROM: false))
+        }
+        for bank in 0..<16 where sidewaysStorage(bank) != nil {
+            let ram = isSidewaysRAM(bank)
             regions.append(MemoryRegion(space: .sidewaysBank(bank),
                                         name: "Sideways \(ram ? "RAM" : "ROM") \(String(bank, radix: 16, uppercase: true))",
                                         base: 0x8000, size: 0x4000, isROM: !ram))
@@ -254,7 +257,7 @@ extension BBCMicro {
         case .shadowRAM:
             return model != .modelB && (0x3000..<0x8000).contains(address) ? ram + Self.shadowOffset + address : nil
         case .boardRAM:
-            return watfordFitted && (0..<0x8000).contains(address) ? ram + Self.shadowOffset + address : nil
+            return (watfordFitted || ariesFitted) && (0..<0x8000).contains(address) ? ram + Self.shadowOffset + address : nil
         case .andy:
             let size = model == .bPlus ? 0x3000 : model == .master128 ? 0x1000 : 0
             return (0x8000..<0x8000 + size).contains(address) ? ram + Self.andyOffset + address - 0x8000 : nil
@@ -262,7 +265,7 @@ extension BBCMicro {
             return model == .master128 && (0xC000..<0xE000).contains(address) ? ram + Self.hazelOffset + address - 0xC000 : nil
         case .sidewaysBank(let bank):
             guard (0..<16).contains(bank), (0x8000..<0xC000).contains(address) else { return nil }
-            return sidewaysBanks[bank].map { $0 + address - 0x8000 }
+            return sidewaysStorage(bank).map { $0 + address - 0x8000 }
         case .osROM:
             return (0xC000..<0x10000).contains(address) ? osROM + address - 0xC000 : nil
         case .parasiteRAM:

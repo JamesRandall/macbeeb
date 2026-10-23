@@ -264,6 +264,16 @@ public final class BBCMicro {
     public internal(set) var watfordMapping = WatfordMapping.bbc
     /// Writes to &FFFD, which the Watford board decodes to no known effect.
     public internal(set) var watfordFFFDWrites = 0
+    /// An Aries B32 is fitted (with or without the B12): its 32K pool is
+    /// the shadow area of `ram`, banks 13 (the first 16K) and 14 (the
+    /// second), and shadow RAM for &3000-&7FFF.
+    public let ariesFitted: Bool
+    public let ariesB12Fitted: Bool
+    let ariesStartUpLink: Bool
+    public internal(set) var aries = AriesState()
+    /// The last writes to an expansion board's registers, newest last, for
+    /// the debugger.
+    public internal(set) var controllerWrites: [ControllerWrite] = []
     /// The Master's data bus isn't buffered: unmapped reads see the last
     /// byte the video fetched.
     var lastVideoByte: UInt8 = 0
@@ -440,6 +450,9 @@ public final class BBCMicro {
         self.configuration = configuration
         model = configuration.model
         watfordFitted = configuration.fittedExpansions.board == .watford32K
+        ariesFitted = configuration.fittedExpansions.board.isAries
+        ariesB12Fitted = configuration.fittedExpansions.board == .ariesB32B12
+        ariesStartUpLink = configuration.fittedExpansions.ariesStartUpLink
         let master = model.isMaster
         cpu = M6502(variant: master ? .cmos : .nmos)
 
@@ -581,9 +594,15 @@ public final class BBCMicro {
                     // 16K: A14 isn't decoded, so the upper 16K is the lower.
                     read = ram + (page - 4) << 12
                     write = read
+                case 3..<8 where ariesFitted && aries.shadow && ariesShadows(page):
+                    read = ram + Self.shadowOffset + Self.ariesShadowOffset(page)
+                    write = read
                 case 3..<8:
                     read = ram + (shadow || boardUpper ? Self.shadowOffset : 0) + page << 12
                     write = read
+                case 8..<12 where ariesFitted:
+                    read = ariesStorage(bank: bank).map { $0 + (page - 8) << 12 }
+                    write = ariesWriteTarget().map { $0 + (page - 8) << 12 }
                 case 8..<12 where pagedRAM && page - 8 < pagedRAMPages:
                     read = ram + Self.andyOffset + (page - 8) << 12
                     write = read
@@ -771,6 +790,8 @@ public final class BBCMicro {
                 default:
                     break
                 }
+            } else if ariesFitted {
+                ariesControl(address, value)
             } else {
                 // ROMSEL (&FE30-&FE3F).
                 romsel = value & 0x0F
@@ -803,9 +824,93 @@ public final class BBCMicro {
         }
     }
 
+    /// A sideways bank's storage: its socket's, or an Aries B32's pool.
+    func sidewaysStorage(_ bank: Int) -> UnsafeMutablePointer<UInt8>? {
+        ariesFitted ? ariesStorage(bank: bank) : sidewaysBanks[bank]
+    }
+
+    /// Whether a sideways bank is RAM (an Aries B32's banks 13 and 14
+    /// included).
+    public func isSidewaysRAM(_ bank: Int) -> Bool {
+        sidewaysRAMBanks.contains(bank) || (ariesFitted && (bank == 13 || bank == 14))
+    }
+
+    // MARK: Aries B32
+
+    /// Whether a page of &3000-&7FFF is shadowed with shadow RAM on:
+    /// &4000-&6FFF always, &3000 and &7000 by their switches.
+    func ariesShadows(_ page: Int) -> Bool {
+        switch page {
+        case 3: aries.shadowLow
+        case 7: aries.shadowHigh
+        default: true
+        }
+    }
+
+    /// Where a shadowed page is in the pool: &4000-&7FFF is bank 13's 16K,
+    /// and &3000-&3FFF the top 4K of bank 14 (&B000-&BFFF). (The manual:
+    /// shadow RAM comes from bank 13 first, and 20K takes the top 4K of
+    /// bank 14; the ROM's *XTEST checks 20K of shadow and 12K of bank 14
+    /// from &8000 don't overlap.)
+    static func ariesShadowOffset(_ page: Int) -> Int {
+        page == 3 ? 0x7000 : (page - 4) << 12
+    }
+
+    /// A sideways bank's storage with an Aries board: 13 and 14 are the
+    /// pool; the rest are sockets.
+    func ariesStorage(bank: Int) -> UnsafeMutablePointer<UInt8>? {
+        switch bank {
+        case 13: ram + Self.shadowOffset
+        case 14: ram + Self.shadowOffset + 0x4000
+        default: sidewaysBanks[bank]
+        }
+    }
+
+    /// Where writes to &8000-&BFFF go: the bank in RAMSEL (&FE32), whatever
+    /// ROMSEL is reading ("write-through"). 13 and 14 are the B32's RAM; 15
+    /// is its ROM socket, so writes are lost (the ROM's *RWRITE OFF writes
+    /// 15); 0-12 pass the write on to the BBC's bus (*RWRITE EXTERNAL writes
+    /// 0), where the B12's RAM takes every write, as its manual says.
+    func ariesWriteTarget() -> UnsafeMutablePointer<UInt8>? {
+        switch Int(aries.ramsel & 0x0F) {
+        case 13, 14: ariesStorage(bank: Int(aries.ramsel & 0x0F))
+        case 15: nil
+        default: ariesB12Fitted ? sidewaysBanks[0] : nil
+        }
+    }
+
+    /// A write to &FE30-&FE3F with an Aries B32: ROMSEL, RAMSEL and the
+    /// shadow switches, by address (the data only matters for ROMSEL and
+    /// RAMSEL).
+    func ariesControl(_ address: UInt16, _ value: UInt8) {
+        switch address & 0x0F {
+        case 0x0: romsel = value & 0x0F
+        case 0x2: aries.ramsel = value
+        case 0x4: aries.shadowHigh = false
+        case 0x6: aries.shadowHigh = true
+        // The ROM's start-up link test: shadow RAM as the link sets it.
+        case 0x8: aries.shadow = ariesStartUpLink
+        case 0xA: aries.shadowLow = true
+        case 0xC: aries.shadowLow = false
+        case 0xE: aries.shadow = false
+        case 0xF: aries.shadow = true
+        default: break
+        }
+        noteControllerWrite(address, value)
+        updatePaging()
+    }
+
+    func noteControllerWrite(_ address: UInt16, _ value: UInt8) {
+        if controllerWrites.count >= 64 {
+            controllerWrites.removeFirst(controllerWrites.count - 63)
+        }
+        controllerWrites.append(ControllerWrite(cycle: cycles, address: address, value: value))
+    }
+
     /// A write to &FFFC-&FFFF with the Watford board fitted: the address
     /// sets the mapping (the OS ROM there ignores the write itself).
     func watfordControl(_ address: UInt16) {
+        noteControllerWrite(address, 0)
         switch address & 3 {
         case 0: watfordMapping = .all
         case 2: watfordMapping = .bbc

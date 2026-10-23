@@ -258,8 +258,10 @@ Interface): Acorn's (DFS 2.26), Watford's DDB2 (DDFS 1.53) or DDB3 (DDFS
 
 The Model B can also have a memory expansion board fitted (Machine >
 Hardware Expansions…): a 16K or 32K sideways RAM module, wired as
-BeebMaster's. ROM images go into its banks from the Mac, or from the BBC with
-DFS 2.26's `*SRLOAD`. The [Hardware Expansion Guide](docs/hardware-expansions/README.md)
+BeebMaster's; Watford Electronics' 32K Shadow RAM board; or the Aries B32
+(32K shared between shadow and sideways RAM), with or without the B12 ROM
+board. The shadow RAM boards come with their real ROMs (Shadow RAM OS 2.40,
+ARIES-B32 1.00), whose own commands and self-tests work. The [Hardware Expansion Guide](docs/hardware-expansions/README.md)
 (also Help > Hardware Expansion Guide in the app) explains them, and agents
 can fit and load them over MCP (`get_hardware`, `power_cycle` with
 `memory_board`, `load_sideways_bank`).

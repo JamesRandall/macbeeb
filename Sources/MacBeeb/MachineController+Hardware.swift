@@ -13,6 +13,7 @@ extension MachineController {
         var slots: [BBCMicro.SidewaysSlot]
         var romsel: UInt8
         var watfordMapping: BBCMicro.WatfordMapping?
+        var aries: BBCMicro.AriesState?
     }
 
     /// The hardware being chosen in the Hardware Expansions window: the
@@ -123,7 +124,8 @@ extension MachineController {
             let m = session.machine
             return HardwareSnapshot(model: m.model, expansions: m.configuration.fittedExpansions,
                                     slots: m.sidewaysSlots, romsel: m.romsel,
-                                    watfordMapping: m.watfordFitted ? m.watfordMapping : nil)
+                                    watfordMapping: m.watfordFitted ? m.watfordMapping : nil,
+                                    aries: m.ariesFitted ? m.aries : nil)
         }
     }
 

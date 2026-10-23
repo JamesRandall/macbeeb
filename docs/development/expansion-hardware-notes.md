@@ -136,3 +136,56 @@ window, and its guide.
   by frame hash; `*FX34` data areas land in the right physical RAM; the
   guide's example program fails with "DIM space" on a stock Model B and runs
   with the board.
+
+## Phase 3 findings: Aries B32 and B12
+
+How the registers were worked out, without guessing:
+
+1. **What the ROM writes.** A scan of ARIES-B32 1.00 for absolute accesses
+   to &FE30–&FE3F finds only writes: &FE30, &FE32, &FE3E/&FE3F, and a few of
+   &FE36, &FE38 and &FE3A. The routine at &AB68 also writes &FE30+X from a
+   table at &AC85, one pair of registers for each of the ROM's four states:
+   &FE3C+&FE34, &FE3A+&FE36, &FE3A+&FE34, &FE3C+&FE36. (One write to &FFFE at
+   &8C3C is data: `*XKLUDGE`'s pattern for patching B20 ROMs.)
+2. **What `*XTEST` expects.** Its state test writes distinct values to &3000,
+   &4000 and &7000 with shadow on and off, then compares what it reads back
+   with a table (&A72A). That gives the shadow pieces exactly: &FE36/&FE34 are
+   &7000–&7FFF on/off, &FE3A/&FE3C &3000–&3FFF on/off, and &4000–&6FFF is
+   always shadowed.
+3. **The pool.** `*XTEST`'s RAM test treats 20K of shadow RAM plus bank 14's
+   &8000–&AFFF as one 32K with no overlap. The manual says shadow RAM comes
+   from bank 13 first, and 20K takes the top 4K of bank 14. So &4000–&7FFF is
+   bank 13, and &3000–&3FFF is &B000–&BFFF of bank 14. MAME's linear map would
+   overlap bank 14's 12K.
+4. **The start-up link.** The detection routine (&839A) writes &FE38 and
+   checks whether &7FFF then reads shadow RAM with shadow off. That result
+   becomes "Start-up link: ON/OFF". So &FE38 sets shadow as the link does.
+5. **RAMSEL.** Run under MacBeeb: `*RWRITE 14` writes 14 to &FE32, `*RWRITE
+   OFF` writes 15 (the ROM socket, so writes are lost), and `*RWRITE EXTERNAL`
+   writes 0. The ROM's table at &AEFD (0, 13, 14, 15, then 00, 13, 14, 15 as
+   BCD digits for printing) agrees. So 0–12 pass writes on to the BBC's bus,
+   which is where the B12's write-through RAM sits.
+
+A first guess that RAMSEL had a "write enable" bit made the ROM's power-on
+use markers vanish, and `*XSTATUS S` then showed bank 14 as 8K + 8K instead
+of the manual's 12K. With the decode above it shows "14: RAM 12K Unused". So
+the manual's examples catch mistakes the code alone might not.
+
+Checked against the ROM and the manual:
+
+- `*XTEST` passes, B32 alone (no RAM in bank 0) and with the B12 (16K in bank
+  0, `RWRITE 0 OK`).
+- `*XSTATUS` at power on gives the manual's example: 20K, 26112 bytes from
+  &1A00 to &8000, "14: RAM 12K Unused", "Start-up link: ON".
+- `*XON 16` is pending until MODE, then 16K. MODE 1 then leaves 22016 bytes
+  (&1A00 to &7000). `*XOFF` and Break leave 5888 bytes (&1900 to &3000) in
+  MODE 1. `*XOFF 2` leaves 25088 bytes (&1A00 to &7C00) in MODE 7. All as the
+  manual says.
+- `*RLOAD` of a 16K image says "B32: Not enough RAM" with 20K of shadow RAM,
+  and fits after `*XON 16`; `*XON 20` then says "B32: RAM in use". As the
+  manual says.
+
+Not emulated: the B20, the B12 without a B32, a RAM chip in the B32's ROM
+socket, other sideways RAM alongside (`*RWRITE EXTERNAL` writes go nowhere
+without the B12), and reads of the board's registers (the ROM never reads
+them).

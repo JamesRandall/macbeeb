@@ -183,12 +183,16 @@ extension BBCMicro {
             state.watfordMapping = watfordMapping
             state.watfordFFFDWrites = watfordFFFDWrites
         }
+        if ariesFitted {
+            state.aries = aries
+        }
         return state
     }
 
     func restoreExpansion(_ state: ExpansionState?) {
         watfordMapping = state?.watfordMapping ?? .bbc
         watfordFFFDWrites = state?.watfordFFFDWrites ?? 0
+        aries = state?.aries ?? AriesState()
     }
 }
 

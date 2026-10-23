@@ -35,11 +35,23 @@ public struct Firmware: Sendable, Equatable, Identifiable {
                  sha1: "210f6162d634fca8d75197d4f64d9b50abc01e1e", sha256: nil, mameName: "we32kram_v1.06.rom"),
         Firmware(image: nil, board: .watford32K, name: "RAM board ROM", version: "1.00", size: 0x2000,
                  sha1: "1b59a3354cfc704ad8aa60b0ed16e4cd2d815031", sha256: nil, mameName: "we32kram_v1.00.rom"),
+        // MAME calls it v2.2; its header (and the manual's examples) say
+        // 1.00.
+        Firmware(image: .ariesB32100, board: .ariesB32, name: "ARIES-B32", version: "1.00", size: 0x4000,
+                 sha1: "466e3b68f1a8e0287ae095cb3c16dac6afc89dcb",
+                 sha256: "8f1e288c08a706f76a43bd8ae296bfb7dce0a3f6244d8f95831261be97a78051",
+                 mameName: "aries-b32_v2.2.rom"),
     ]
 
     /// The bundled version for `board`, if it has a controller ROM.
     public static func standard(for board: BBCMicro.MemoryBoard) -> Firmware? {
-        known.first { $0.board == board && $0.image != nil }
+        known.first { $0.fits(board) && $0.image != nil }
+    }
+
+    /// Whether it's the ROM for `board` (the B32's is the same with or
+    /// without the B12).
+    public func fits(_ board: BBCMicro.MemoryBoard) -> Bool {
+        self.board == board || (self.board == .ariesB32 && board == .ariesB32B12)
     }
 
     /// Whether MacBeeb comes with this version.
@@ -68,7 +80,7 @@ public struct Firmware: Sendable, Equatable, Identifiable {
     public static func identify(_ bytes: [UInt8], for board: BBCMicro.MemoryBoard) -> Identification {
         let hash = sha1(bytes)
         if let match = known.first(where: { $0.sha1 == hash }) {
-            return match.board == board ? .known(match) : .anotherBoard(match)
+            return match.fits(board) ? .known(match) : .anotherBoard(match)
         }
         let expected = standard(for: board)?.size ?? 0x4000
         // A 16K dump of an 8K ROM (repeated) is the same ROM.

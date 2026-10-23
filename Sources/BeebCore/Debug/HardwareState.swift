@@ -191,6 +191,17 @@ extension BBCMicro {
             rows.append(("Writes to &FFFD", "\(watfordFFFDWrites) (no known effect)"))
             rows.append(("Video reads", "main RAM, always"))
         }
+        if ariesFitted {
+            rows.append(("Shadow switches", aries.shadowAllocation))
+            rows.append(("Shadow now (&FE3E/&FE3F)", aries.shadow ? "on: the CPU sees shadow RAM" : "off: the CPU sees main RAM"))
+            rows.append(("Writes (&FE32)", "\(hex(aries.ramsel)): \(aries.writeTarget)"))
+            rows.append(("Start-up link", ariesStartUpLink ? "fitted" : "removed"))
+            rows.append(("ROM's state (&27F)", hex(peek(0x27F))))
+            rows.append(("Video reads", "main RAM, always"))
+        }
+        if !controllerWrites.isEmpty {
+            rows.append(("Last register writes", controllerWrites.suffix(6).map { "\(hex($0.address, 4))=\(hex($0.value))" }.joined(separator: " ")))
+        }
         if let bank = expansions.board.controllerROMBank {
             rows.append(("Controller ROM", sidewaysSlots[bank].header.map { "\($0.name), bank \(bank)" } ?? "missing (bank \(bank))"))
         }
