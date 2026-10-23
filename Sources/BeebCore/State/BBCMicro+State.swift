@@ -109,6 +109,10 @@ extension BBCMicro {
         userVIA = s.userVIA
         crtc = s.crtc
         videoULA = s.videoULA
+        // NuLA as this machine has it: an older snapshot has none.
+        if configuration.videoNuLA != (videoULA.nula != nil) {
+            videoULA.nula = configuration.videoNuLA ? VideoNuLA() : nil
+        }
         saa5050 = s.saa5050
         adc = s.adc
         soundChip = s.soundChip

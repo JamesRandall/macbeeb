@@ -7,6 +7,11 @@ graphics modes. MacBeeb can fit some of these to its Model B.
 
 ## Quick start
 
+**Video:** turn on **VideoNuLA fitted** under **Video** in the same window,
+on any model, and **Restart BBC**. See [VideoNuLA](videonula.md).
+
+**Memory:**
+
 1. Choose **Machine ▸ Hardware Expansions…** (⌥⌘E), or **Hardware
    Expansions…** in the toolbar's Model menu.
 2. Click a board, such as **Sideways RAM 32K**.
@@ -26,8 +31,14 @@ To take it out again, choose **None (stock Model B)** and restart.
 | Aries B32 | 32K shared between shadow and sideways RAM (20K + 12K, 16K + 16K or 0 + 32K), with its ROM (ARIES-B32 1.00) | [Aries B32 and B12](aries-b32-b12.md) |
 | Aries B32 + B12 | The B32, plus twelve ROM sockets and 16K of sideways RAM | [Aries B32 and B12](aries-b32-b12.md) |
 
+And for video, on any model:
+
+| Upgrade | What it adds | Guide |
+| --- | --- | --- |
+| VideoNuLA | Each of the 16 colours any of 4,096 | [VideoNuLA](videonula.md) |
+
 Only one memory board can be fitted at a time: on a real BBC they all plug
-into the same places. Expansion boards are for the Model B. The B+ and the
+into the same places. VideoNuLA is separate: it goes with any board, or none. Expansion boards are for the Model B. The B+ and the
 Masters have shadow and sideways RAM built in, and the Model A can't take
 them.
 
@@ -92,4 +103,5 @@ AI agents can fit boards and load sideways RAM with MacBeeb's MCP tools
   their real ROM, checked by its hash. You can use your own dump instead.
 - The Aries B32's registers were worked out from what its real ROM does, and
   its own `*XTEST` passes. Each guide lists what isn't emulated.
-- VideoNuLA is being added. It will appear here when it's done and tested.
+- VideoNuLA is a port of b2's, and b2's NuLA picture tests pass pixel for
+  pixel. Its guide lists the few functions that aren't emulated.

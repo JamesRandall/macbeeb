@@ -108,12 +108,24 @@ extension BBCMicro {
             ("Mode", "\(videoULA.teletext ? "teletext" : "bitmap"), \(rates[Int(videoULA.lineWidth)]) pixels, \(videoULA.fast6845 ? "2MHz" : "1MHz") CRTC\(videoULA.flash ? ", flash" : "")"),
             ("Screen RAM", videoRAMOffset != 0 ? "shadow" : "main"),
         ]
+        // The palette holds the physical colour (the OS writes it EOR 7 and
+        // the ULA inverts it back).
         for logical in 0..<16 {
-            let physical = videoULA.palette[logical] ^ 7
+            let physical = videoULA.palette[logical]
             let name = (physical & 8 != 0 ? "flashing " : "") + colours[Int(physical & 7)]
             rows.append(("Palette \(logical)", "\(physical) (\(name))"))
         }
-        return HardwareSection("Video ULA", rows)
+        if let n = videoULA.nula {
+            rows.append(("VideoNuLA", n.disableA1 ? "fitted, registers disabled (function 5) until power off" : "fitted: &FE22 control, &FE23 palette"))
+            rows.append(("NuLA palette mode", n.directPalette ? "direct (logical colours)" : "through the ULA palette"))
+            rows.append(("NuLA offset / blanking", "\(n.scrollOffset) / \(n.blankingSize)"))
+            rows.append(("NuLA attribute mode", "\(n.attributeMode)\(n.textAttributeMode ? ", text attributes" : "")"))
+            rows.append(("NuLA palette write", n.paletteWritePending ? "half done (first byte \(hex(n.paletteWriteBuffer)))" : "ready"))
+            for i in 0..<16 {
+                rows.append(("NuLA colour \(i)", String(format: "&%03X %@", n.outputPalette[i], n.rgb888(i)) + (n.flash[i] ? ", flashes" : "")))
+            }
+        }
+        return HardwareSection(videoULA.nula == nil ? "Video ULA" : "Video ULA (VideoNuLA)", rows)
     }
 
     var soundState: HardwareSection {

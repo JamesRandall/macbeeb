@@ -360,6 +360,8 @@ public final class BBCMicro {
         /// The Model B's expansions: a memory board. (Ignored on other
         /// models.)
         public var expansions: Expansions
+        /// VideoNuLA fitted in place of the Video ULA.
+        public var videoNuLA: Bool
         /// A disc in drive 0 at power on: the co-processor's system disc,
         /// so it boots. Not saved with the configuration (a save state has
         /// its discs).
@@ -380,9 +382,10 @@ public final class BBCMicro {
         public init(model: Model = .modelB, os: [UInt8], sidewaysROMs: [Int: [UInt8]],
                     sidewaysRAMBanks: Set<Int>? = nil, secondProcessorROM: [UInt8]? = nil,
                     discInterface: DiscInterface = .intel8271, coprocessor: Coprocessor = .mos6502,
-                    startupDisc: StartupDisc? = nil, expansions: Expansions = .none) {
+                    startupDisc: StartupDisc? = nil, expansions: Expansions = .none, videoNuLA: Bool = false) {
             self.discInterface = discInterface
             self.expansions = expansions
+            self.videoNuLA = videoNuLA
             self.startupDisc = startupDisc
             self.coprocessor = coprocessor
             self.model = model
@@ -398,7 +401,7 @@ public final class BBCMicro {
         }
 
         enum CodingKeys: CodingKey {
-            case model, os, sidewaysROMs, sidewaysRAMBanks, secondProcessorROM, discInterface, coprocessor, expansions
+            case model, os, sidewaysROMs, sidewaysRAMBanks, secondProcessorROM, discInterface, coprocessor, expansions, videoNuLA
         }
 
         public init(from decoder: Decoder) throws {
@@ -412,6 +415,7 @@ public final class BBCMicro {
             coprocessor = try c.decodeIfPresent(Coprocessor.self, forKey: .coprocessor) ?? .mos6502
             // Older save states have none.
             expansions = try c.decodeIfPresent(Expansions.self, forKey: .expansions) ?? .none
+            videoNuLA = try c.decodeIfPresent(Bool.self, forKey: .videoNuLA) ?? false
         }
 
         /// What's wrong with the expansions, if anything: bad wiring, or a
@@ -453,6 +457,7 @@ public final class BBCMicro {
         ariesFitted = configuration.fittedExpansions.board.isAries
         ariesB12Fitted = configuration.fittedExpansions.board == .ariesB32B12
         ariesStartUpLink = configuration.fittedExpansions.ariesStartUpLink
+        videoULA = VideoULA(nula: configuration.videoNuLA)
         let master = model.isMaster
         cpu = M6502(variant: master ? .cmos : .nmos)
 
@@ -646,6 +651,26 @@ public final class BBCMicro {
         }
     }
 
+    /// Writes as the CPU would at `address`, for tools: I/O through the
+    /// machine's decode (so devices see it, as VideoNuLA's registers must),
+    /// memory through the paging (ROM ignores it; the Watford latch sees
+    /// &FFFC-&FFFF). The CPU's 1MHz stretching isn't modelled.
+    public func cpuWrite(_ address: UInt16, _ value: UInt8) {
+        if address >= 0xFC00 && address < 0xFF00 {
+            if model.isMaster {
+                writeIOMaster(address, value)
+            } else {
+                writeIO(address, value)
+            }
+        } else {
+            writePages[pageTable + Int(address >> 12)][Int(address & 0xFFF)] = value
+            if address >= 0xFFFC && watfordFitted {
+                watfordControl(address)
+            }
+        }
+        rewinder?.keyframe()
+    }
+
     /// Reads the RAM the video hardware sees (shadow RAM on the Master
     /// with ACCCON D set).
     public func peekScreen(_ address: UInt16) -> UInt8 {
@@ -771,8 +796,15 @@ public final class BBCMicro {
             }
         case 0xFE20:
             if address & 0x10 == 0 {
-                // Video ULA (&FE20-&FE2F).
-                if address & 1 == 0 {
+                // Video ULA (&FE20-&FE2F); with VideoNuLA, A1 set is its
+                // registers.
+                if videoULA.nula != nil && address & 2 != 0 {
+                    if address & 1 == 0 {
+                        videoULA.writeNuLAControl(value)
+                    } else {
+                        videoULA.writeNuLAPalette(value)
+                    }
+                } else if address & 1 == 0 {
                     videoULA.writeControl(value)
                 } else {
                     videoULA.writePalette(value)
@@ -1001,7 +1033,13 @@ public final class BBCMicro {
         case 0xFE20:
             switch address & 0x1C {
             case 0x00:
-                if address & 1 == 0 {
+                if videoULA.nula != nil && address & 2 != 0 {
+                    if address & 1 == 0 {
+                        videoULA.writeNuLAControl(value)
+                    } else {
+                        videoULA.writeNuLAPalette(value)
+                    }
+                } else if address & 1 == 0 {
                     videoULA.writeControl(value)
                 } else {
                     videoULA.writePalette(value)
@@ -1442,6 +1480,11 @@ public final class BBCMicro {
             ic15Byte = output.address & 0x2000 != 0 ? value : 0
         }
 
+        // VideoNuLA starts a line's scroll and blanking as the display
+        // comes on (b2 does it for each byte fetched while it was off).
+        if videoULA.nula != nil && !videoULA.teletext && !crtcLastOutput.display {
+            videoULA.displayEnabled()
+        }
         // Done even in teletext mode: the cursor flag sets up the cursor.
         videoULA.byte(value, cudisp: output.cudisp)
         crtcLastOutput = output
@@ -1450,7 +1493,7 @@ public final class BBCMicro {
     @inline(__always)
     private func emitVideo() {
         if videoULA.teletext {
-            saa5050.emitPixels(&unit)
+            saa5050.emitPixels(&unit, palette: videoULA.output)
             if videoULA.cursorPattern & 1 != 0 {
                 unit.pixels[0] ^= cursorXOR
                 unit.pixels[1] ^= cursorXOR

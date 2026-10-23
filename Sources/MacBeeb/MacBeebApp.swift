@@ -468,6 +468,9 @@ struct MachineWindow: View {
         if machine.model == .modelB, machine.expansions.board != .none {
             name += " + " + machine.expansions.board.displayName
         }
+        if machine.videoNuLA {
+            name += " + VideoNuLA"
+        }
         var title = machine.discNames[0].map { "\(name) — \($0)" } ?? name
         if machine.paused {
             title += " (Paused)"

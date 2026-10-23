@@ -189,3 +189,30 @@ Not emulated: the B20, the B12 without a B32, a RAM chip in the B32's ROM
 socket, other sideways RAM alongside (`*RWRITE EXTERNAL` writes go nowhere
 without the B12), and reads of the board's registers (the ROM never reads
 them).
+
+## Phase 4 findings: VideoNuLA
+
+- b2's `VideoULA.cpp` is a full NuLA (MacBeeb's stock ULA was already a port
+  of its non-NuLA half), so NuLA is a port of the rest. The state is one
+  optional struct (`VideoULA.nula`): nil on a machine without it, so the
+  stock path costs one predictable test per cycle, and older snapshots load.
+- b2's picture tests (`etc/b2_tests/5`) compare directly: MacBeeb's TV is
+  b2's, 736×576. All 368 NuLA pictures and the 16 stock ULA ones match pixel
+  for pixel. The one difference found on the way was mine: b2 marks units as
+  12MHz pixels whenever attribute mode 1 is on, in every pixel mode, and at
+  4MHz writes nothing into the scroll buffer but still outputs it.
+- A long-standing debugger bug fixed in passing: the Hardware view showed
+  each logical colour's physical colour EOR 7 (MODE 2's red as "6 (cyan)").
+  The ULA's palette holds the physical colour; the OS writes it EOR 7 and
+  the ULA inverts it back.
+- Not emulated, because nothing shows how they look: attribute modes 2 and 3
+  and the text attribute mode (b2 stores but doesn't draw them; its
+  `ShiftAttributeText` is never used), and functions E and F (border and blank
+  colours: jsbeeb stubs them, b2 ignores them). jsbeeb renders less than b2:
+  the palette, direct mode and flash flags, but not offset or blanking.
+- The Bitshifters gallery (bbcnula1.ssd) programs a 16-colour palette and
+  shows its pictures with NuLA; without it, its writes to &FE23 reach the
+  stock palette (the mirror of &FE21), as on a real Model B. Not committed (the
+  pictures are third-party art): the test reads it from reference/.
+- b2's pictures are b2's own output (its harness can infer them), so matching
+  them is agreement with b2, not proof against real hardware.

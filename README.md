@@ -261,7 +261,10 @@ Hardware Expansions…): a 16K or 32K sideways RAM module, wired as
 BeebMaster's; Watford Electronics' 32K Shadow RAM board; or the Aries B32
 (32K shared between shadow and sideways RAM), with or without the B12 ROM
 board. The shadow RAM boards come with their real ROMs (Shadow RAM OS 2.40,
-ARIES-B32 1.00), whose own commands and self-tests work. The [Hardware Expansion Guide](docs/hardware-expansions/README.md)
+ARIES-B32 1.00), whose own commands and self-tests work. Any model can have
+VideoNuLA instead of its Video ULA (b2's, whose NuLA picture tests pass):
+sixteen colours of 4,096, which agents can program and inspect too
+(`video_nula`, `set_video_nula_palette`, `bus_write`). The [Hardware Expansion Guide](docs/hardware-expansions/README.md)
 (also Help > Hardware Expansion Guide in the app) explains them, and agents
 can fit and load them over MCP (`get_hardware`, `power_cycle` with
 `memory_board`, `load_sideways_bank`).

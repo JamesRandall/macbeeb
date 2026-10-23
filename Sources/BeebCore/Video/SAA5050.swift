@@ -160,10 +160,12 @@ public struct SAA5050: Codable, Sendable {
 
     /// One char is 2 units wide.
     @inline(__always)
-    mutating func emitPixels(_ unit: inout VideoUnit) {
+    /// `palette`: the colours (VideoNuLA's, which programs can change, or
+    /// the stock ones), as b2 has it.
+    mutating func emitPixels(_ unit: inout VideoUnit, palette: InlineArray<16, UInt16>) {
         let o = output[readIndex]
-        unit.pixels[0] = VideoULA.outputPalette[Int(o.bg)] | VideoUnit.Kind.teletext.rawValue << 12
-        unit.pixels[1] = VideoULA.outputPalette[Int(o.fg)]
+        unit.pixels[0] = palette[Int(o.bg)] | VideoUnit.Kind.teletext.rawValue << 12
+        unit.pixels[1] = palette[Int(o.fg)]
         unit.pixels[2] = UInt16(o.data0)
         unit.pixels[3] = UInt16(o.data1)
         readIndex = (readIndex + 1) & 7

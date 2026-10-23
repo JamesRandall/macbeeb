@@ -141,7 +141,7 @@ public final class AgentTools: Sendable {
         return (notes.isEmpty ? "" : notes + "\n") + "[t=\(time)s] screen:\n" + lines.joined(separator: "\n")
     }
 
-    static let tools: [Tool] = coreTools + debugTools + hardwareTools
+    static let tools: [Tool] = coreTools + debugTools + hardwareTools + nulaTools
 
     static let coreTools: [Tool] = [
         Tool(definition: ToolDefinition(
@@ -203,7 +203,8 @@ public final class AgentTools: Sendable {
                                                   "description": "Model B only: the memory expansion board (default: keep as is). none is the stock Model B; sideways_ram_16 and sideways_ram_32 are a 16K or 32K sideways RAM module in a motherboard socket; watford_32k is Watford Electronics' 32K shadow RAM board with its ROM (Shadow RAM OS 2.40) in bank 13; aries_b32 is the Aries B32 (32K shared between shadow RAM and sideways RAM banks 13 and 14, its ROM in bank 15, BASIC in 11 and DFS in 10; *XON, *XOFF, *XSTATUS, *RLOAD, *RWRITE, *XTEST) and aries_b32_b12 adds the B12 (sockets 1-12, 16K RAM in bank 0; BASIC in 12, DFS in 11). get_hardware shows what's fitted"] as JSONValue,
                                  "sideways_ram_socket": prop("integer", "Sideways RAM boards: the socket (bank) the module's in, 12 or 13 (default 13)"),
                                  "second_bank_below": prop("integer", "sideways_ram_32: the second bank is 4 (default) or 8 below the first, as the module's lead is wired"),
-                                 "aries_start_up_link": prop("boolean", "Aries B32: the start-up link is fitted (default true: shadow RAM on at power on and Ctrl-Break)")])
+                                 "aries_start_up_link": prop("boolean", "Aries B32: the start-up link is fitted (default true: shadow RAM on at power on and Ctrl-Break)"),
+                                 "video_nula": prop("boolean", "Fit VideoNuLA in place of the Video ULA (16 programmable 12-bit colours; any model), or take it out (default: keep as is). video_nula shows its state")])
         )) { context, args in
             var expansionChange: (@Sendable (BBCMicro.Expansions) throws -> BBCMicro.Expansions)?
             if args["memory_board"] != nil || args["sideways_ram_socket"] != nil || args["second_bank_below"] != nil
@@ -230,6 +231,7 @@ public final class AgentTools: Sendable {
                 }
             }
             let changeExpansions = expansionChange
+            let nula = args["video_nula"]?.boolValue
             var requestedModel: BBCMicro.Model?
             if let name = args["model"]?.stringValue {
                 guard let named = agentModels[name] else { throw ToolFailure("model must be model_a, model_b, b_plus, master_128 or master_compact") }
@@ -251,7 +253,7 @@ public final class AgentTools: Sendable {
             let coprocessor = requestedCoprocessor
             return .text(try context.perform { session in
                 var configuration: BBCMicro.Configuration?
-                if model != nil || secondProcessor != nil || interface != nil || coprocessor != nil || changeExpansions != nil {
+                if model != nil || secondProcessor != nil || interface != nil || coprocessor != nil || changeExpansions != nil || nula != nil {
                     let current = session.machine
                     let fitted = current.secondProcessor != nil || current.z80Processor != nil || current.master512 != nil || current.armProcessor != nil
                     let newModel = model ?? current.model
@@ -279,6 +281,7 @@ public final class AgentTools: Sendable {
                                                            coprocessor: newCoprocessor,
                                                            discInterface: interface ?? current.configuration.discInterface,
                                                            expansions: expansions, sidewaysImages: images)
+                    configuration?.videoNuLA = nula ?? current.configuration.videoNuLA
                 }
                 session.powerCycle(configuration: configuration)
                 // Booting a system disc (DOS Plus especially) takes longer.

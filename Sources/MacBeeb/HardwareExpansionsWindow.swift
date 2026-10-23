@@ -73,16 +73,70 @@ struct HardwareExpansionsWindow: View {
     // MARK: Not a Model B
 
     private var otherModel: some View {
-        ContentUnavailableView {
-            Label("Expansion boards are for the BBC Model B", systemImage: "memorychip")
-        } description: {
-            Text("The \(machine.model.displayName) has its own memory built in\(machine.model == .modelA ? "" : ": shadow RAM and sideways RAM"). Switch to a Model B to fit sideways RAM.")
-        } actions: {
-            Button("Switch to a Model B") {
-                machine.apply(draft)
-                machine.switchToModelB(with: draft.expansions)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(machine.model.displayName)
+                        .font(.largeTitle.weight(.semibold))
+                    Text(machine.model == .modelA ? "Memory boards are for the Model B."
+                         : "Its shadow and sideways RAM are built in; memory boards are for the Model B.")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                }
+                HStack(spacing: 14) {
+                    Image(systemName: "memorychip")
+                        .font(.system(size: 26))
+                        .foregroundStyle(.secondary)
+                    Text("Sideways RAM, Watford and Aries boards fit the BBC Model B.")
+                    Spacer()
+                    Button("Switch to a Model B") {
+                        machine.apply(draft)
+                        machine.switchToModelB(with: draft.expansions)
+                    }
+                }
+                .padding(14)
+                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+                videoSection
             }
-                .buttonStyle(.borderedProminent)
+            .padding(20)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            restartBar
+        }
+        .animation(.snappy(duration: 0.25), value: draft)
+    }
+
+    // MARK: Video
+
+    private var videoSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionTitle("Video", detail: "VideoNuLA replaces the Video ULA: each of the sixteen colours can be any of 4,096. It fits any model, with any memory board.")
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 14) {
+                    Image(systemName: "paintpalette")
+                        .font(.system(size: 26))
+                        .foregroundStyle(draft.videoNuLA ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
+                        .frame(width: 34)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle("VideoNuLA fitted", isOn: $draft.videoNuLA)
+                            .toggleStyle(.switch)
+                            .font(.headline)
+                            .help("Fit VideoNuLA in place of the Video ULA (restarts the BBC)")
+                        Text(draft.videoNuLA
+                             ? "Programs set colours by writing &FE23; the standard colours until they do."
+                             : "The stock Video ULA: eight colours, and eight flashing ones.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                if draft.videoNuLA, !pending, let nula = snapshot?.nula {
+                    NuLAPaletteView(nula: nula)
+                        .transition(.opacity)
+                }
+            }
+            .padding(14)
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
         }
     }
 
@@ -101,6 +155,7 @@ struct HardwareExpansionsWindow: View {
                     shadowSection
                 }
                 banksSection
+                videoSection
             }
             .padding(20)
         }
@@ -423,6 +478,17 @@ struct HardwareExpansionsWindow: View {
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
     }
 
+    private var restartTitle: String {
+        let current = machine.hardwareDraft
+        if draft.expansions != current.expansions && machine.model == .modelB {
+            return "Fitting \(expansions.board == .none ? "no board" : "the " + expansions.board.displayName) restarts the BBC"
+        }
+        if draft.videoNuLA != current.videoNuLA {
+            return draft.videoNuLA ? "Fitting VideoNuLA restarts the BBC" : "Taking VideoNuLA out restarts the BBC"
+        }
+        return "Changing the board’s ROM restarts the BBC"
+    }
+
     /// How much of an Aries bank shadow RAM is using.
     private func ariesNote(_ bank: Int) -> String? {
         guard let aries = snapshot?.aries else { return nil }
@@ -443,8 +509,7 @@ struct HardwareExpansionsWindow: View {
                         .font(.title2)
                         .foregroundStyle(.orange)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(draft.expansions == machine.expansions ? "Changing the board’s ROM restarts the BBC"
-                             : "Fitting \(expansions.board == .none ? "no board" : "the " + expansions.board.displayName) restarts the BBC")
+                        Text(restartTitle)
                             .font(.headline)
                         Text("As switching off and on: what’s in memory is lost. Discs stay in their drives.")
                             .font(.callout)
@@ -803,6 +868,55 @@ private struct AriesPoolView: View {
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
         .animation(.snappy(duration: 0.3), value: state)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// VideoNuLA's sixteen colours as the BBC has set them, live.
+private struct NuLAPaletteView: View {
+    let nula: MachineController.NuLAView
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 4) {
+                ForEach(0..<16, id: \.self) { i in
+                    let c = nula.colours[i]
+                    VStack(spacing: 3) {
+                        RoundedRectangle(cornerRadius: 5)
+                            .fill(Color(red: Double(c >> 8 & 15) / 15, green: Double(c >> 4 & 15) / 15, blue: Double(c & 15) / 15))
+                            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(.separator))
+                            .overlay(alignment: .topTrailing) {
+                                if nula.flashing[i] {
+                                    Image(systemName: "bolt.fill")
+                                        .font(.system(size: 8))
+                                        .foregroundStyle(.white)
+                                        .shadow(radius: 1)
+                                        .padding(3)
+                                }
+                            }
+                            .frame(height: 30)
+                        Text("\(i)")
+                            .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                        Text(String(format: "%03X", c & 0xFFF))
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .help(String(format: "Colour %d: RGB444 &%03X (#%02X%02X%02X)%@", i, c & 0xFFF, Int(c >> 8 & 15) * 17,
+                                 Int(c >> 4 & 15) * 17, Int(c & 15) * 17, nula.flashing[i] ? ", flashing" : ""))
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: nula.colours)
+            HStack(spacing: 16) {
+                Label(nula.disabled ? "Disabled by the BBC until power off" : nula.direct ? "Direct palette" : "Through the ULA’s palette",
+                      systemImage: nula.disabled ? "nosign" : "arrow.triangle.branch")
+                if nula.offset > 0 { Label("Offset \(nula.offset)", systemImage: "arrow.right.to.line") }
+                if nula.blanking > 0 { Label("Left blanking \(nula.blanking)", systemImage: "rectangle.lefthalf.inset.filled") }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("VideoNuLA colours: " + (0..<16).map { String(format: "%d %03X", $0, nula.colours[$0] & 0xFFF) }.joined(separator: ", "))
     }
 }
 

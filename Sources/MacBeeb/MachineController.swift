@@ -59,6 +59,9 @@ final class MachineController {
     /// Controller ROMs the user has chosen in place of the bundled ones,
     /// by board.
     private(set) var controllerROMPaths: [BBCMicro.MemoryBoard: String]
+    /// VideoNuLA fitted in place of the Video ULA (any model). Remembered
+    /// like the model.
+    private(set) var videoNuLA: Bool
     private static let powerOnImagesDefaultsKey = "MacBeebSidewaysPowerOnImages"
     /// Counts changes to the hardware (a power cycle with new hardware, or
     /// sideways RAM loaded or cleared), for the Hardware Expansions window.
@@ -120,10 +123,14 @@ final class MachineController {
         self.powerOnImagePaths = powerOnImagePaths
         let controllerROMPaths = Self.savedControllerROMPaths
         self.controllerROMPaths = controllerROMPaths
-        let configuration = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
-                                                   discInterface: discInterface, expansions: expansions,
-                                                   sidewaysImages: Self.images(at: powerOnImagePaths),
-                                                   controllerROM: Self.controllerROM(for: expansions.board, paths: controllerROMPaths))
+        let videoNuLA = Self.savedVideoNuLA
+        self.videoNuLA = videoNuLA
+        var built = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
+                                           discInterface: discInterface, expansions: expansions,
+                                           sidewaysImages: Self.images(at: powerOnImagePaths),
+                                           controllerROM: Self.controllerROM(for: expansions.board, paths: controllerROMPaths))
+        built.videoNuLA = videoNuLA
+        let configuration = built
         let discDriveSounds = UserDefaults.standard.object(forKey: Self.discDriveSoundsDefaultsKey) as? Bool ?? true
         self.discDriveSounds = discDriveSounds
         host = EmulatorHost(discDriveSounds: Self.discDriveSounds(for:), discDriveSoundsOn: discDriveSounds) {
@@ -552,15 +559,17 @@ final class MachineController {
     func setExpansionsValue(_ new: BBCMicro.Expansions) { expansions = new }
     func setPowerOnImagePathsValue(_ new: [Int: String]) { powerOnImagePaths = new }
     func setControllerROMPathsValue(_ new: [BBCMicro.MemoryBoard: String]) { controllerROMPaths = new }
+    func setVideoNuLAValue(_ new: Bool) { videoNuLA = new }
     func noteHardwareChanged() { hardwareChanges += 1 }
     /// Power cycles into the hardware as now set.
     func restartWithHardware() { changeMachine() }
 
     private func changeMachine() {
-        let configuration = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
+        var configuration = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
                                                    discInterface: discInterface, expansions: expansions,
                                                    sidewaysImages: Self.images(at: powerOnImagePaths),
                                                    controllerROM: Self.controllerROM(for: expansions.board, paths: controllerROMPaths))
+        configuration.videoNuLA = videoNuLA
         hardwareChanges += 1
         // As BBCMicro.insertDiscs: an empty drive 0, or one with the old
         // machine's system disc, gets the new machine's.
@@ -890,6 +899,7 @@ final class MachineController {
             coprocessor = file.configuration.coprocessor
             discInterface = file.configuration.discInterface
             expansions = file.configuration.expansions
+            videoNuLA = file.configuration.videoNuLA
             hardwareChanges += 1
             discNames = [:]
             driveMedia = [:]
@@ -976,6 +986,7 @@ extension MachineController {
         // expansion board.
         discInterface = .intel8271
         expansions = .none
+        videoNuLA = false
         secondProcessor = requirement.coprocessor != nil
         if let coprocessor = requirement.coprocessor {
             self.coprocessor = coprocessor
@@ -1100,6 +1111,7 @@ extension MachineController {
                 coprocessor = file.configuration.coprocessor
                 discInterface = file.configuration.discInterface
                 expansions = file.configuration.expansions
+                videoNuLA = file.configuration.videoNuLA
                 hardwareChanges += 1
                 startupDiscName = nil
                 discNames = Dictionary(uniqueKeysWithValues: manifest.drives.map { ($0.drive, $0.name) })

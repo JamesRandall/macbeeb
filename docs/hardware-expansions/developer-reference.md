@@ -160,6 +160,78 @@ shadow RAM linearly onto the pool, which overlaps bank 14's 12K.
 `ExpansionState`; the pool is in the snapshot's RAM. The start-up link is
 part of the configuration (`Expansions.ariesStartUpLink`).
 
+## VideoNuLA
+
+`Configuration.videoNuLA` fits it on any model; `VideoULA.nula`
+(`VideoNuLA`) is its state, nil without it. It's a port of b2's
+`VideoULA.cpp`.
+
+### Registers
+
+| Address (B, B+: &FE20–&FE2F; Master: &FE20–&FE23) | Without NuLA | With NuLA |
+| --- | --- | --- |
+| A1 clear, A0 clear (&FE20) | ULA control | ULA control |
+| A1 clear, A0 set (&FE21) | ULA palette | ULA palette |
+| A1 set, A0 clear (&FE22) | ULA control (mirror) | NuLA control: function << 4 \| value |
+| A1 set, A0 set (&FE23) | ULA palette (mirror) | NuLA palette: two writes, [index \| red] then [green \| blue] |
+
+All are write-only. After function 5, &FE22/&FE23 are mirrors again until
+power off.
+
+| Function | Value | Effect |
+| --- | --- | --- |
+| 1 | bit 0 | Direct palette: logical colours index NuLA's palette, skipping &FE21 |
+| 2 | 0–7 | Horizontal offset (scroll), in pixels |
+| 3 | 0–15 | Left blanking, in columns |
+| 4 | — | Reset: standard colours, colours 8–15 flash, offset 0, blanking 0, palette through the ULA, a half write forgotten, attribute mode 0 |
+| 5 | — | Disable NuLA until power off |
+| 6 | 0–3 | Attribute mode; only 1 is drawn (as b2) |
+| 7 | bit 0 | Text attribute mode: stored, not drawn |
+| 8, 9 | bits 3–0 | Flash flags for colours 8–11 and 12–15 (bit 3 the lowest colour) |
+| 0, 10–15 | — | Ignored (counted: `ignoredWrites`) |
+
+Colours are RGB444, shown as 8-bit RGB by doubling each nibble (`F80` is
+`#FF8800`). Programming a colour clears its flash flag. Teletext uses colours
+0–7. Changes take effect on the cycle the CPU writes them.
+
+### State
+
+`VideoNuLA` is `Codable` inside the snapshot's `VideoULA` (optional, so older
+snapshots load). A snapshot restored into a machine with NuLA but without NuLA
+state gets NuLA at power on, and one with NuLA state restored into a machine
+without NuLA loses it: the configuration decides.
+
+### MCP contracts
+
+| Tool | Arguments | What it does |
+| --- | --- | --- |
+| `get_hardware` | — | Includes `video: the stock Video ULA` or `video: VideoNuLA (…)` |
+| `power_cycle` | `video_nula: true/false` | Fits or removes it (a restart); other changes keep it as it is |
+| `video_nula` | — | Read-only: fitted, enabled, palette mode, a half-done write (first byte, colour, red), offset, blanking, attribute modes, ULA control, all 16 colours as `&RGB (#RRGGBB)` with flash flags, each logical colour's mapping and current colour, ignored writes, and capabilities (`palette`, `direct_palette`, `horizontal_offset`, `left_blanking`, `reset`, `disable`, `attribute_mode_1`, `flash_flags`, `mode7_palette`: yes; `attribute_modes_2_3`, `text_attribute_mode`, `border_and_blank_colours`: unsupported). It's the emulator's record: the registers are write-only |
+| `set_video_nula_palette` | `index` 0–15, `rgb` `"F80"`/`"&F80"`/`"#F80"`/`"0xF80"` or 0–4095 | Writes the two bytes to &FE23 through the bus, as a program would |
+| `set_video_nula_control` | `function` 1–6, 8, 9; `value` within the function's range | Writes &FE22 through the bus, then returns the state |
+| `bus_write` | `address`, `bytes` | Writes each byte to the address as the CPU would: I/O through the machine's decode, memory through the paging. The general route to any device register |
+
+Errors start with a code: `not_fitted:`, `disabled:` (function 5 until power
+off), `invalid_value:`, `pending_write:` (the BBC has written the first byte
+of a colour, so the helper refuses rather than completing the program's
+colour; `bus_write` doesn't check), `unsupported_feature:` (6 with 2 or 3, 7,
+14, 15).
+
+`poke` still writes memory only, never I/O, and `peek` never reads a device's
+registers with side effects, so neither can change NuLA (or any latch) by
+accident.
+
+### Evidence
+
+`NuLAReferenceTests` runs b2's NuLA test programs (`etc/b2_tests/5`) as b2's
+test_beeb.cpp does and compares the picture pixel for pixel with b2's: the
+ULA mode test on a Master (stock ULA, and NuLA with palette mode and
+attribute mode 1, 80 pictures) and the scroll and blank tests on a Model B
+(modes 0–8, every setting, 288 pictures). All match. 25 are committed for CI;
+the rest are read from `reference/b2` in optimised builds. MacBeeb's TV is a
+port of b2's, so the pictures compare directly.
+
 ## Inspection and the debugger
 
 | Space (`peek`/`poke` `space`, debugger) | What it reads |
@@ -232,4 +304,14 @@ peek               {"address": "&8009", "length": 13, "space": "bank13"}
   picture unchanged, the pool layout, the start-up link, the B12, Ctrl-Break,
   save states, the firmware, and the ROM's own `*XTEST` (in optimised builds,
   or with `MACBEEB_SLOW_TESTS`).
+- `VideoNuLATests`: power-on state, the palette protocol (one entry, sixteen
+  in a row, a half write), the control functions, the stock ULA's mirrors,
+  colours on screen (bar 8 `#FF8800`), direct mode, MODE 7, a change half
+  way down the screen, save states (and older ones), alongside the Aries
+  B32, the Master, the guide's example (and on a stock Model B), and the
+  Bitshifters gallery (optimised builds, from `reference/`).
+- `VideoNuLAAgentTests`: the end-to-end MCP scenario (discover, fit, program
+  through &FE23 and the helper, inspect, check the screenshot's pixels, save
+  and load, the errors, take it out).
+- `NuLAReferenceTests`: b2's pictures, above.
 - `AgentHardwareToolsTests`: the MCP round trip.

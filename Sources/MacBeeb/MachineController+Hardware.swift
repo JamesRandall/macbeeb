@@ -14,6 +14,26 @@ extension MachineController {
         var romsel: UInt8
         var watfordMapping: BBCMicro.WatfordMapping?
         var aries: BBCMicro.AriesState?
+        var nula: NuLAView?
+    }
+
+    /// What the window shows of VideoNuLA.
+    struct NuLAView: Sendable, Equatable {
+        var colours: [UInt16]
+        var flashing: [Bool]
+        var direct: Bool
+        var disabled: Bool
+        var offset: UInt8
+        var blanking: UInt8
+
+        init(_ n: VideoNuLA) {
+            colours = (0..<16).map { n.outputPalette[$0] }
+            flashing = (0..<16).map { n.flash[$0] }
+            direct = n.directPalette
+            disabled = n.disableA1
+            offset = n.scrollOffset
+            blanking = n.blankingSize
+        }
     }
 
     /// The hardware being chosen in the Hardware Expansions window: the
@@ -21,13 +41,14 @@ extension MachineController {
     struct HardwareDraft: Equatable {
         var expansions: BBCMicro.Expansions
         var controllerROMPaths: [BBCMicro.MemoryBoard: String]
+        var videoNuLA: Bool
 
         /// The controller ROM the board would use.
         var controllerROMPath: String? { controllerROMPaths[expansions.board] }
     }
 
     var hardwareDraft: HardwareDraft {
-        HardwareDraft(expansions: expansions, controllerROMPaths: controllerROMPaths)
+        HardwareDraft(expansions: expansions, controllerROMPaths: controllerROMPaths, videoNuLA: videoNuLA)
     }
 
     static var savedExpansions: BBCMicro.Expansions {
@@ -51,6 +72,10 @@ extension MachineController {
         }
     }
 
+    static var savedVideoNuLA: Bool {
+        UserDefaults.standard.bool(forKey: videoNuLAKey)
+    }
+
     static var savedControllerROMPaths: [BBCMicro.MemoryBoard: String] {
         guard let saved = UserDefaults.standard.dictionary(forKey: controllerROMsKey) as? [String: String] else { return [:] }
         return Dictionary(uniqueKeysWithValues: saved.compactMap { key, path in BBCMicro.MemoryBoard(rawValue: key).map { ($0, path) } })
@@ -70,6 +95,7 @@ extension MachineController {
 
     private static let expansionsKey = "MacBeebExpansions"
     private static let controllerROMsKey = "MacBeebControllerROMs"
+    private static let videoNuLAKey = "MacBeebVideoNuLA"
     private static let powerOnImagesKey = "MacBeebSidewaysPowerOnImages"
 
     /// Fits a different board (or changes its wiring or controller ROM),
@@ -84,7 +110,11 @@ extension MachineController {
         setControllerROMPathsValue(draft.controllerROMPaths)
         UserDefaults.standard.set(Dictionary(uniqueKeysWithValues: draft.controllerROMPaths.map { ($0.key.rawValue, $0.value) }),
                                   forKey: Self.controllerROMsKey)
-        if model == .modelB {
+        let nulaChanged = draft.videoNuLA != videoNuLA
+        setVideoNuLAValue(draft.videoNuLA)
+        UserDefaults.standard.set(draft.videoNuLA, forKey: Self.videoNuLAKey)
+        // The board matters only on a Model B; NuLA on any model.
+        if model == .modelB || nulaChanged {
             restartWithHardware()
         }
     }
@@ -125,7 +155,8 @@ extension MachineController {
             return HardwareSnapshot(model: m.model, expansions: m.configuration.fittedExpansions,
                                     slots: m.sidewaysSlots, romsel: m.romsel,
                                     watfordMapping: m.watfordFitted ? m.watfordMapping : nil,
-                                    aries: m.ariesFitted ? m.aries : nil)
+                                    aries: m.ariesFitted ? m.aries : nil,
+                                    nula: m.videoULA.nula.map(NuLAView.init))
         }
     }
 
