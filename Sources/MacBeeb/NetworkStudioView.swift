@@ -62,6 +62,11 @@ struct NetworkStudioView: View {
         case canvas, tiles, traffic, mandelbrot
     }
 
+    init(session: NetworkSession, mode: Mode = .canvas) {
+        self.session = session
+        _mode = State(initialValue: mode)
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             Group {

@@ -36,7 +36,8 @@ public struct MandelbrotObserver: Sendable {
         public var cycles: UInt64
     }
 
-    /// A tile the coordinator accepted (an ACK with status 0).
+    /// A tile the coordinator accepted (an ACK with status 0, or 1 for one
+    /// whose acceptance wasn't heard).
     public struct Accepted: Sendable, Equatable {
         public var epoch: Int
         public var station: UInt8
@@ -280,7 +281,13 @@ public struct MandelbrotObserver: Sendable {
             switch ack.status {
             case 0:
                 accept(key, from: worker, into: &w, at: cycles)
-            case 1: w.duplicates += 1
+            case 1:
+                // Already done: an earlier ACK for it didn't get through (a
+                // worker resends until it hears), so it was accepted then.
+                w.duplicates += 1
+                if accepted[key.tile] == nil {
+                    accept(key, from: worker, into: &w, at: cycles)
+                }
             case 2: w.stale += 1
             default: break
             }

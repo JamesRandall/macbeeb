@@ -58,6 +58,10 @@ enum NetworkSelfTest {
     /// works whatever windows the app restores).
     static func runIfRequested() {
         guard let path else { return }
+        if UserDefaults.standard.string(forKey: "MacBeebNetworkSelfTestTemplate") == "distributedMandelbrot" {
+            runMandelbrot(path)
+            return
+        }
         NSLog("MacBeeb: network self-test starting")
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("macbeeb-network-selftest-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -105,6 +109,77 @@ enum NetworkSelfTest {
             prints.orderBack(nil)
             try? await Task.sleep(for: .seconds(2))
             capture(prints, to: path.replacingOccurrences(of: ".png", with: "-print.png"))
+            NSApp.terminate(nil)
+        }
+    }
+
+    /// With `-MacBeebNetworkSelfTestTemplate distributedMandelbrot`: opens
+    /// the Distributed Mandelbrot network, waits for the workers to boot
+    /// from the network, types *CLUSTER and *MANDEL on the Guide as its
+    /// screen says, waits for the picture, and saves the canvas, the
+    /// Mandelbrot view and every machine's screen text (path.txt).
+    static func runMandelbrot(_ path: String) {
+        NSLog("MacBeeb: Mandelbrot self-test starting")
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("macbeeb-network-selftest-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent("Distributed Mandelbrot.\(NetworkPackage.fileExtension)")
+        guard (try? NetworkPackage.create(.distributedMandelbrot, at: url)) != nil,
+              let session = try? NetworkSession.session(for: url) else {
+            NSLog("MacBeeb: Mandelbrot self-test: can't open the network")
+            NSApp.terminate(nil)
+            return
+        }
+        func window(_ mode: NetworkStudioView.Mode) -> NSWindow {
+            let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 1400, height: 820),
+                                  styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
+            window.contentViewController = NSHostingController(rootView: NetworkStudioView(session: session, mode: mode)
+                .frame(width: 1400, height: 820))
+            window.orderBack(nil)
+            return window
+        }
+        let canvas = window(.canvas)
+        let view = window(.mandelbrot)
+        let stations = session.project.stations.filter { $0.kind == .station }
+        func screens() async -> [(String, String)] {
+            var result: [(String, String)] = []
+            for node in stations {
+                let text = (try? await session.controllers[node.id]?.host.performAsync { $0.machine.screenText().joined(separator: "\n") }) ?? nil
+                result.append((node.name, text ?? "(off)"))
+            }
+            return result
+        }
+        func waitFor(_ seconds: Int, _ done: ([(String, String)]) -> Bool) async -> Bool {
+            for _ in 0..<seconds {
+                if done(await screens()) { return true }
+                try? await Task.sleep(for: .seconds(1))
+            }
+            return false
+        }
+        Task { @MainActor in
+            var report = ""
+            let workers = stations.filter { $0.bootsNetwork == true }.map(\.name)
+            let booted = await waitFor(120) { screens in
+                screens.filter { workers.contains($0.0) }.allSatisfy { $0.1.contains("Waiting for *CLUSTER") }
+            }
+            report += "Workers booted from the network: \(booted)\n"
+            guard let guide = stations.first(where: { $0.bootsDisc == true }), let controller = session.controllers[guide.id] else { return }
+            controller.host.send(.type("*CLUSTER\n"))
+            let launched = await waitFor(90) { $0.first { $0.0 == guide.name }?.1.contains("failed.") == true }
+            report += "CLUSTER finished: \(launched)\n"
+            capture(canvas, to: path.replacingOccurrences(of: ".png", with: "-cluster.png"))
+            controller.host.send(.type("*MANDEL\n"))
+            let start = Date()
+            let complete = await waitFor(240) { screens in
+                screens.filter { workers.contains($0.0) }.allSatisfy { $0.1.contains("run complete") }
+            }
+            report += "Render complete: \(complete) after \(Int(Date().timeIntervalSince(start)))s wall\n"
+            try? await Task.sleep(for: .seconds(1))
+            capture(canvas, to: path)
+            capture(view, to: path.replacingOccurrences(of: ".png", with: "-mandelbrot.png"))
+            for (name, text) in await screens() {
+                report += "\n== \(name)\n\(text)\n"
+            }
+            try? report.write(toFile: path.replacingOccurrences(of: ".png", with: ".txt"), atomically: true, encoding: .utf8)
             NSApp.terminate(nil)
         }
     }

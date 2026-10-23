@@ -229,6 +229,23 @@ struct MandelbrotObserverTests {
         #expect(observer.workers[2]?.tiles == 1)
     }
 
+    /// The coordinator's ACK didn't get through, so the worker sent its
+    /// RESULT again and heard "duplicate": the tile was accepted the first
+    /// time, and it's drawn once.
+    @Test func aDuplicateIsAnAcceptanceMissed() {
+        var line = SyntheticLine()
+        Self.join(&line, 2)
+        Self.assign(&line, 3, epoch: 1, to: 2)
+        line.send(Self.result(3, epoch: 1), from: 2, to: 1, port: 0xB0)
+        line.send(Self.result(3, epoch: 1), from: 2, to: 1, port: 0xB0)
+        Self.ack(&line, 3, epoch: 1, to: 2, status: 1)
+        var observer = MandelbrotObserver()
+        observer.observe(line.frames)
+        #expect(observer.accepted[3]?.drawn == true)
+        #expect(observer.workers[2]?.tiles == 1 && observer.workers[2]?.duplicates == 1)
+        #expect(observer.tilesCompleted == 1)
+    }
+
     @Test func aSlowWorkerIsUnresponsiveAndItsTileGoesElsewhere() {
         var line = SyntheticLine()
         Self.join(&line, 2)
