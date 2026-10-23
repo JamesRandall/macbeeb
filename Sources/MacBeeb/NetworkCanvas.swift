@@ -260,7 +260,7 @@ struct NetworkCanvas: View {
     // MARK: Palette
 
     enum PaletteItem: String, CaseIterable, Identifiable {
-        case modelB, master128, fileServer, printServer, clock
+        case modelB, master128, fileServer, level2FileServer, printServer, clock
 
         var id: String { rawValue }
 
@@ -269,6 +269,7 @@ struct NetworkCanvas: View {
             case .modelB: "BBC Model B"
             case .master128: "Master 128"
             case .fileServer: "File Server"
+            case .level2FileServer: "Level 2 File Server"
             case .printServer: "Printer Server"
             case .clock: "Clock"
             }
@@ -277,7 +278,7 @@ struct NetworkCanvas: View {
         var kind: NetworkNode.Kind {
             switch self {
             case .modelB, .master128: .station
-            case .fileServer: .fileServer
+            case .fileServer, .level2FileServer: .fileServer
             case .printServer: .printServer
             case .clock: .clock
             }
@@ -288,6 +289,7 @@ struct NetworkCanvas: View {
             case .modelB: "desktopcomputer"
             case .master128: "desktopcomputer.and.macbook"
             case .fileServer: "externaldrive.connected.to.line.below"
+            case .level2FileServer: "externaldrive.badge.person.crop"
             case .printServer: "printer"
             case .clock: "metronome"
             }
@@ -333,6 +335,7 @@ struct NetworkCanvas: View {
         case .modelB: session.add(.station, model: .modelB, at: point)
         case .master128: session.add(.station, model: .master128, at: point)
         case .fileServer: session.add(.fileServer, at: point)
+        case .level2FileServer: session.add(.fileServer, level: .level2, at: point)
         case .printServer: session.add(.printServer, at: point)
         case .clock: session.add(.clock, at: point)
         }
@@ -582,7 +585,7 @@ struct MachineCard: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             if node.kind != .station {
-                Label(node.kind == .fileServer ? "FILE SERVER" : "PRINTER SERVER",
+                Label(node.kind == .fileServer ? (node.level == .level2 ? "LEVEL 2 FILE SERVER" : "FILE SERVER") : "PRINTER SERVER",
                       systemImage: node.kind == .fileServer ? "externaldrive.connected.to.line.below" : "printer")
                     .font(.system(size: 9, weight: .bold))
                     .padding(.horizontal, 6)

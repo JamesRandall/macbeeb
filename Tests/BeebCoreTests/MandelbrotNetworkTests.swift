@@ -79,8 +79,9 @@ struct MandelbrotNetworkTests {
         #expect(rig.run(until: { [2, 3].allSatisfy { rig.screen($0).contains("run complete") } }, seconds: 150),
                 "\(rig.screen(2))\n\(rig.screen(3))")
         #expect(rig.mode5Colours(1) == Self.picture)
-        // Both did some; between them, all 320.
-        #expect(rig.tilesDone(2) > 0 && rig.tilesDone(3) > 0 && rig.tilesDone(2) + rig.tilesDone(3) == 320,
+        // Both did some; between them, all 320 (less any whose ACK was lost:
+        // the worker's resend is answered "duplicate", which it doesn't count).
+        #expect(rig.tilesDone(2) > 0 && rig.tilesDone(3) > 0 && (310...320).contains(rig.tilesDone(2) + rig.tilesDone(3)),
                 "\(rig.screen(2))\n\(rig.screen(3))")
         rig.type(1, " ")
         #expect(rig.run(until: { rig.screen(1).contains("Iterations in all  580816") }), "\(rig.screen(1))")

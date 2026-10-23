@@ -11,7 +11,9 @@ public final class Econet {
     /// Whether the ADLC's interrupt reaches NMI (INTON) or not (INTOFF).
     public private(set) var nmiEnabled = false
     /// The line it's plugged into, if any. Without one there's no clock.
-    weak var bus: EconetBus?
+    weak var bus: EconetBus? {
+        didSet { adlc.lineDelay = bus?.delay ?? 0 }
+    }
     /// What's arrived from the line, by the time (in the machine's cycles)
     /// it reaches the ADLC.
     /// (A nil symbol is the start of one: the line's busy from its first
