@@ -5,6 +5,7 @@
 import Foundation
 import Testing
 @testable import BeebCore
+import BeebNetwork
 import BeebROMs
 
 /// Machines on one line, run in lockstep here (no threads).
@@ -270,6 +271,36 @@ struct EconetFileServerTests {
         rig.type(2, "*NET\n")
         rig.type(2, "*CAT\n")
         #expect(rig.run(until: { rig.screen(2).contains("Level 1 FS") }), "\(rig.screen(2))")
+    }
+
+    /// Files put on the server's disc from the Mac while it's serving:
+    /// the stations load them without the server being restarted, and the
+    /// stations' own files stay.
+    @Test func filesFromTheMacWhileServing() throws {
+        let rig = EconetRig([(.modelB, 254), (.modelB, 1)])
+        let disc = try Disc.fromImage(FileServerDisc.image(), format: .ssd)
+        try rig.startLevel1FileServer(0, clients: [1], directories: ["A"], disc: disc)
+        rig.type(1, "*NET\n")
+        rig.type(1, "10 PRINT \"MINE\"\nSAVE \"MINE\"\n")
+        rig.run(until: { rig.lastLines(1, 1) == ">" })
+
+        // From the Mac: a BASIC listing as text, as Disc Contents would.
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("fs-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("FROMMAC.bas")
+        try "10 PRINT \"HELLO FROM THE MAC\"\n".write(to: file, atomically: true, encoding: .utf8)
+        // (As HostSession.changeVolume does it.)
+        let before = try DiscVolume(disc: rig.machines[0].drives[0].disc!)
+        var volume = before
+        #expect(try FileServerDisc.add([file], to: &volume) == ["A.FROMMAC"])
+        rig.machines[0].insertDisc(try Disc.fromImage(volume.image, format: .ssd), drive: 0)
+        #expect(rig.machines[0].refreshCachedCatalogue(old: before.image, new: volume.image))
+
+        rig.type(1, "CHAIN \"FROMMAC\"\n")
+        #expect(rig.run(until: { rig.screen(1).contains("HELLO FROM THE MAC\n") }), "\(rig.screen(1))")
+        rig.type(1, "*CAT\n")
+        #expect(rig.run(until: { rig.screen(1).contains("MINE") && rig.screen(1).contains("FROMMAC") }), "\(rig.screen(1))")
     }
 
     /// A Master 128 (ANFS 4.25) and a Model B (DNFS) on one server.

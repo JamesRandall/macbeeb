@@ -388,10 +388,9 @@ final class NetworkSession: StationOwner {
     func startFileServer(_ id: UUID) {
         if !isOn(id) { powerOn(id, startingServer: false) }
         guard let controller = controllers[id] else { return }
-        if project[id]?.discs[0] == nil {
-            let disc = BeebROMs.BundledDisc.econetLevel1
-            let staged = FileManager.default.temporaryDirectory.appendingPathComponent("Econet Level 1.ssd")
-            try? Data(disc.data).write(to: staged)
+        if project[id]?.discs[0] == nil, let image = try? FileServerDisc.image() {
+            let staged = FileManager.default.temporaryDirectory.appendingPathComponent("File Server.ssd")
+            try? Data(image).write(to: staged)
             controller.insertDisc(staged, drive: 0, boot: false)
         }
         controller.host.send(.pressBreak)
@@ -415,6 +414,46 @@ final class NetworkSession: StationOwner {
             controller.insertDisc(staged, drive: 0, boot: false)
         }
         controller.host.send(.shiftBreak)
+    }
+
+    /// Puts Mac files on a file server's disc, in the directory every
+    /// station shares, while it serves (it sees them at once). Named and
+    /// addressed by .inf files beside them; BASIC text (.bas) is tokenised.
+    func addFilesToServer(_ id: UUID, _ urls: [URL]) {
+        guard let controller = controllers[id], project[id]?.discs[0] != nil else {
+            let alert = NSAlert()
+            alert.messageText = "The file server isn’t running"
+            alert.informativeText = "Switch it on (its disc goes in when it starts), then add the files."
+            alert.runModal()
+            return
+        }
+        let host = controller.host
+        Task {
+            do {
+                // The drive may be busy serving: wait for a quiet moment.
+                for _ in 0..<40 {
+                    switch try await host.changeVolume(drive: 0, { volume in try FileServerDisc.add(urls, to: &volume) }) {
+                    case .changed: return
+                    case .noDisc: throw CocoaError(.fileNoSuchFile)
+                    case .busy: try await Task.sleep(for: .milliseconds(150))
+                    }
+                }
+                throw CocoaError(.fileWriteVolumeReadOnly)
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = "Couldn’t add the files to the file server"
+                alert.informativeText = (error as? DiscEditError).map { "\($0)" } ?? error.localizedDescription
+                alert.runModal()
+            }
+        }
+    }
+
+    func chooseFilesForServer(_ id: UUID) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.message = "Choose files for the file server. Each goes in directory A, where every station can load it."
+        guard panel.runModal() == .OK else { return }
+        addFilesToServer(id, panel.urls)
     }
 
     /// What a server's console says: its last non-blank line.

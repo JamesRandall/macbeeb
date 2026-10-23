@@ -57,6 +57,52 @@ public struct NetworkProject: Codable, Sendable, Equatable {
         return (2...).lazy.map { "\(base) \($0)" }.first { !names.contains($0) }!
     }
 
+    // MARK: Placing
+
+    /// A machine card's size on the canvas, and the space between them.
+    public static let cardSize = CanvasPoint(x: 236, y: 230)
+    public static let columnSpacing = 260.0
+    public static let rowSpacing = 330.0
+
+    /// Where a new node of `kind` goes: at the end of its row, so the
+    /// trunk grows to reach it. Stations go along the top row, servers and
+    /// the clock along the row below.
+    public func nextPosition(for kind: NetworkNode.Kind) -> CanvasPoint {
+        let stationRow = commonY(nodes.filter { $0.kind == .station })
+        let serverRow = commonY(nodes.filter { $0.kind != .station })
+        let y: Double
+        switch kind {
+        case .station:
+            y = stationRow ?? serverRow.map { $0 - Self.rowSpacing } ?? 0
+        case .fileServer, .printServer, .clock:
+            y = serverRow ?? stationRow.map { $0 + Self.rowSpacing } ?? Self.rowSpacing
+        }
+        let row = nodes.filter { abs($0.position.y - y) < Self.cardSize.y / 2 }
+        let x = row.map(\.position.x).max().map { $0 + Self.columnSpacing } ?? nodes.map(\.position.x).min() ?? 0
+        return freePosition(near: CanvasPoint(x: x, y: y))
+    }
+
+    /// `point`, or the nearest place to the right of it along its row
+    /// that no card covers.
+    public func freePosition(near point: CanvasPoint, excluding id: UUID? = nil) -> CanvasPoint {
+        var candidate = point
+        for _ in 0..<500 {
+            let covered = nodes.contains { node in
+                node.id != id && abs(node.position.x - candidate.x) < Self.cardSize.x
+                    && abs(node.position.y - candidate.y) < Self.cardSize.y
+            }
+            if !covered { return candidate }
+            candidate.x += Self.columnSpacing
+        }
+        return candidate
+    }
+
+    /// The y most of these nodes share (their row), if there are any.
+    private func commonY(_ nodes: [NetworkNode]) -> Double? {
+        let counts = Dictionary(grouping: nodes, by: { ($0.position.y / 10).rounded() * 10 }).mapValues(\.count)
+        return counts.max { ($0.value, -$0.key) < ($1.value, -$1.key) }?.key
+    }
+
     // MARK: Problems
 
     /// What's wrong with the network as set up, for the canvas to show.

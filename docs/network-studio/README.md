@@ -74,6 +74,15 @@ network.
 To start the server by hand (after Break, for example), choose **Start File
 Server** in its inspector or right-click menu.
 
+**Files from the Mac**: drag files onto the file server's card, or choose
+**Add Files…** in its inspector. They go on the server's disc in directory
+A, where every station can load them, while it serves. A BASIC listing
+saved as text (`.bas`) becomes a BASIC program; other files take their
+BBC name and addresses from a `.inf` file beside them, as in Disc Contents.
+**Show Files** opens the server's disc in Disc Contents, to rename, delete
+or drag files back out. The server's disc holds about 190K, in up to 31
+files (DFS's limit), the server's own included.
+
 ## Printing
 
 **Window ▸ Print Centre** (⌥⌘P) shows everything the BBCs have printed, on

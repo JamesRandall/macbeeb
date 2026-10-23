@@ -121,6 +121,7 @@ struct MachineInspector: View {
     var openStation: (UUID) -> Void
     var openDebugger: (UUID) -> Void
     var openHardware: (UUID) -> Void
+    @Environment(\.openWindow) private var openWindow
     @State private var name = ""
     @State private var number = ""
     @State private var numberProblem: String?
@@ -171,9 +172,18 @@ struct MachineInspector: View {
                         LabeledContent("Console", value: line)
                             .font(.callout.monospaced())
                     }
+                    HStack {
+                        Button("Add Files…") { session.chooseFilesForServer(node.id) }
+                            .help("Put Mac files on the server, in directory A (or drag them onto its card)")
+                        Button("Show Files") {
+                            if let controller { openWindow(id: DiscContentsWindow.windowID, value: controller.id) }
+                        }
+                        .disabled(controller == nil)
+                        .help("The server's disc: its files, to add, rename, delete or drag out to the Mac")
+                    }
                     Button("Start File Server") { session.startFileServer(node.id) }
                         .help("Runs Acorn's Level 1 file server from its disc, giving every other machine the shared directory A")
-                    Text("Acorn's Level 1 file server runs on this BBC, from its disc. Every other machine on the network shares directory A: on them, type *NET, then SAVE, LOAD, CHAIN and *CAT use the server. Open its window to see the server's console.")
+                    Text("Acorn's Level 1 file server runs on this BBC, from its disc. Every other machine on the network shares directory A: on them, type *NET, then SAVE, LOAD, CHAIN and *CAT use the server. Drop Mac files on its card to put them there (BASIC as .bas text, or files with .inf addresses). Open its window to see the server's console.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

@@ -303,3 +303,24 @@ public final class DiscDrive {
         if tracksPerStep == 2 { disc.eraseTrack(upper: written.upper, track: written.track ^ 1) }
     }
 }
+
+extension BBCMicro {
+    /// A DFS disc's files were changed from outside (MacBeeb's Disc
+    /// Contents, or the Network Studio adding files to a file server): if
+    /// DFS has the disc's old catalogue cached (at &0E00, its two sectors),
+    /// it's given the new one, as it would have after reading the disc
+    /// again. The Model B's 8271 can't tell DFS a disc's been changed, so
+    /// it would otherwise go on using the old one until it next read it.
+    /// Anything else at &0E00 is left alone. Returns whether it did.
+    @discardableResult
+    public func refreshCachedCatalogue(old: [UInt8], new: [UInt8]) -> Bool {
+        guard old.count >= 512, new.count >= 512, old[0..<512] != new[0..<512] else { return false }
+        for i in 0..<512 where peek(UInt16(0x0E00 + i)) != old[i] {
+            return false
+        }
+        for i in 0..<512 {
+            poke(UInt16(0x0E00 + i), new[i])
+        }
+        return true
+    }
+}

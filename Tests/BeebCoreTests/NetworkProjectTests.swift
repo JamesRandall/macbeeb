@@ -100,3 +100,44 @@ struct NetworkProjectTests {
         #expect(runtime.stations.count == 1)
     }
 }
+
+/// Where new machines go: along the trunk, not on top of each other.
+struct NetworkPlacingTests {
+    @Test func newStationsExtendTheTopRow() {
+        var project = NetworkTemplate.schoolClassroom.makeProject()
+        var placed: [CanvasPoint] = []
+        for _ in 0..<5 {
+            let point = project.nextPosition(for: .station)
+            placed.append(point)
+            project.nodes.append(NetworkNode(kind: .station, name: "New", stationNumber: project.freeStationNumber(),
+                                             setup: MachineSetup(), position: point))
+        }
+        let topRow = project.nodes.first { $0.name == "BBC 1" }!.position.y
+        #expect(placed.allSatisfy { $0.y == topRow })
+        #expect(zip(placed, placed.dropFirst()).allSatisfy { $1.x - $0.x == NetworkProject.columnSpacing })
+        let rightmost = project.nodes.filter { $0.name.hasPrefix("BBC") }.map(\.position.x).max()!
+        #expect(placed[0].x == rightmost + NetworkProject.columnSpacing)
+    }
+
+    @Test func serversGoAlongTheRowBelow() {
+        let project = NetworkTemplate.schoolClassroom.makeProject()
+        let point = project.nextPosition(for: .fileServer)
+        let serverRow = project.nodes.first { $0.kind == .fileServer }!.position.y
+        #expect(point.y == serverRow)
+        #expect(!project.nodes.contains { abs($0.position.x - point.x) < 236 && abs($0.position.y - point.y) < 230 })
+    }
+
+    @Test func dropsOnACardMoveAlong() {
+        let project = NetworkTemplate.twoBBCs.makeProject()
+        let first = project.nodes[0].position
+        let moved = project.freePosition(near: first)
+        #expect(moved.y == first.y && moved.x > first.x)
+        #expect(project.freePosition(near: CanvasPoint(x: 5000, y: 5000)) == CanvasPoint(x: 5000, y: 5000))
+    }
+
+    @Test func emptyNetwork() {
+        let project = NetworkTemplate.empty.makeProject()
+        let station = project.nextPosition(for: .station)
+        #expect(!project.nodes.contains { abs($0.position.x - station.x) < 236 && abs($0.position.y - station.y) < 230 })
+    }
+}

@@ -642,6 +642,10 @@ final class HostSession: MachineSession {
         disc.writeProtected = old.writeProtected
         let writeBack = writeBacks[drive].flatMap { $0.disc === old ? $0 : nil }
         insert(disc, format: writeBack?.format ?? volume.format, drive: drive, onWrite: writeBack?.write)
+        if !volume.isADFS {
+            // DFS's cached catalogue, if it's this disc's.
+            machine.refreshCachedCatalogue(old: before.image, new: volume.image)
+        }
         if let writeBack, let bytes = try? disc.toImage(writeBack.format) {
             writeBack.write(bytes)
         }

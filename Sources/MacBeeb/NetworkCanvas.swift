@@ -77,7 +77,8 @@ struct NetworkCanvas: View {
                 })
             .dropDestination(for: String.self) { items, location in
                 guard let item = items.first.flatMap(PaletteItem.init(rawValue:)) else { return false }
-                add(item, at: snapped(canvasPoint(location)))
+                // Where it's dropped, unless that's on another card.
+                add(item, at: session.project.freePosition(near: snapped(canvasPoint(location))))
                 return true
             }
         }
@@ -151,6 +152,12 @@ struct NetworkCanvas: View {
             } else {
                 MachineCard(session: session, node: node, selected: selected, problem: problem?.message,
                             showsScreen: zoom >= 0.35)
+                    .dropDestination(for: URL.self) { urls, _ in
+                        // Mac files onto the file server go on its disc.
+                        guard node.kind == .fileServer, !urls.isEmpty else { return false }
+                        session.addFilesToServer(node.id, urls)
+                        return true
+                    }
             }
         }
         .contentShape(RoundedRectangle(cornerRadius: 14))
@@ -227,6 +234,7 @@ struct NetworkCanvas: View {
             if node.kind == .fileServer {
                 Divider()
                 Button("Start File Server") { session.startFileServer(node.id) }
+                Button("Add Files…") { session.chooseFilesForServer(node.id) }
             }
             if node.kind == .printServer {
                 Divider()
@@ -266,6 +274,15 @@ struct NetworkCanvas: View {
             }
         }
 
+        var kind: NetworkNode.Kind {
+            switch self {
+            case .modelB, .master128: .station
+            case .fileServer: .fileServer
+            case .printServer: .printServer
+            case .clock: .clock
+            }
+        }
+
         var symbol: String {
             switch self {
             case .modelB: "desktopcomputer"
@@ -286,7 +303,8 @@ struct NetworkCanvas: View {
                 .padding(.top, 4)
             ForEach(PaletteItem.allCases) { item in
                 Button {
-                    add(item, at: snapped(canvasPoint(CGPoint(x: size.width / 2, y: size.height / 2))))
+                    // At the end of its row, along the trunk.
+                    add(item, at: session.project.nextPosition(for: item.kind))
                 } label: {
                     Label(item.title, systemImage: item.symbol)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -318,7 +336,21 @@ struct NetworkCanvas: View {
         case .printServer: session.add(.printServer, at: point)
         case .clock: session.add(.clock, at: point)
         }
-        if let id { session.selection = [id] }
+        if let id {
+            session.selection = [id]
+            reveal(point)
+        }
+    }
+
+    /// Pans to show `point` (a new card) if it's off the canvas.
+    private func reveal(_ point: CanvasPoint) {
+        let view = viewPoint(CGPoint(x: point.x, y: point.y))
+        let margin = 140 * zoom
+        guard view.x < margin + 180 || view.x > size.width - margin || view.y < margin || view.y > size.height - margin else { return }
+        withAnimation(.easeInOut(duration: 0.3)) {
+            centre = CGPoint(x: point.x, y: (centre.y + point.y) / 2)
+        }
+        rememberView()
     }
 
     // MARK: Problems and zoom
