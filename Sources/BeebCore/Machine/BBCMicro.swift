@@ -138,6 +138,10 @@ public final class BBCMicro {
     public var userVIA = VIA6522()
     public var crtc = CRTC6845()
     public var videoULA = VideoULA()
+    /// VideoNuLA, if fitted, beside the Video ULA (whose palette and control
+    /// it uses).
+    public internal(set) var nula: VideoNuLA?
+    public let nulaFitted: Bool
     public var saa5050 = SAA5050()
     public var adc = UPD7002()
     public var soundChip = SN76489()
@@ -457,7 +461,8 @@ public final class BBCMicro {
         ariesFitted = configuration.fittedExpansions.board.isAries
         ariesB12Fitted = configuration.fittedExpansions.board == .ariesB32B12
         ariesStartUpLink = configuration.fittedExpansions.ariesStartUpLink
-        videoULA = VideoULA(nula: configuration.videoNuLA)
+        nulaFitted = configuration.videoNuLA
+        nula = nulaFitted ? VideoNuLA() : nil
         let master = model.isMaster
         cpu = M6502(variant: master ? .cmos : .nmos)
 
@@ -798,14 +803,15 @@ public final class BBCMicro {
             if address & 0x10 == 0 {
                 // Video ULA (&FE20-&FE2F); with VideoNuLA, A1 set is its
                 // registers.
-                if videoULA.nula != nil && address & 2 != 0 {
+                if nulaFitted && address & 2 != 0 {
                     if address & 1 == 0 {
-                        videoULA.writeNuLAControl(value)
+                        nula!.writeControl(value, ula: &videoULA)
                     } else {
-                        videoULA.writeNuLAPalette(value)
+                        nula!.writePalette(value, ula: &videoULA)
                     }
                 } else if address & 1 == 0 {
                     videoULA.writeControl(value)
+                    if nulaFitted { nula!.updatePixelBufferOffset(fast6845: videoULA.fast6845) }
                 } else {
                     videoULA.writePalette(value)
                 }
@@ -1033,14 +1039,15 @@ public final class BBCMicro {
         case 0xFE20:
             switch address & 0x1C {
             case 0x00:
-                if videoULA.nula != nil && address & 2 != 0 {
+                if nulaFitted && address & 2 != 0 {
                     if address & 1 == 0 {
-                        videoULA.writeNuLAControl(value)
+                        nula!.writeControl(value, ula: &videoULA)
                     } else {
-                        videoULA.writeNuLAPalette(value)
+                        nula!.writePalette(value, ula: &videoULA)
                     }
                 } else if address & 1 == 0 {
                     videoULA.writeControl(value)
+                    if nulaFitted { nula!.updatePixelBufferOffset(fast6845: videoULA.fast6845) }
                 } else {
                     videoULA.writePalette(value)
                 }
@@ -1482,18 +1489,49 @@ public final class BBCMicro {
 
         // VideoNuLA starts a line's scroll and blanking as the display
         // comes on (b2 does it for each byte fetched while it was off).
-        if videoULA.nula != nil && !videoULA.teletext && !crtcLastOutput.display {
-            videoULA.displayEnabled()
-        }
         // Done even in teletext mode: the cursor flag sets up the cursor.
-        videoULA.byte(value, cudisp: output.cudisp)
+        if nulaFitted {
+            nulaByte(value, cudisp: output.cudisp)
+        } else {
+            videoULA.byte(value, cudisp: output.cudisp)
+        }
         crtcLastOutput = output
+    }
+
+    /// A byte fetched with VideoNuLA fitted: NuLA starts a line's scroll and
+    /// blanking as the display comes on (b2 does it for each byte fetched
+    /// while it was off), then the ULA takes the byte.
+    private func nulaByte(_ value: UInt8, cudisp: Bool) {
+        if !videoULA.teletext && !crtcLastOutput.display {
+            nula!.displayEnabled(ula: &videoULA)
+        }
+        videoULA.byte(value, cudisp: cudisp)
+        nula!.originalByte = value
+    }
+
+    /// Video output with VideoNuLA fitted: emitVideo, with NuLA's pixels
+    /// and colours.
+    private func emitVideoNuLA() {
+        if videoULA.teletext {
+            saa5050.emitPixels(&unit, palette: nula!.outputPalette)
+            if videoULA.cursorPattern & 1 != 0 {
+                unit.pixels[0] ^= cursorXOR
+                unit.pixels[1] ^= cursorXOR
+            }
+            videoULA.cursorPattern >>= 1
+        } else if crtcLastOutput.display && crtcLastOutput.raster < 8 {
+            nula!.emit(&unit, ula: &videoULA)
+        } else {
+            videoULA.emitBlank(&unit)
+        }
     }
 
     @inline(__always)
     private func emitVideo() {
-        if videoULA.teletext {
-            saa5050.emitPixels(&unit, palette: videoULA.output)
+        if nulaFitted {
+            emitVideoNuLA()
+        } else if videoULA.teletext {
+            saa5050.emitPixels(&unit, palette: VideoULA.outputPalette)
             if videoULA.cursorPattern & 1 != 0 {
                 unit.pixels[0] ^= cursorXOR
                 unit.pixels[1] ^= cursorXOR

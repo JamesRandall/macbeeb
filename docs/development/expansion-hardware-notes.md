@@ -216,3 +216,29 @@ them).
   pictures are third-party art): the test reads it from reference/.
 - b2's pictures are b2's own output (its harness can infer them), so matching
   them is agreement with b2, not proof against real hardware.
+
+## Phase 5: completion
+
+- Performance: NuLA's state first lived inside `VideoULA`, and the stock
+  Model B ran about 5% slower (`beeb-bench`, headless 18.0× to 17.2×). It now
+  lives beside it (`BBCMicro.nula`, `VideoNuLA.swift`), with one test of a
+  constant at each of the three places video touches it. That's within the
+  benchmark's run-to-run spread (17.3–17.4× against 17.6–18.0×). Phases 1–3
+  measured the same as before.
+- Help: every section of the Hardware Expansions window has a Learn More link
+  to its guide page, as well as the toolbar's Guide button and Help ▸ Hardware
+  Expansion Guide.
+- Not done (no reference, or not practical yet): watchpoints that report the
+  physical bank as well as the address; separate trace entries for video
+  fetches. The debugger's Hardware view does list the last writes to a
+  board's registers.
+
+## Firmware and test material used
+
+| What | Version | SHA-256 | Where |
+| --- | --- | --- | --- |
+| Watford Shadow RAM OS | 2.40 | a2e7c05f809e62faf980096459165fa356cf7c253265131ec68a91bcd2f8bfcb | Bundled (BeebROMs/ROMs) |
+| ARIES-B32 | 1.00 (MAME: v2.2) | 8f1e288c08a706f76a43bd8ae296bfb7dce0a3f6244d8f95831261be97a78051 | Bundled |
+| b2's NuLA and ULA test programs | b2 master | — | Tests/BeebCoreTests/Resources/nula (GPLv3) |
+| b2's expected pictures | b2 master | — | 25 in Resources/nula/wanted; all 384 from reference/b2 |
+| Bitshifters VideoNuLA Gallery 1 | GitHub master | — | reference/bitshifters-nula (not committed) |

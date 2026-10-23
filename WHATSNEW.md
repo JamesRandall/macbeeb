@@ -9,6 +9,16 @@ release's section for the GitHub release and Sparkle's update window, and
 won't build a release without one.
 -->
 
+## 1.5
+
+- **Hardware expansions:** Machine ▸ Hardware Expansions… (⌥⌘E) fits a memory board to the Model B: a 16K or 32K sideways RAM module, Watford Electronics' 32K Shadow RAM board, or the Aries B32, with or without the B12 ROM board. The window shows the board's memory to scale, the sixteen sideways banks as the BBC uses them, and for shadow RAM, what programs and the screen each see. Load ROM images into sideways RAM from the Mac, or from the BBC with DFS 2.26's `*SRLOAD` or the Aries `*RLOAD`.
+- **The boards' own ROMs:** the Watford board comes with Shadow RAM OS 2.40 and the Aries B32 with ARIES-B32 1.00, so their commands work as the manuals describe (`*HELP RAMSTATUS`, `*XON 16`, `*XSTATUS`, `*RWRITE`), and the Aries' own `*XTEST` passes.
+- **VideoNuLA:** on any model, each of the sixteen colours can be any of 4,096. Turn it on under Video in the same window; the window shows the colours as programs set them.
+- **Hardware Expansion Guide:** Help ▸ Hardware Expansion Guide explains each board with examples, and the developer reference has the memory maps and registers.
+- **For AI agents (MCP):** `get_hardware`, `power_cycle` with `memory_board` and `video_nula`, `load_sideways_bank`, `save_sideways_bank`, `video_nula`, `set_video_nula_palette`, `set_video_nula_control`, and `bus_write` to write any register as the BBC's CPU would.
+- **Ctrl-Break:** Machine ▸ Ctrl-Break (⌃⌘B), a hard reset that keeps memory.
+- **Fixed:** the debugger's Video ULA view showed the wrong physical colour for each logical colour.
+
 ## 1.4.1
 
 - **Double-click to play:** in the Game Library, double-click a game you've got to start it.

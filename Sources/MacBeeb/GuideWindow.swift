@@ -173,9 +173,12 @@ enum GuideBlock: Hashable {
                     rows.append(next.trimmingCharacters(in: .whitespaces))
                     lines.removeFirst()
                 }
+                // A \| in a cell is a literal bar, not a column.
                 let cells = rows.map { row in
-                    row.trimmingCharacters(in: CharacterSet(charactersIn: "|"))
-                        .components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+                    row.replacingOccurrences(of: "\\|", with: "\u{1}")
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "|"))
+                        .components(separatedBy: "|")
+                        .map { $0.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "\u{1}", with: "|") }
                 }
                 // Drop the |---|---| separator.
                 blocks.append(.table(cells.filter { !$0.allSatisfy { $0.allSatisfy { "-: ".contains($0) } } }))

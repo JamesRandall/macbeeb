@@ -282,6 +282,17 @@ peek               {"address": "&8009", "length": 13, "space": "bank13"}
 | Power cycle | Reset | Cleared, then power-on images | Reset |
 | A different board | New machine | New and cleared | Reset |
 
+## Performance
+
+None of this may slow a machine that doesn't have it. Paging is rebuilt only
+when a register changes, as before. The Watford latch costs one comparison
+per CPU write, and NuLA one test of a constant per video cycle: the stock
+Video ULA path is the code it was. `beeb-bench` (a Model B drawing in MODE 2,
+three runs each, Apple silicon): before the expansions 17.6–18.0× real time
+headless and 16.0–16.1× with the TV; now 17.3–17.4× and 15.6–15.7×, within
+the runs' own spread. (Keeping NuLA's state inside `VideoULA` at first cost
+5%; it now lives beside it, in `BBCMicro.nula`.)
+
 ## Tests
 
 - `StockBaselineTests`: the stock Model B's and Master's pictures and the

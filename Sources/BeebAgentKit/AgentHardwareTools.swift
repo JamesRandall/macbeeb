@@ -85,7 +85,7 @@ extension AgentTools {
                 } else {
                     lines.append("memory board: none (expansion boards fit the Model B only)")
                 }
-                lines.append("video: \(m.videoULA.nula == nil ? "the stock Video ULA" : "VideoNuLA (16 programmable 12-bit colours\(m.videoULA.nula!.disableA1 ? "; disabled by the BBC until power off" : "")); video_nula shows its state")")
+                lines.append("video: \(m.nula == nil ? "the stock Video ULA" : "VideoNuLA (16 programmable 12-bit colours\(m.nula!.disableA1 ? "; disabled by the BBC until power off" : "")); video_nula shows its state")")
                 lines.append("sideways banks (ROMSEL &\(hex(m.romsel)), bank \(m.romsel & 0x0F) selected):")
                 lines.append(bankTable(m))
                 return lines.joined(separator: "\n")
@@ -176,7 +176,7 @@ extension AgentTools {
     }
 
     static func nulaState(_ m: BBCMicro) -> String {
-        guard let n = m.videoULA.nula else {
+        guard let n = m.nula else {
             return "VideoNuLA: not fitted (the stock Video ULA). power_cycle with video_nula: true fits it. On the stock ULA, &FE22 and &FE23 are &FE20 and &FE21 again."
         }
         var lines = ["VideoNuLA: fitted (emulator diagnostic state: NuLA's registers are write-only on the BBC)"]
@@ -192,7 +192,7 @@ extension AgentTools {
         let logical = m.videoULA.logicalPalette
         lines.append("logical colours (&FE21 mapping -> what pixels of that colour show now):")
         for i in 0..<16 {
-            lines.append(String(format: "  %2d -> physical %2d -> ", i, logical[i]) + rgbText(m.videoULA.effectiveColour(logical: i)))
+            lines.append(String(format: "  %2d -> physical %2d -> ", i, logical[i]) + rgbText((m.nula?.colour(logical: i, ula: m.videoULA) ?? m.videoULA.colour(logical: i))))
         }
         if n.ignoredWrites > 0 { lines.append("writes to &FE22 with unknown functions: \(n.ignoredWrites) (ignored)") }
         return lines.joined(separator: "\n")
@@ -200,7 +200,7 @@ extension AgentTools {
 
     /// The machine, checked for a usable NuLA, or why not.
     static func requireNuLA(_ m: BBCMicro) throws {
-        guard let n = m.videoULA.nula else {
+        guard let n = m.nula else {
             throw ToolFailure("not_fitted: VideoNuLA isn't fitted (power_cycle with video_nula: true; it restarts the BBC)")
         }
         guard !n.disableA1 else {
@@ -243,12 +243,12 @@ extension AgentTools {
             return .text(try context.perform { session in
                 let m = session.machine
                 try requireNuLA(m)
-                if m.videoULA.nula!.paletteWritePending {
-                    throw ToolFailure("pending_write: the BBC has written the first byte of a palette entry (&\(hex(m.videoULA.nula!.paletteWriteBuffer))) and not the second; writing now would complete its entry instead. Run the machine on, or reset NuLA (set_video_nula_control function 4)")
+                if m.nula!.paletteWritePending {
+                    throw ToolFailure("pending_write: the BBC has written the first byte of a palette entry (&\(hex(m.nula!.paletteWriteBuffer))) and not the second; writing now would complete its entry instead. Run the machine on, or reset NuLA (set_video_nula_control function 4)")
                 }
                 m.cpuWrite(0xFE23, UInt8(index << 4) | UInt8(rgb >> 8))
                 m.cpuWrite(0xFE23, UInt8(rgb & 0xFF))
-                return "colour \(index) = \(rgbText(m.videoULA.nula!.outputPalette[index]))"
+                return "colour \(index) = \(rgbText(m.nula!.outputPalette[index]))"
             })
         },
 

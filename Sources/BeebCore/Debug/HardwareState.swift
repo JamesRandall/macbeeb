@@ -115,7 +115,7 @@ extension BBCMicro {
             let name = (physical & 8 != 0 ? "flashing " : "") + colours[Int(physical & 7)]
             rows.append(("Palette \(logical)", "\(physical) (\(name))"))
         }
-        if let n = videoULA.nula {
+        if let n = nula {
             rows.append(("VideoNuLA", n.disableA1 ? "fitted, registers disabled (function 5) until power off" : "fitted: &FE22 control, &FE23 palette"))
             rows.append(("NuLA palette mode", n.directPalette ? "direct (logical colours)" : "through the ULA palette"))
             rows.append(("NuLA offset / blanking", "\(n.scrollOffset) / \(n.blankingSize)"))
@@ -125,7 +125,7 @@ extension BBCMicro {
                 rows.append(("NuLA colour \(i)", String(format: "&%03X %@", n.outputPalette[i], n.rgb888(i)) + (n.flash[i] ? ", flashes" : "")))
             }
         }
-        return HardwareSection(videoULA.nula == nil ? "Video ULA" : "Video ULA (VideoNuLA)", rows)
+        return HardwareSection(nula == nil ? "Video ULA" : "Video ULA (VideoNuLA)", rows)
     }
 
     var soundState: HardwareSection {

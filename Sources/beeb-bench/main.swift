@@ -78,5 +78,5 @@ for (withTV, secondProcessor, rewind) in [(false, false, false), (true, false, f
     let elapsedSeconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
     let name = !withTV ? "headless" : secondProcessor ? "with TV and 6502 2P" : rewind ? "with TV and rewind" : "with TV"
     print("Model B " + name.padding(toLength: 20, withPad: " ", startingAt: 0)
-          + String(format: "%.0fx real time", emulatedSeconds / elapsedSeconds))
+          + String(format: "%.1fx real time", emulatedSeconds / elapsedSeconds))
 }

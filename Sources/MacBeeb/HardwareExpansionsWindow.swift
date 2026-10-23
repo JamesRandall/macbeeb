@@ -110,7 +110,8 @@ struct HardwareExpansionsWindow: View {
 
     private var videoSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionTitle("Video", detail: "VideoNuLA replaces the Video ULA: each of the sixteen colours can be any of 4,096. It fits any model, with any memory board.")
+            SectionTitle("Video", detail: "VideoNuLA replaces the Video ULA: each of the sixteen colours can be any of 4,096. It fits any model, with any memory board.",
+                         guide: "videonula")
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 14) {
                     Image(systemName: "paintpalette")
@@ -196,7 +197,8 @@ struct HardwareExpansionsWindow: View {
 
     private var boardSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionTitle("Memory Board", detail: "One board at a time: they all plug into the same place.")
+            SectionTitle("Memory Board", detail: "One board at a time: they all plug into the same place.",
+                         guide: expansions.board.guidePage)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 12)], spacing: 12) {
                 ForEach(BBCMicro.MemoryBoard.allCases, id: \.self) { board in
                     BoardCard(board: board, selected: expansions.board == board, fitted: machine.expansions.board == board) {
@@ -278,7 +280,8 @@ struct HardwareExpansionsWindow: View {
         let choice = firmwareChoice
         let bank = expansions.board.controllerROMBank ?? 0
         return VStack(alignment: .leading, spacing: 10) {
-            SectionTitle("Controller ROM", detail: "The board does nothing without its ROM: it switches the memory and adds the commands.")
+            SectionTitle("Controller ROM", detail: "The board does nothing without its ROM: it switches the memory and adds the commands.",
+                         guide: expansions.board.guidePage)
             HStack(alignment: .top, spacing: 14) {
                 Image(systemName: "cpu")
                     .font(.system(size: 26))
@@ -342,7 +345,8 @@ struct HardwareExpansionsWindow: View {
 
     private var shadowSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionTitle("Shadow RAM", detail: "Two views of the screen’s memory: programs use the board’s RAM while the screen stays in main RAM.")
+            SectionTitle("Shadow RAM", detail: "Two views of the screen’s memory: programs use the board’s RAM while the screen stays in main RAM.",
+                         guide: expansions.board.guidePage)
             if expansions.board.isAries {
                 AriesPoolView(state: pending ? nil : snapshot?.aries)
                 ShadowMapView(shadowStartK: (pending ? nil : snapshot?.aries).map { $0.shadowK == 20 ? 12 : $0.shadowK == 16 ? 16 : 32 } ?? 12,
@@ -448,7 +452,8 @@ struct HardwareExpansionsWindow: View {
     private var banksSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionTitle("Sideways Banks",
-                         detail: "Sixteen bank numbers, chosen by ROMSEL (&FE30); the highest-numbered language starts at power on.")
+                         detail: "Sixteen bank numbers, chosen by ROMSEL (&FE30); the highest-numbered language starts at power on.",
+                         guide: "developer-reference")
             BankStrip(slots: plannedSlots, selected: pending ? nil : snapshot.map { Int($0.romsel & 0x0F) })
             if !expansions.sidewaysRAMBanks.isEmpty || !(snapshot?.slots.filter { $0.kind == .ram }.isEmpty ?? true) {
                 ramBanks
@@ -548,22 +553,34 @@ struct HardwareExpansionsWindow: View {
 private struct SectionTitle: View {
     let title: String
     let detail: String
+    /// The guide page that explains it, for a Learn More link.
+    var guide: String?
+    @Environment(\.openWindow) private var openWindow
 
-    init(_ title: String, detail: String) {
+    init(_ title: String, detail: String, guide: String? = nil) {
         self.title = title
         self.detail = detail
+        self.guide = guide
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.title2.weight(.semibold))
-            Text(detail)
-                .font(.callout)
-                .foregroundStyle(.secondary)
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.title2.weight(.semibold))
+                Text(detail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            Spacer()
+            if let guide {
+                Button("Learn More") { openWindow(id: GuideWindow.windowID, value: guide) }
+                    .buttonStyle(.link)
+                    .help("Open the Hardware Expansion Guide")
+            }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isHeader)
     }
 }
 

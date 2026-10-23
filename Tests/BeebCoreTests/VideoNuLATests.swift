@@ -34,8 +34,7 @@ func barPixel(_ frame: [UInt32], _ logical: Int, firstBarColoured: Bool = false)
 
 struct VideoNuLATests {
     @Test func powersUpWithTheStandardColours() {
-        let ula = VideoULA(nula: true)
-        let n = ula.nula!
+        let n = VideoNuLA()
         for i in 0..<16 {
             #expect(n.outputPalette[i] == VideoULA.outputPalette[i])
             #expect(n.flash[i] == (i >= 8))
@@ -47,45 +46,47 @@ struct VideoNuLATests {
     /// Two writes per entry: [index|red] then [green|blue]; the first alone
     /// changes nothing; only that entry changes, and it stops flashing.
     @Test func paletteProtocol() {
-        var ula = VideoULA(nula: true)
-        ula.writeNuLAPalette(0x8F)
-        #expect(ula.nula!.paletteWritePending && ula.nula!.outputPalette[8] == 0x000)
-        ula.writeNuLAPalette(0x80)
-        #expect(!ula.nula!.paletteWritePending)
-        #expect(ula.nula!.outputPalette[8] == 0xF80 && ula.nula!.rgb888(8) == "#FF8800")
-        #expect(!ula.nula!.flash[8] && ula.nula!.flash[9])
-        for i in 0..<16 where i != 8 { #expect(ula.nula!.outputPalette[i] == VideoULA.outputPalette[i]) }
+        var ula = VideoULA()
+        var n = VideoNuLA()
+        n.writePalette(0x8F, ula: &ula)
+        #expect(n.paletteWritePending && n.outputPalette[8] == 0x000)
+        n.writePalette(0x80, ula: &ula)
+        #expect(!n.paletteWritePending)
+        #expect(n.outputPalette[8] == 0xF80 && n.rgb888(8) == "#FF8800")
+        #expect(!n.flash[8] && n.flash[9])
+        for i in 0..<16 where i != 8 { #expect(n.outputPalette[i] == VideoULA.outputPalette[i]) }
         // Rapid sequential writes: all sixteen.
         for i in 0..<16 {
-            ula.writeNuLAPalette(UInt8(i << 4 | 1))
-            ula.writeNuLAPalette(0x23)
+            n.writePalette(UInt8(i << 4 | 1), ula: &ula)
+            n.writePalette(0x23, ula: &ula)
         }
-        #expect((0..<16).allSatisfy { ula.nula!.outputPalette[$0] == 0x123 })
+        #expect((0..<16).allSatisfy { n.outputPalette[$0] == 0x123 })
     }
 
     @Test func controlFunctions() {
-        var ula = VideoULA(nula: true)
-        ula.writeNuLAControl(0x11)
-        #expect(ula.nula!.directPalette)
-        ula.writeNuLAControl(0x25)
-        ula.writeNuLAControl(0x3A)
-        #expect(ula.nula!.scrollOffset == 5 && ula.nula!.blankingSize == 10)
-        ula.writeNuLAControl(0x80)
-        ula.writeNuLAControl(0x95)
-        #expect(!ula.nula!.flash[8] && !ula.nula!.flash[11] && ula.nula!.flash[13] && ula.nula!.flash[15] && !ula.nula!.flash[12])
+        var ula = VideoULA()
+        var n = VideoNuLA()
+        n.writeControl(0x11, ula: &ula)
+        #expect(n.directPalette)
+        n.writeControl(0x25, ula: &ula)
+        n.writeControl(0x3A, ula: &ula)
+        #expect(n.scrollOffset == 5 && n.blankingSize == 10)
+        n.writeControl(0x80, ula: &ula)
+        n.writeControl(0x95, ula: &ula)
+        #expect(!n.flash[8] && !n.flash[11] && n.flash[13] && n.flash[15] && !n.flash[12])
         // Reset: the standard colours and settings; a half write forgotten.
-        ula.writeNuLAPalette(0x0F)
-        ula.writeNuLAControl(0x40)
-        #expect(!ula.nula!.directPalette && ula.nula!.scrollOffset == 0 && ula.nula!.blankingSize == 0)
-        #expect(!ula.nula!.paletteWritePending && ula.nula!.flash[8])
+        n.writePalette(0x0F, ula: &ula)
+        n.writeControl(0x40, ula: &ula)
+        #expect(!n.directPalette && n.scrollOffset == 0 && n.blankingSize == 0)
+        #expect(!n.paletteWritePending && n.flash[8])
         // Unknown functions are ignored and counted.
-        ula.writeNuLAControl(0xE3)
-        #expect(ula.nula!.ignoredWrites == 1)
+        n.writeControl(0xE3, ula: &ula)
+        #expect(n.ignoredWrites == 1)
         // Disable: &FE22/&FE23 are the stock registers until power off.
-        ula.writeNuLAControl(0x50)
-        ula.writeNuLAControl(0x9C)
+        n.writeControl(0x50, ula: &ula)
+        n.writeControl(0x9C, ula: &ula)
         #expect(ula.control == 0x9C)
-        ula.writeNuLAPalette(0x12)
+        n.writePalette(0x12, ula: &ula)
         #expect(ula.logicalPalette[1] == 5)
     }
 
@@ -96,7 +97,7 @@ struct VideoNuLATests {
         m.cpuWrite(0xFE23, 0x31)
         #expect(m.videoULA.logicalPalette[3] == 6)
         m.cpuWrite(0xFE22, 0x9C)
-        #expect(m.videoULA.control == 0x9C && m.videoULA.nula == nil)
+        #expect(m.videoULA.control == 0x9C && m.nula == nil)
     }
 
     /// A programmed colour shows in the picture: bar 8 in MODE 2 becomes
@@ -206,9 +207,9 @@ struct VideoNuLATests {
     @Test func halfWrittenPaletteCompletesWithTheNextByte() {
         let m = nulaMachine()
         m.cpuWrite(0xFE23, 0x5A)
-        #expect(m.videoULA.nula!.paletteWritePending)
+        #expect(m.nula!.paletteWritePending)
         m.cpuWrite(0xFE23, 0xBC)
-        #expect(m.videoULA.nula!.outputPalette[5] == 0xABC)
+        #expect(m.nula!.outputPalette[5] == 0xABC)
     }
 
     @Test func saveStateKeepsThePalette() throws {
@@ -217,18 +218,18 @@ struct VideoNuLATests {
         m.cpuWrite(0xFE23, 0x80)
         m.cpuWrite(0xFE22, 0x23)
         let restored = try SaveStateFile(data: try SaveStateFile(m).data()).makeMachine()
-        #expect(restored.videoULA.nula?.outputPalette[2] == 0xF80)
-        #expect(restored.videoULA.nula?.scrollOffset == 3)
+        #expect(restored.nula?.outputPalette[2] == 0xF80)
+        #expect(restored.nula?.scrollOffset == 3)
         // An older save state (no NuLA in it) restores with NuLA at power-on.
         var old = SaveStateFile(m)
-        old.snapshot.videoULA.nula = nil
+        old.snapshot.nula = nil
         let fromOld = try old.makeMachine()
-        #expect(fromOld.videoULA.nula?.outputPalette[2] == VideoULA.outputPalette[2])
+        #expect(fromOld.nula?.outputPalette[2] == VideoULA.outputPalette[2])
         // And a stock machine's snapshot can't sneak NuLA in.
         let stock = BBCMicro(configuration: BeebROMs.configuration(for: .modelB))
         var sneaky = SaveStateFile(stock)
-        sneaky.snapshot.videoULA.nula = VideoNuLA()
-        #expect(try sneaky.makeMachine().videoULA.nula == nil)
+        sneaky.snapshot.nula = VideoNuLA()
+        #expect(try sneaky.makeMachine().nula == nil)
     }
 
     /// NuLA coexists with a memory board: no I/O overlap.
@@ -241,14 +242,14 @@ struct VideoNuLATests {
         #expect(lines(m).contains("Current shadow RAM: 20K"))
         m.cpuWrite(0xFE23, 0x1F)
         m.cpuWrite(0xFE23, 0x00)
-        #expect(m.videoULA.nula!.outputPalette[1] == 0xF00 && m.aries.ramsel == 15)
+        #expect(m.nula!.outputPalette[1] == 0xF00 && m.aries.ramsel == 15)
     }
 
     /// The Master too (its ULA is &FE20-&FE23).
     @Test func onTheMaster() {
         let m = nulaMachine(.master128)
         enter(m, "?&FE23=&4A:?&FE23=&BC")
-        #expect(m.videoULA.nula!.outputPalette[4] == 0xABC)
+        #expect(m.nula!.outputPalette[4] == 0xABC)
     }
 
     /// The Bitshifters VideoNuLA gallery (MIT; not committed: it's run from
@@ -350,6 +351,6 @@ struct VideoNuLAAgentTests {
         // Disable it again: the stock ULA, stock colours.
         #expect(!tools.call("power_cycle", arguments: ["video_nula": false]).isError)
         #expect(text("video_nula").contains("not fitted"))
-        #expect(session.machine.videoULA.nula == nil)
+        #expect(session.machine.nula == nil)
     }
 }

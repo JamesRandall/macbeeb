@@ -156,7 +156,7 @@ extension MachineController {
                                     slots: m.sidewaysSlots, romsel: m.romsel,
                                     watfordMapping: m.watfordFitted ? m.watfordMapping : nil,
                                     aries: m.ariesFitted ? m.aries : nil,
-                                    nula: m.videoULA.nula.map(NuLAView.init))
+                                    nula: m.nula.map(NuLAView.init))
         }
     }
 

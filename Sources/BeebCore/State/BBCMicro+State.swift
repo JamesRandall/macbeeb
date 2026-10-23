@@ -16,6 +16,8 @@ extension BBCMicro {
         var userVIA: VIA6522
         var crtc: CRTC6845
         var videoULA: VideoULA
+        /// VideoNuLA's state (nil without it, and in older snapshots).
+        var nula: VideoNuLA?
         var saa5050: SAA5050
         var adc: UPD7002
         var soundChip: SN76489
@@ -69,7 +71,7 @@ extension BBCMicro {
 
     public func snapshot() -> Snapshot {
         Snapshot(cycles: cycles, cpu: cpu.snapshot, systemVIA: systemVIA, userVIA: userVIA, crtc: crtc,
-                 videoULA: videoULA, saa5050: saa5050, adc: adc, soundChip: soundChip,
+                 videoULA: videoULA, nula: nula, saa5050: saa5050, adc: adc, soundChip: soundChip,
                  model: model, ram: Data(bytes: ram, count: Self.ramSize),
                  sidewaysRAM: Dictionary(uniqueKeysWithValues: sidewaysRAMBanks.map { ($0, Data(bytes: sidewaysBanks[$0]!, count: 0x4000)) }),
                  romsel: romsel, acccon: acccon, pageTable: pageTable, lastVideoByte: lastVideoByte,
@@ -109,10 +111,9 @@ extension BBCMicro {
         userVIA = s.userVIA
         crtc = s.crtc
         videoULA = s.videoULA
-        // NuLA as this machine has it: an older snapshot has none.
-        if configuration.videoNuLA != (videoULA.nula != nil) {
-            videoULA.nula = configuration.videoNuLA ? VideoNuLA() : nil
-        }
+        // NuLA as this machine has it: an older snapshot has none, and a
+        // snapshot's NuLA doesn't go into a machine without one.
+        nula = nulaFitted ? (s.nula ?? VideoNuLA()) : nil
         saa5050 = s.saa5050
         adc = s.adc
         soundChip = s.soundChip
