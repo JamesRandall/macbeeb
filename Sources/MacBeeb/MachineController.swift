@@ -51,6 +51,17 @@ final class MachineController {
     /// The Model B's disc interface. Remembered like the model.
     private(set) var discInterface: BBCMicro.DiscInterface
     private static let discInterfaceDefaultsKey = "MacBeebDiscInterface"
+    /// The Model B's expansion board. Remembered like the model.
+    private(set) var expansions: BBCMicro.Expansions
+    private static let expansionsDefaultsKey = "MacBeebExpansions"
+    /// Files put into sideways RAM banks at power on, by bank.
+    private(set) var powerOnImagePaths: [Int: String]
+    private static let powerOnImagesDefaultsKey = "MacBeebSidewaysPowerOnImages"
+    /// Counts changes to the hardware (a power cycle with new hardware, or
+    /// sideways RAM loaded or cleared), for the Hardware Expansions window.
+    private(set) var hardwareChanges = 0
+    /// Set to open the Hardware Expansions window.
+    var hardwareRequested = false
     /// Identifies this machine to its debugger window.
     let id = UUID()
     /// Open machines, for finding a debugger window's machine.
@@ -100,8 +111,13 @@ final class MachineController {
         let discInterface = UserDefaults.standard.string(forKey: Self.discInterfaceDefaultsKey)
             .flatMap(BBCMicro.DiscInterface.init(rawValue:)) ?? .intel8271
         self.discInterface = discInterface
+        let expansions = Self.savedExpansions
+        self.expansions = expansions
+        let powerOnImagePaths = Self.savedPowerOnImagePaths
+        self.powerOnImagePaths = powerOnImagePaths
         let configuration = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
-                                                   discInterface: discInterface)
+                                                   discInterface: discInterface, expansions: expansions,
+                                                   sidewaysImages: Self.images(at: powerOnImagePaths))
         let discDriveSounds = UserDefaults.standard.object(forKey: Self.discDriveSoundsDefaultsKey) as? Bool ?? true
         self.discDriveSounds = discDriveSounds
         host = EmulatorHost(discDriveSounds: Self.discDriveSounds(for:), discDriveSoundsOn: discDriveSounds) {
@@ -526,9 +542,18 @@ final class MachineController {
         changeMachine()
     }
 
+    // For the hardware extension (another file).
+    func setExpansionsValue(_ new: BBCMicro.Expansions) { expansions = new }
+    func setPowerOnImagePathsValue(_ new: [Int: String]) { powerOnImagePaths = new }
+    func noteHardwareChanged() { hardwareChanges += 1 }
+    /// Power cycles into the hardware as now set.
+    func restartWithHardware() { changeMachine() }
+
     private func changeMachine() {
         let configuration = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
-                                                   discInterface: discInterface)
+                                                   discInterface: discInterface, expansions: expansions,
+                                                   sidewaysImages: Self.images(at: powerOnImagePaths))
+        hardwareChanges += 1
         // As BBCMicro.insertDiscs: an empty drive 0, or one with the old
         // machine's system disc, gets the new machine's.
         let startup = configuration.startupDisc?.name
@@ -794,6 +819,12 @@ final class MachineController {
         host.send(.shiftBreak)
     }
 
+    /// Ctrl-Break: a hard reset that keeps memory (the OS scans the
+    /// sideways ROMs afresh).
+    func ctrlBreak() {
+        host.send(.perform { $0.machine.ctrlBreak() })
+    }
+
     private(set) var recordingURL: URL?
 
     /// Starts recording to a movie the user picks, or stops.
@@ -850,6 +881,8 @@ final class MachineController {
             secondProcessor = file.configuration.secondProcessorROM != nil
             coprocessor = file.configuration.coprocessor
             discInterface = file.configuration.discInterface
+            expansions = file.configuration.expansions
+            hardwareChanges += 1
             discNames = [:]
             driveMedia = [:]
             refreshSnapshotHistory()
@@ -931,8 +964,10 @@ extension MachineController {
     func play(_ game: CuratedGame, disc url: URL, record: InstalledGame) {
         let requirement = game.machine
         model = requirement.model
-        // The games were checked on the standard 8271 interface.
+        // The games were checked on the standard 8271 interface, with no
+        // expansion board.
         discInterface = .intel8271
+        expansions = .none
         secondProcessor = requirement.coprocessor != nil
         if let coprocessor = requirement.coprocessor {
             self.coprocessor = coprocessor
@@ -1056,6 +1091,8 @@ extension MachineController {
                 secondProcessor = file.configuration.secondProcessorROM != nil
                 coprocessor = file.configuration.coprocessor
                 discInterface = file.configuration.discInterface
+                expansions = file.configuration.expansions
+                hardwareChanges += 1
                 startupDiscName = nil
                 discNames = Dictionary(uniqueKeysWithValues: manifest.drives.map { ($0.drive, $0.name) })
                 driveMedia = restoredMedia

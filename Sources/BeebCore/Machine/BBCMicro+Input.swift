@@ -42,6 +42,16 @@ extension BBCMicro {
         rewinder?.keyframe()
     }
 
+    /// Ctrl-Break: a hard reset, as at power on but keeping the RAM (the
+    /// MOS clears its own workspace and scans the sideways ROMs afresh).
+    public func ctrlBreak() {
+        applyKey(.ctrl, down: true)
+        applyKey(.breakKey, down: true)
+        schedule(KeyEvent(cycle: cycles + 200_000, key: .breakKey, down: false))
+        schedule(KeyEvent(cycle: cycles + 1_000_000, key: .ctrl, down: false))
+        rewinder?.keyframe()
+    }
+
     /// Presses and releases Break.
     public func pressBreak() {
         applyKey(.breakKey, down: true)

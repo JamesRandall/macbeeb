@@ -143,14 +143,18 @@ extension BeebROMs {
     /// (CP/M, DOS Plus), so they boot, unless `systemDisc` is false.
     ///
     /// On the Model B, `discInterface` picks the disc controller and its
-    /// filing system (in bank 14).
+    /// filing system (in bank 14), and `expansions` the memory board.
+    /// `sidewaysImages` are put in sideways RAM banks at power on.
     public static func configuration(for model: BBCMicro.Model, secondProcessor: Bool = false,
                                      coprocessor: BBCMicro.Coprocessor = .mos6502,
                                      discInterface: BBCMicro.DiscInterface = .intel8271,
-                                     systemDisc: Bool = true) -> BBCMicro.Configuration {
+                                     systemDisc: Bool = true,
+                                     expansions: BBCMicro.Expansions = .none,
+                                     sidewaysImages: [Int: [UInt8]] = [:]) -> BBCMicro.Configuration {
         var configuration = standardConfiguration(for: model)
         configuration.coprocessor = coprocessor
         if model == .modelB {
+            configuration.expansions = expansions
             configuration.discInterface = discInterface
             configuration.sidewaysROMs[14] = switch discInterface {
             case .intel8271: data(.dfs12)
@@ -172,6 +176,11 @@ extension BeebROMs {
             if systemDisc, let disc = BundledDisc.system(for: coprocessor) {
                 configuration.startupDisc = .init(name: disc.rawValue, image: disc.data, format: disc.format)
             }
+        }
+        // Only into RAM, and never over a ROM.
+        let ramBanks = configuration.sidewaysRAMBanks.union(configuration.fittedExpansions.sidewaysRAMBanks)
+        for (bank, image) in sidewaysImages where ramBanks.contains(bank) && image.count <= 0x4000 {
+            configuration.sidewaysROMs[bank] = image
         }
         return configuration
     }

@@ -44,6 +44,9 @@ extension BBCMicro {
         if secondProcessor != nil {
             sections.append(tubeState)
         }
+        if let expansion = expansionState {
+            sections.append(expansion)
+        }
         if model == .masterCompact {
             sections.append(HardwareSection("Settings EEPROM (PCD8572)", [
                 ("Contents", eeprom.contents.prefix(20).map { String(format: "%02X", $0) }.joined(separator: " ") + " …"),
@@ -175,6 +178,19 @@ extension BBCMicro {
             ("Serial ULA", "\(hex(serial.control)): \(serial.rs423Selected ? "RS423" : "cassette"), motor \(serial.motorOn ? "on" : "off")"),
             ("Tape", tape.map { String(format: "%.1fs of %.1fs", $0.elapsed, $0.duration) } ?? "none"),
         ])
+    }
+
+    /// The Model B's expansion board, if one's fitted.
+    var expansionState: HardwareSection? {
+        let expansions = configuration.fittedExpansions
+        guard expansions.board != .none else { return nil }
+        var rows = [("Board", expansions.board.displayName),
+                    ("ROMSEL (read and write)", "\(hex(romsel)) (bank \(romsel & 0x0F))")]
+        for bank in expansions.sidewaysRAMBanks {
+            let slot = sidewaysSlots[bank]
+            rows.append(("Bank \(bank) (RAM)", slot.header.map { "ROM image: \($0.name)" } ?? "no ROM image"))
+        }
+        return HardwareSection("Expansion board", rows)
     }
 
     var tubeState: HardwareSection {

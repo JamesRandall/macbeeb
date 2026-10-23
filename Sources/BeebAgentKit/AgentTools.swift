@@ -141,7 +141,7 @@ public final class AgentTools: Sendable {
         return (notes.isEmpty ? "" : notes + "\n") + "[t=\(time)s] screen:\n" + lines.joined(separator: "\n")
     }
 
-    static let tools: [Tool] = coreTools + debugTools
+    static let tools: [Tool] = coreTools + debugTools + hardwareTools
 
     static let coreTools: [Tool] = [
         Tool(definition: ToolDefinition(
@@ -198,8 +198,34 @@ public final class AgentTools: Sendable {
                                  "coprocessor": ["type": "string", "enum": ["mos6502", "z80", "master512", "arm", "masterTurbo"],
                                                  "description": "Which second processor: mos6502 (default), z80 (CP/M; it starts with the bundled CP/M system disc in drive 0 and boots to A>), master512 (an 80186 for DOS Plus, on a master_128; it starts with the bundled DOS Plus boot disc in drive 0 and boots to A>, which takes about 40 emulated seconds) arm (the ARM Evaluation System: 8MHz ARM1, 4MB, an A* supervisor prompt) or masterTurbo (the Master Turbo, on a master_128: a 4MHz 65C102 on the internal Tube, otherwise like mos6502)"] as JSONValue,
                                  "disc_interface": ["type": "string", "enum": ["intel8271", "acorn1770", "watfordDDB2", "watfordDDB3", "opus"],
-                                                    "description": "Model B only: the disc interface and its filing system (default: keep as is)"] as JSONValue])
+                                                    "description": "Model B only: the disc interface and its filing system (default: keep as is)"] as JSONValue,
+                                 "memory_board": ["type": "string", "enum": .array(agentBoards.keys.sorted().map { .string($0) }),
+                                                  "description": "Model B only: the memory expansion board (default: keep as is). none is the stock Model B; sideways_ram_16 and sideways_ram_32 are a 16K or 32K sideways RAM module in a motherboard socket. get_hardware shows what's fitted"] as JSONValue,
+                                 "sideways_ram_socket": prop("integer", "Sideways RAM boards: the socket (bank) the module's in, 12 or 13 (default 13)"),
+                                 "second_bank_below": prop("integer", "sideways_ram_32: the second bank is 4 (default) or 8 below the first, as the module's lead is wired")])
         )) { context, args in
+            var expansionChange: (@Sendable (BBCMicro.Expansions) throws -> BBCMicro.Expansions)?
+            if args["memory_board"] != nil || args["sideways_ram_socket"] != nil || args["second_bank_below"] != nil {
+                var board: BBCMicro.MemoryBoard?
+                if let name = args["memory_board"]?.stringValue {
+                    guard let named = agentBoards[name] else {
+                        throw ToolFailure("memory_board must be one of \(agentBoards.keys.sorted().joined(separator: ", "))")
+                    }
+                    board = named
+                }
+                let socket = args["sideways_ram_socket"]?.intValue
+                let below = args["second_bank_below"]?.intValue
+                let newBoard = board
+                expansionChange = { current in
+                    var e = current
+                    if let newBoard { e.board = newBoard }
+                    if let socket { e.sidewaysRAMSocket = socket }
+                    if let below { e.secondBankBelow = below }
+                    if let problem = e.problem { throw ToolFailure(problem) }
+                    return e
+                }
+            }
+            let changeExpansions = expansionChange
             var requestedModel: BBCMicro.Model?
             if let name = args["model"]?.stringValue {
                 guard let named = agentModels[name] else { throw ToolFailure("model must be model_a, model_b, b_plus, master_128 or master_compact") }
@@ -221,7 +247,7 @@ public final class AgentTools: Sendable {
             let coprocessor = requestedCoprocessor
             return .text(try context.perform { session in
                 var configuration: BBCMicro.Configuration?
-                if model != nil || secondProcessor != nil || interface != nil || coprocessor != nil {
+                if model != nil || secondProcessor != nil || interface != nil || coprocessor != nil || changeExpansions != nil {
                     let current = session.machine
                     let fitted = current.secondProcessor != nil || current.z80Processor != nil || current.master512 != nil || current.armProcessor != nil
                     let newModel = model ?? current.model
@@ -234,10 +260,21 @@ public final class AgentTools: Sendable {
                         }
                         newCoprocessor = .mos6502
                     }
+                    // The board (and anything put in its RAM at power on)
+                    // stays fitted unless changed.
+                    var expansions = current.configuration.expansions
+                    if let changeExpansions {
+                        guard newModel == .modelB else {
+                            throw ToolFailure("memory boards fit the model_b only (this would be a \(newModel.displayName))")
+                        }
+                        expansions = try changeExpansions(expansions)
+                    }
+                    let images = current.configuration.sidewaysROMs.filter { current.sidewaysRAMBanks.contains($0.key) }
                     configuration = BeebROMs.configuration(for: newModel,
                                                            secondProcessor: secondProcessor ?? (coprocessor != nil || fitted),
                                                            coprocessor: newCoprocessor,
-                                                           discInterface: interface ?? current.configuration.discInterface)
+                                                           discInterface: interface ?? current.configuration.discInterface,
+                                                           expansions: expansions, sidewaysImages: images)
                 }
                 session.powerCycle(configuration: configuration)
                 // Booting a system disc (DOS Plus especially) takes longer.
@@ -248,17 +285,20 @@ public final class AgentTools: Sendable {
 
         Tool(definition: ToolDefinition(
             name: "press_break",
-            description: "Press Break (soft reset; BASIC programs survive with OLD). With shift=true, Shift-Break boots the disc in drive 0. Then runs until the machine waits for input (up to max_seconds).",
+            description: "Press Break (soft reset; BASIC programs survive with OLD). With shift=true, Shift-Break boots the disc in drive 0. With ctrl=true, Ctrl-Break: a hard reset that keeps RAM (sideways RAM included) but resets the OS and scans the sideways ROMs afresh, e.g. after load_sideways_bank. Then runs until the machine waits for input (up to max_seconds).",
             inputSchema: schema(["shift": prop("boolean", "Hold Shift to boot the disc"),
+                                 "ctrl": prop("boolean", "Hold Ctrl: a hard reset"),
                                  "max_seconds": prop("number", "Longest to wait for input (default 30)"),
                                  "resume": resumeProperty])
         )) { context, args in
             let shift = args["shift"]?.boolValue ?? false
+            let ctrl = args["ctrl"]?.boolValue ?? false
+            guard !(shift && ctrl) else { throw ToolFailure("shift or ctrl, not both") }
             let maxSeconds = args["max_seconds"]?.doubleValue ?? 30
             let resume = args["resume"]?.boolValue ?? true
             return .text(try context.perform { session in
                 resumeIfStopped(session, resume)
-                if shift { session.machine.shiftBreak() } else { session.machine.pressBreak() }
+                if shift { session.machine.shiftBreak() } else if ctrl { session.machine.ctrlBreak() } else { session.machine.pressBreak() }
                 session.advance(seconds: 0.5)
                 let idle = runUntilIdle(session, maxSeconds: maxSeconds)
                 return summary(session, extra: idle ? "" : "(still running after \(maxSeconds)s)")

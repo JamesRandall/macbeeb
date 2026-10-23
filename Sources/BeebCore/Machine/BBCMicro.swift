@@ -236,7 +236,7 @@ public final class BBCMicro {
     let osROM: UnsafeMutablePointer<UInt8>
     /// Sideways ROM and RAM banks; nil for an empty socket.
     let sidewaysBanks: [UnsafeMutablePointer<UInt8>?]
-    let sidewaysRAMBanks: Set<Int>
+    public let sidewaysRAMBanks: Set<Int>
     /// Writes to ROM land here.
     let discardPage: UnsafeMutablePointer<UInt8>
     /// 4K page -> memory, for reads (nil: nothing there) and writes. Pages
@@ -340,6 +340,9 @@ public final class BBCMicro {
         public var coprocessor: Coprocessor
         /// The Model B's disc interface (the others' are built in).
         public var discInterface: DiscInterface
+        /// The Model B's expansions: a memory board. (Ignored on other
+        /// models.)
+        public var expansions: Expansions
         /// A disc in drive 0 at power on: the co-processor's system disc,
         /// so it boots. Not saved with the configuration (a save state has
         /// its discs).
@@ -360,8 +363,9 @@ public final class BBCMicro {
         public init(model: Model = .modelB, os: [UInt8], sidewaysROMs: [Int: [UInt8]],
                     sidewaysRAMBanks: Set<Int>? = nil, secondProcessorROM: [UInt8]? = nil,
                     discInterface: DiscInterface = .intel8271, coprocessor: Coprocessor = .mos6502,
-                    startupDisc: StartupDisc? = nil) {
+                    startupDisc: StartupDisc? = nil, expansions: Expansions = .none) {
             self.discInterface = discInterface
+            self.expansions = expansions
             self.startupDisc = startupDisc
             self.coprocessor = coprocessor
             self.model = model
@@ -377,7 +381,7 @@ public final class BBCMicro {
         }
 
         enum CodingKeys: CodingKey {
-            case model, os, sidewaysROMs, sidewaysRAMBanks, secondProcessorROM, discInterface, coprocessor
+            case model, os, sidewaysROMs, sidewaysRAMBanks, secondProcessorROM, discInterface, coprocessor, expansions
         }
 
         public init(from decoder: Decoder) throws {
@@ -389,6 +393,13 @@ public final class BBCMicro {
             secondProcessorROM = try c.decodeIfPresent([UInt8].self, forKey: .secondProcessorROM)
             discInterface = try c.decodeIfPresent(DiscInterface.self, forKey: .discInterface) ?? .intel8271
             coprocessor = try c.decodeIfPresent(Coprocessor.self, forKey: .coprocessor) ?? .mos6502
+            // Older save states have none.
+            expansions = try c.decodeIfPresent(Expansions.self, forKey: .expansions) ?? .none
+        }
+
+        /// The expansions in effect: the Model B's, or none.
+        public var fittedExpansions: Expansions {
+            model == .modelB ? expansions : .none
         }
     }
 
@@ -415,10 +426,12 @@ public final class BBCMicro {
         ram.initialize(repeating: 0, count: Self.ramSize)
         osROM = .allocate(capacity: 0x4000)
         osROM.initialize(from: configuration.os, count: 0x4000)
-        sidewaysRAMBanks = configuration.sidewaysRAMBanks
+        // A sideways RAM board's banks are RAM too.
+        let ramBanks = configuration.sidewaysRAMBanks.union(configuration.fittedExpansions.sidewaysRAMBanks)
+        sidewaysRAMBanks = ramBanks
         sidewaysBanks = (0..<16).map { bank in
             let data = configuration.sidewaysROMs[bank]
-            let isRAM = configuration.sidewaysRAMBanks.contains(bank)
+            let isRAM = ramBanks.contains(bank)
             guard data != nil || isRAM else { return nil }
             precondition(data?.count ?? 0 <= 16384, "sideways ROM too big")
             let p = UnsafeMutablePointer<UInt8>.allocate(capacity: 0x4000)

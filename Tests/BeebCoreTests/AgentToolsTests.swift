@@ -242,3 +242,78 @@ struct AgentToolAdditionsTests {
     }
 }
 
+
+/// The hardware tools: discovering, fitting and loading sideways RAM.
+struct AgentHardwareToolsTests {
+    let support = AgentToolsTests()
+
+    func modelBTools() -> (AgentTools, HeadlessSession) {
+        let session = HeadlessSession { BBCMicro(configuration: BeebROMs.configuration(for: .modelB)) }
+        session.machine.runUntilIdle()
+        return (AgentTools(context: session), session)
+    }
+
+    @Test func stockModelBHasNoBoard() {
+        let (tools, _) = modelBTools()
+        let text = support.text(tools.call("get_hardware", arguments: [:]))
+        #expect(text.contains("memory board: none (None (stock Model B))"), "\(text)")
+        #expect(text.contains("15  ROM, Motherboard socket: BASIC"), "\(text)")
+        #expect(text.contains("12  empty socket, Motherboard socket"), "\(text)")
+    }
+
+    /// Fit a 32K board, load a ROM into it from a file, Break, and run it;
+    /// read it back physically and logically.
+    @Test func fitLoadBreakAndRun() throws {
+        let (tools, session) = modelBTools()
+        let fitted = tools.call("power_cycle", arguments: ["memory_board": "sideways_ram_32", "second_bank_below": 8])
+        #expect(!fitted.isError, "\(support.text(fitted))")
+        let hardware = support.text(tools.call("get_hardware", arguments: [:]))
+        #expect(hardware.contains("32K of sideways RAM in banks 13 and 5"), "\(hardware)")
+        #expect(hardware.contains("13  RAM, 32K sideways RAM module, writable when selected: no ROM image"), "\(hardware)")
+
+        let rom = Bundle.module.resourceURL!.appendingPathComponent("Resources/expansions/hello.rom").path
+        let loaded = support.text(tools.call("load_sideways_bank", arguments: ["bank": 5, "path": .string(rom)]))
+        #expect(loaded.contains("a ROM image, MacBeeb Hello 1.00"), "\(loaded)")
+        // Physical read of bank 5 while BASIC (15) is paged in.
+        #expect(support.text(tools.call("peek", arguments: ["address": "&8009", "length": 7, "space": "bank5"])).contains("MacBeeb"))
+        // The CPU's view has BASIC paged in.
+        #expect(support.text(tools.call("peek", arguments: ["address": "&8009", "length": 7, "space": "host"])).contains("BASIC"))
+
+        #expect(!tools.call("press_break", arguments: ["ctrl": true]).isError)
+        let output = support.text(tools.call("run_command", arguments: ["text": "*HELLO"]))
+        #expect(output.contains("Hello from sideways RAM bank 5"), "\(output)")
+
+        // Power cycling keeps the board (and clears its RAM, as switching off would).
+        _ = tools.call("power_cycle", arguments: [:])
+        #expect(session.machine.configuration.expansions.board == .sidewaysRAM32)
+        #expect(session.machine.sidewaysSlots[5].header == nil)
+    }
+
+    @Test func plainBreakAlsoFindsANewROM() throws {
+        let (tools, _) = modelBTools()
+        _ = tools.call("power_cycle", arguments: ["memory_board": "sideways_ram_16"])
+        let rom = Bundle.module.resourceURL!.appendingPathComponent("Resources/expansions/hello.rom").path
+        _ = tools.call("load_sideways_bank", arguments: ["bank": 13, "path": .string(rom)])
+        _ = tools.call("press_break", arguments: [:])
+        let output = support.text(tools.call("run_command", arguments: ["text": "*HELLO"]))
+        // OS 1.20 scans the sideways banks on every Break, not just a hard one.
+        #expect(output.contains("Hello from sideways RAM bank 13"), "\(output)")
+    }
+
+    @Test func errorsExplainThemselves() throws {
+        let (tools, _) = modelBTools()
+        let rom = Bundle.module.resourceURL!.appendingPathComponent("Resources/expansions/hello.rom").path
+        let noRAM = tools.call("load_sideways_bank", arguments: ["bank": 13, "path": .string(rom)])
+        #expect(noRAM.isError && support.text(noRAM).contains("there's no sideways RAM"), "\(support.text(noRAM))")
+        _ = tools.call("power_cycle", arguments: ["memory_board": "sideways_ram_16"])
+        let rom15 = tools.call("load_sideways_bank", arguments: ["bank": 15, "path": .string(rom)])
+        #expect(rom15.isError && support.text(rom15).contains("Bank 15 isn't sideways RAM. Sideways RAM: banks 13"), "\(support.text(rom15))")
+        let badSocket = tools.call("power_cycle", arguments: ["sideways_ram_socket": 15])
+        #expect(badSocket.isError && support.text(badSocket).contains("bank 12 or 13"))
+        let master = tools.call("power_cycle", arguments: ["model": "master_128", "memory_board": "sideways_ram_16"])
+        #expect(master.isError && support.text(master).contains("model_b only"))
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent("bank-\(UUID().uuidString).rom")
+        #expect(!tools.call("save_sideways_bank", arguments: ["bank": 15, "path": .string(file.path)]).isError)
+        #expect(try Data(contentsOf: file).count == 16384)
+    }
+}

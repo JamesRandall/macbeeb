@@ -28,6 +28,7 @@ struct MacBeebApp: App {
             }
             CommandGroup(replacing: .help) {
                 WhatsNewMenuItem()
+                GuideMenuItem()
             }
             CommandGroup(replacing: .newItem) {
                 BookshelfMenuItem()
@@ -195,6 +196,8 @@ struct MacBeebApp: App {
                     .keyboardShortcut("b", modifiers: [.command])
                 Button("Shift-Break (Boot Disc)") { machine?.shiftBreak() }
                     .keyboardShortcut("b", modifiers: [.command, .shift])
+                Button("Ctrl-Break (Hard Reset)") { machine?.ctrlBreak() }
+                    .keyboardShortcut("b", modifiers: [.command, .control])
                 Button("Power Cycle") { machine?.powerCycle() }
                     .keyboardShortcut("r", modifiers: [.command, .shift])
                 Divider()
@@ -244,6 +247,10 @@ struct MacBeebApp: App {
                 }
                 .disabled(machine?.model != .modelB)
                 .help("The Model B's disc interface; the B+ and Masters have a 1770 built in")
+                Button("Hardware Expansions…") { machine?.hardwareRequested = true }
+                    .keyboardShortcut("e", modifiers: [.command, .option])
+                    .disabled(machine == nil)
+                    .help("The Model B's memory board and sideways ROM and RAM banks")
             }
         }
 
@@ -253,6 +260,18 @@ struct MacBeebApp: App {
             }
         }
         .defaultSize(width: 1100, height: 760)
+
+        WindowGroup("Hardware Expansions", id: HardwareExpansionsWindow.windowID, for: UUID.self) { $id in
+            if let id, let machine = MachineController.all[id] {
+                HardwareExpansionsWindow(machine: machine)
+            }
+        }
+        .defaultSize(width: 700, height: 780)
+
+        WindowGroup("Hardware Expansion Guide", id: GuideWindow.windowID, for: String.self) { $page in
+            GuideWindow(page: page)
+        }
+        .defaultSize(width: 980, height: 760)
 
         WindowGroup("Disc Contents", id: DiscContentsWindow.windowID, for: UUID.self) { $id in
             if let id, let machine = MachineController.all[id] {
@@ -409,6 +428,12 @@ struct MachineWindow: View {
                                          userInfo: [.announcement: toast, .priority: NSAccessibilityPriorityLevel.medium.rawValue])
                 }
             }
+            .onChange(of: machine.hardwareRequested) {
+                if machine.hardwareRequested {
+                    machine.hardwareRequested = false
+                    openWindow(id: HardwareExpansionsWindow.windowID, value: machine.id)
+                }
+            }
             .onChange(of: machine.discContentsRequested) {
                 if machine.discContentsRequested {
                     machine.discContentsRequested = false
@@ -439,7 +464,10 @@ struct MachineWindow: View {
     }
 
     private var title: String {
-        let name = machine.model.displayName + (machine.fittedCoprocessor.map { " + " + $0.displayName } ?? "")
+        var name = machine.model.displayName + (machine.fittedCoprocessor.map { " + " + $0.displayName } ?? "")
+        if machine.model == .modelB, machine.expansions.board != .none {
+            name += " + " + machine.expansions.board.displayName
+        }
         var title = machine.discNames[0].map { "\(name) — \($0)" } ?? name
         if machine.paused {
             title += " (Paused)"

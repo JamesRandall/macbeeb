@@ -135,7 +135,9 @@ and up on a timeline, for repeatable scripted play), `load_disc`, `eject_disc`,
 `load_tape`, `rewind_tape`,
 `load_program`, `run`, `run_until_idle`, `run_until_address`,
 `read_screen_text`, `screenshot`, `peek`, `poke`, `disassemble`,
-`get_status`, `press_break`, `power_cycle` (which can switch model),
+`get_status`, `get_hardware`, `press_break`, `power_cycle` (which can switch
+model and fit a Model B expansion board), `load_sideways_bank`,
+`save_sideways_bank`,
 `save_snapshot`, `restore_snapshot`, `save_state`, `load_state`,
 `start_recording`, `stop_recording`; and for debugging, `set_breakpoint`,
 `list_breakpoints`, `delete_breakpoint`, `continue`, `step` (including
@@ -253,6 +255,14 @@ isn't decoded) and no user VIA, disc interface, ADC or Tube.
 The Model B can have a 1770 board instead of its 8271 (Machine > Disc
 Interface): Acorn's (DFS 2.26), Watford's DDB2 (DDFS 1.53) or DDB3 (DDFS
 1.54T), or Opus's (DDOS 3.45), with their latch layouts as b2 has them.
+
+The Model B can also have a memory expansion board fitted (Machine >
+Hardware Expansions…): a 16K or 32K sideways RAM module, wired as
+BeebMaster's. ROM images go into its banks from the Mac, or from the BBC with
+DFS 2.26's `*SRLOAD`. The [Hardware Expansion Guide](docs/hardware-expansions/README.md)
+(also Help > Hardware Expansion Guide in the app) explains them, and agents
+can fit and load them over MCP (`get_hardware`, `power_cycle` with
+`memory_board`, `load_sideways_bank`).
 
 The B+ 128K adds shadow RAM, its 12K of paged RAM, sideways RAM in banks 0,
 1, 12 and 13, and an Acorn 1770 (DFS 2.26).
