@@ -3,6 +3,7 @@
 // Usage: swift run -c release beeb-bench [seconds]
 
 import BeebCore
+import BeebHost
 import BeebROMs
 import Foundation
 
@@ -79,4 +80,25 @@ for (withTV, secondProcessor, rewind) in [(false, false, false), (true, false, f
     let name = !withTV ? "headless" : secondProcessor ? "with TV and 6502 2P" : rewind ? "with TV and rewind" : "with TV"
     print("Model B " + name.padding(toLength: 20, withPad: " ", startingAt: 0)
           + String(format: "%.1fx real time", emulatedSeconds / elapsedSeconds))
+}
+
+// Networks of Model Bs on one NetworkHost, each drawing in Mode 2, as fast
+// as they'll go: the network's speed against real time.
+if CommandLine.arguments.contains("network") {
+    for count in [1, 2, 4, 8, 16] {
+        let network = NetworkHost()
+        network.setSpeedLimited(false)
+        let configuration = BeebROMs.configuration(for: .modelB)
+        let hosts = (0..<count).map { _ in network.addStation(id: UUID()) { BBCMicro(configuration: configuration) } }
+        network.start()
+        Thread.sleep(forTimeInterval: 1)
+        for host in hosts {
+            host.send(.type("MODE 2\nREPEAT:GCOL0,RND(7):DRAW RND(1280),RND(1024):UNTIL FALSE\n"))
+        }
+        Thread.sleep(forTimeInterval: 3.5)
+        let speed = network.status.speed
+        network.stop()
+        print("Network of \(count) Model B".padding(toLength: 28, withPad: " ", startingAt: 0)
+              + String(format: "%5.1fx real time (%.1fx in machine time)", speed, speed * Double(count)))
+    }
 }

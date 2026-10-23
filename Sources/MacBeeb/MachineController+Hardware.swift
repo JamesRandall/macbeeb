@@ -63,15 +63,6 @@ extension MachineController {
         return Dictionary(uniqueKeysWithValues: saved.compactMap { key, path in Int(key).map { ($0, path) } })
     }
 
-    /// The images to put in sideways RAM at power on; files that have gone
-    /// or are too big are left out.
-    static func images(at paths: [Int: String]) -> [Int: [UInt8]] {
-        paths.compactMapValues { path in
-            guard let data = FileManager.default.contents(atPath: path), !data.isEmpty, data.count <= 0x4000 else { return nil }
-            return [UInt8](data)
-        }
-    }
-
     static var savedVideoNuLA: Bool {
         UserDefaults.standard.bool(forKey: videoNuLAKey)
     }
@@ -79,18 +70,6 @@ extension MachineController {
     static var savedControllerROMPaths: [BBCMicro.MemoryBoard: String] {
         guard let saved = UserDefaults.standard.dictionary(forKey: controllerROMsKey) as? [String: String] else { return [:] }
         return Dictionary(uniqueKeysWithValues: saved.compactMap { key, path in BBCMicro.MemoryBoard(rawValue: key).map { ($0, path) } })
-    }
-
-    /// The user's controller ROM for `board`, if they've chosen one and it's
-    /// still there (otherwise the bundled one is used).
-    static func controllerROM(for board: BBCMicro.MemoryBoard, paths: [BBCMicro.MemoryBoard: String]) -> [UInt8]? {
-        guard let path = paths[board], let data = FileManager.default.contents(atPath: path) else { return nil }
-        let bytes = [UInt8](data)
-        switch Firmware.identify(bytes, for: board) {
-        case .known(let firmware): return bytes.count == firmware.size ? bytes : Array(bytes[..<firmware.size])
-        case .unknown: return bytes
-        case .wrongSize, .anotherBoard: return nil
-        }
     }
 
     private static let expansionsKey = "MacBeebExpansions"
@@ -105,14 +84,14 @@ extension MachineController {
         guard draft != hardwareDraft, draft.expansions.problem == nil else { return }
         setExpansionsValue(draft.expansions)
         if let data = try? JSONEncoder().encode(draft.expansions) {
-            UserDefaults.standard.set(data, forKey: Self.expansionsKey)
+            remember(data, forKey: Self.expansionsKey)
         }
         setControllerROMPathsValue(draft.controllerROMPaths)
-        UserDefaults.standard.set(Dictionary(uniqueKeysWithValues: draft.controllerROMPaths.map { ($0.key.rawValue, $0.value) }),
+        remember(Dictionary(uniqueKeysWithValues: draft.controllerROMPaths.map { ($0.key.rawValue, $0.value) }),
                                   forKey: Self.controllerROMsKey)
         let nulaChanged = draft.videoNuLA != videoNuLA
         setVideoNuLAValue(draft.videoNuLA)
-        UserDefaults.standard.set(draft.videoNuLA, forKey: Self.videoNuLAKey)
+        remember(draft.videoNuLA, forKey: Self.videoNuLAKey)
         // The board matters only on a Model B; NuLA on any model.
         if model == .modelB || nulaChanged {
             restartWithHardware()
@@ -129,7 +108,7 @@ extension MachineController {
     func switchToModelB(with new: BBCMicro.Expansions) {
         setExpansionsValue(new)
         if let data = try? JSONEncoder().encode(new) {
-            UserDefaults.standard.set(data, forKey: Self.expansionsKey)
+            remember(data, forKey: Self.expansionsKey)
         }
         if model == .modelB {
             restartWithHardware()
@@ -144,7 +123,7 @@ extension MachineController {
         var paths = powerOnImagePaths
         paths[bank] = url?.path
         setPowerOnImagePathsValue(paths)
-        UserDefaults.standard.set(Dictionary(uniqueKeysWithValues: paths.map { (String($0.key), $0.value) }),
+        remember(Dictionary(uniqueKeysWithValues: paths.map { (String($0.key), $0.value) }),
                                   forKey: Self.powerOnImagesKey)
     }
 

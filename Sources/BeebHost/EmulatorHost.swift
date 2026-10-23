@@ -122,8 +122,16 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
         stop()
     }
 
+    /// Whether a `NetworkHost` drives this machine (so it has no thread of
+    /// its own).
+    public internal(set) var isNetworkStation = false
+    /// Whether the machine keeps rewind snapshots. A network's stations
+    /// don't by default: each keeps its own, and they add up.
+    public internal(set) var keepsRewind = true
+
     public func start() {
-        guard thread == nil else { return }
+        // A station's network runs it: a thread here would run it twice.
+        guard thread == nil, !isNetworkStation else { return }
         let thread = Thread { [unowned self] in self.threadMain() }
         thread.name = "BBC Micro"
         thread.qualityOfService = .userInteractive
@@ -171,10 +179,142 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
 
     // MARK: Emulation thread
 
+    // The machine is driven either by this host's own thread (`start`) or,
+    // as a station of a network, by the network's thread (`NetworkHost`).
+    // Either way, these are only touched by the driving thread.
+    private var session: HostSession?
+    /// Paused from the menu (in a network: this station is suspended).
+    private(set) var paused = false
+    private(set) var speedLimited = true
+
+    /// The machine's session, made on first use by the driving thread.
+    func drivingSession() -> HostSession {
+        if let session { return session }
+        let made = HostSession(host: self, makeMachine: makeMachine)
+        session = made
+        return made
+    }
+
+    /// Runs the queued commands, on the driving thread. Returns whether
+    /// emulated time jumped or the machine changed (so wall-clock pacing
+    /// starts again).
+    @discardableResult
+    func runCommands() -> Bool {
+        let session = drivingSession()
+        var restart = false
+        for command in commands.withLock({ list -> [Command] in
+            defer { list.removeAll() }
+            return list
+        }) {
+            let machine = session.machine
+            switch command {
+            case .key(let key, let down):
+                machine.setKey(key, down: down)
+            case .paste(let text):
+                machine.paste(text)
+            case .type(let text):
+                machine.type(text)
+            case .releaseAllKeys:
+                machine.releaseAllKeys()
+            case .joystick(let index, let x, let y, let fire):
+                machine.setJoystick(index, x: x, y: y, fire: fire)
+            case .mouseMove(let dx, let dy):
+                machine.moveMouse(dx: dx, dy: dy)
+            case .mouseButtons(let buttons):
+                machine.setMouseButtons(buttons)
+            case .powerCycle:
+                session.powerCycle()
+                restart = true
+            case .changeMachine(let configuration):
+                session.powerCycle(configuration: configuration)
+                restart = true
+            case .loadProgram(let disc, let file):
+                machine.loadProgram(disc: disc, file: file)
+            case .insertDisc(let image, let format, let drive, let onWrite):
+                session.insertDisc(image: image, format: format, drive: drive, onWrite: onWrite)
+            case .shiftBreak:
+                machine.shiftBreak()
+            case .pressBreak:
+                machine.pressBreak()
+            case .setPaused(let value):
+                paused = value
+                restart = true
+            case .setSpeedLimited(let value):
+                speedLimited = value
+                restart = true
+            case .setDiscDriveSounds(let on):
+                discDriveSoundsOn = on
+                session.applyDiscDriveSounds()
+            case .startRecording(let url, let codec):
+                do {
+                    try session.startRecording(to: url, codec: codec)
+                } catch {
+                    NSLog("MacBeeb: can't record: \(error)")
+                }
+            case .stopRecording(let completion):
+                do {
+                    try session.stopRecording()
+                    completion(nil)
+                } catch {
+                    completion(error)
+                }
+            case .saveState(let url, let completion):
+                do {
+                    try SaveStateFile(session.machine).data().write(to: url, options: .atomic)
+                    completion(nil)
+                } catch {
+                    completion(error)
+                }
+            case .loadState(let file):
+                do {
+                    let restored = try file.makeMachine()
+                    if let debugger = session.machine.debuggerIfCreated {
+                        restored.debugger.adopt(debugger)
+                    }
+                    session.replace(with: restored)
+                    restart = true
+                } catch {
+                    NSLog("MacBeeb: can't load state: \(error)")
+                }
+            case .restoreState(let file, let writeBacks, let completion):
+                do {
+                    let restored = try file.makeMachine()
+                    if let debugger = session.machine.debuggerIfCreated {
+                        restored.debugger.adopt(debugger)
+                    }
+                    session.replace(with: restored)
+                    restored.releaseAllKeys()
+                    for (drive, writeBack) in writeBacks {
+                        session.attachWriteBack(drive: drive, writeBack)
+                    }
+                    restart = true
+                    completion(nil)
+                } catch {
+                    completion(error)
+                }
+            case .perform(let body):
+                body(session)
+                restart = true
+            }
+        }
+        return restart
+    }
+
+    /// Publishes the debugger's state and says whether the machine should
+    /// run now: not paused, stopped by the debugger or held for an agent.
+    func readyToRun() -> Bool {
+        let debugger = drivingSession().machine.debuggerIfCreated
+        let stop = debugger?.stopReason
+        let stopCount = debugger?.stopCount ?? 0
+        latestDebugStop.withLock { $0 = (stop, stopCount) }
+        return !paused && stop == nil && !isHeldForAgent
+    }
+
+    /// Whether the audio output is playing this machine's sound.
+    var isAudioActive: Bool { audioActive.load(ordering: .acquiring) }
+
     private func threadMain() {
-        let session = HostSession(host: self, makeMachine: makeMachine)
-        var paused = false
-        var speedLimited = true
+        let session = drivingSession()
         let clock = ContinuousClock()
         var wallStart = clock.now
         var wallStartCycles = session.machine.cycles
@@ -190,107 +330,10 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
         }
 
         while running.load(ordering: .acquiring) {
-            for command in commands.withLock({ list -> [Command] in
-                defer { list.removeAll() }
-                return list
-            }) {
-                let machine = session.machine
-                switch command {
-                case .key(let key, let down):
-                    machine.setKey(key, down: down)
-                case .paste(let text):
-                    machine.paste(text)
-                case .type(let text):
-                    machine.type(text)
-                case .releaseAllKeys:
-                    machine.releaseAllKeys()
-                case .joystick(let index, let x, let y, let fire):
-                    machine.setJoystick(index, x: x, y: y, fire: fire)
-                case .mouseMove(let dx, let dy):
-                    machine.moveMouse(dx: dx, dy: dy)
-                case .mouseButtons(let buttons):
-                    machine.setMouseButtons(buttons)
-                case .powerCycle:
-                    session.powerCycle()
-                    resetWallClock()
-                case .changeMachine(let configuration):
-                    session.powerCycle(configuration: configuration)
-                    resetWallClock()
-                case .loadProgram(let disc, let file):
-                    machine.loadProgram(disc: disc, file: file)
-                case .insertDisc(let image, let format, let drive, let onWrite):
-                    session.insertDisc(image: image, format: format, drive: drive, onWrite: onWrite)
-                case .shiftBreak:
-                    machine.shiftBreak()
-                case .pressBreak:
-                    machine.pressBreak()
-                case .setPaused(let value):
-                    paused = value
-                    resetWallClock()
-                case .setSpeedLimited(let value):
-                    speedLimited = value
-                    resetWallClock()
-                case .setDiscDriveSounds(let on):
-                    discDriveSoundsOn = on
-                    session.applyDiscDriveSounds()
-                case .startRecording(let url, let codec):
-                    do {
-                        try session.startRecording(to: url, codec: codec)
-                    } catch {
-                        NSLog("MacBeeb: can't record: \(error)")
-                    }
-                case .stopRecording(let completion):
-                    do {
-                        try session.stopRecording()
-                        completion(nil)
-                    } catch {
-                        completion(error)
-                    }
-                case .saveState(let url, let completion):
-                    do {
-                        try SaveStateFile(session.machine).data().write(to: url, options: .atomic)
-                        completion(nil)
-                    } catch {
-                        completion(error)
-                    }
-                case .loadState(let file):
-                    do {
-                        let restored = try file.makeMachine()
-                        if let debugger = session.machine.debuggerIfCreated {
-                            restored.debugger.adopt(debugger)
-                        }
-                        session.replace(with: restored)
-                        resetWallClock()
-                    } catch {
-                        NSLog("MacBeeb: can't load state: \(error)")
-                    }
-                case .restoreState(let file, let writeBacks, let completion):
-                    do {
-                        let restored = try file.makeMachine()
-                        if let debugger = session.machine.debuggerIfCreated {
-                            restored.debugger.adopt(debugger)
-                        }
-                        session.replace(with: restored)
-                        restored.releaseAllKeys()
-                        for (drive, writeBack) in writeBacks {
-                            session.attachWriteBack(drive: drive, writeBack)
-                        }
-                        resetWallClock()
-                        completion(nil)
-                    } catch {
-                        completion(error)
-                    }
-                case .perform(let body):
-                    body(session)
-                    resetWallClock()
-                }
+            if runCommands() {
+                resetWallClock()
             }
-
-            let debugger = session.machine.debuggerIfCreated
-            let stop = debugger?.stopReason
-            let stopCount = debugger?.stopCount ?? 0
-            latestDebugStop.withLock { $0 = (stop, stopCount) }
-            if paused || stop != nil || isHeldForAgent {
+            if !readyToRun() {
                 Thread.sleep(forTimeInterval: 0.005)
                 resetWallClock()
                 continue
@@ -299,7 +342,7 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
             // Pace: by the audio queue if audio is playing, else by the wall
             // clock.
             if speedLimited {
-                if audioActive.load(ordering: .acquiring) {
+                if isAudioActive {
                     if audioRing.count >= audioTarget {
                         Thread.sleep(forTimeInterval: 0.001)
                         continue
@@ -408,7 +451,7 @@ final class HostSession: MachineSession {
 
     private func attach() {
         machine.tv = tv
-        if machine.rewinder == nil {
+        if machine.rewinder == nil && host.keepsRewind {
             machine.enableRewind()
         }
         machine.attachAudio(sampleRate: host.sampleRate, ring: host.audioRing)

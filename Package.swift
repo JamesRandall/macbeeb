@@ -47,6 +47,10 @@ let package = Package(
         // Runs a machine on its own thread, paced by audio or the wall clock.
         .target(name: "BeebHost", dependencies: ["BeebCore", "BeebCapture"]),
 
+        // Networks of machines: the saved project, templates, and the
+        // network that runs them.
+        .target(name: "BeebNetwork", dependencies: ["BeebCore", "BeebHost", "BeebROMs"]),
+
         .executableTarget(name: "beeb", dependencies: ["BeebCore", "BeebCapture", "BeebROMs"]),
 
         // Tools for AI agents to drive a machine, and the MCP server.
@@ -59,7 +63,7 @@ let package = Package(
         .executableTarget(
             name: "MacBeeb",
             dependencies: ["BeebCore", "BeebHost", "BeebCapture", "BeebROMs", "BeebAgentKit", "BeebDAP", "BeebLibrary",
-                           .product(name: "Sparkle", package: "Sparkle")],
+                           "BeebNetwork", .product(name: "Sparkle", package: "Sparkle")],
             // Sparkle.framework is embedded in Contents/Frameworks.
             linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
@@ -79,12 +83,12 @@ let package = Package(
         .target(name: "M6502GenKit"),
         .executableTarget(name: "m6502-gen", dependencies: ["M6502GenKit"]),
 
-        .executableTarget(name: "beeb-bench", dependencies: ["BeebCore", "BeebROMs"]),
+        .executableTarget(name: "beeb-bench", dependencies: ["BeebCore", "BeebHost", "BeebROMs"]),
 
         .testTarget(
             name: "BeebCoreTests",
             dependencies: ["BeebCore", "BeebROMs", "BeebCapture", "BeebHost", "BeebAgentKit", "BeebDAP", "BeebLibrary",
-                           "M6502GenKit"],
+                           "BeebNetwork", "M6502GenKit"],
             resources: [.copy("Resources")]
         ),
 

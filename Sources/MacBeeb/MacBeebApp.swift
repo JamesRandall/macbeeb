@@ -346,6 +346,16 @@ struct NewMachineMenuItem: View {
 struct MachineWindow: View {
     static let windowID = "machine"
     @State private var machine = MachineController()
+
+    var body: some View {
+        MachineScreen(machine: machine)
+    }
+}
+
+/// A machine's picture, menus and toolbar: a standalone machine's window,
+/// or a network station's.
+struct MachineScreen: View {
+    @Bindable var machine: MachineController
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -354,9 +364,13 @@ struct MachineWindow: View {
                      onZoom: { machine.pictureZoomed($0) }, keyboardDisc: { machine.bootDiscPath },
                      onBecomeKey: {
                          Joysticks.shared.machine = machine
-                         MachineController.frontmost = machine
+                         if !machine.isStation {
+                             MachineController.frontmost = machine
+                         }
                      },
                      onClose: {
+                         // A station runs on without its window.
+                         guard !machine.isStation else { return }
                          // Closed (the bookshelf may keep the app open):
                          // it stops, and the bookshelf stops using it.
                          machine.setPaused(true)
@@ -407,6 +421,7 @@ struct MachineWindow: View {
                 }
             }
             .onAppear {
+                guard !machine.isStation else { return }
                 if WhatsNew.shouldShowOnLaunch() {
                     openWindow(id: WhatsNewView.windowID)
                 }
@@ -466,8 +481,16 @@ struct MachineWindow: View {
 
     private var title: String {
         var name = machine.model.displayName + (machine.fittedCoprocessor.map { " + " + $0.displayName } ?? "")
-        if machine.model == .modelB, machine.expansions.board != .none {
-            name += " + " + machine.expansions.board.displayName
+        if machine.model == .modelB {
+            if machine.expansions.board != .none {
+                name += " + " + machine.expansions.board.displayName
+            }
+            if machine.expansions.sidewaysRAM != .none {
+                name += " + " + machine.expansions.sidewaysRAM.displayName
+            }
+        }
+        if let station = machine.station {
+            name = station.stationTitle(machine) + " — " + name
         }
         if machine.videoNuLA {
             name += " + VideoNuLA"

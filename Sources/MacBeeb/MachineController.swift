@@ -5,9 +5,26 @@ import BeebCore
 import BeebDAP
 import BeebHost
 import BeebLibrary
+import BeebNetwork
 import BeebROMs
 import Observation
 import UniformTypeIdentifiers
+
+/// What a network station's controller tells its network: the station's
+/// hardware and discs belong to the network's project, not the app's
+/// defaults.
+@MainActor
+protocol StationOwner: AnyObject {
+    /// The station's hardware changed (its window's menus or Hardware
+    /// Expansions).
+    func stationSetupChanged(_ controller: MachineController)
+    /// A disc is going into one of its drives: where the station should
+    /// use it from (the network's copy), or nil not to.
+    func station(_ controller: MachineController, willInsert url: URL, drive: Int) -> URL?
+    func station(_ controller: MachineController, didEject drive: Int)
+    /// "BBC 2 · station 2", for the window title.
+    func stationTitle(_ controller: MachineController) -> String
+}
 
 /// One emulated machine and its window's actions.
 @MainActor
@@ -15,6 +32,15 @@ import UniformTypeIdentifiers
 final class MachineController {
     let host: EmulatorHost
     private let audio: AudioOutput
+    /// The network this machine is a station of, if it is one. Its hardware
+    /// is remembered there, and it runs whether or not it has a window.
+    @ObservationIgnored private(set) weak var station: StationOwner?
+    /// The station's node in its network's project.
+    let stationID: UUID?
+    var isStation: Bool { stationID != nil }
+    /// Whether its sound is playing (a station's is only while it's the
+    /// one chosen).
+    private(set) var audible = false
     private(set) var paused = false
     /// An agent's holding the machine still between its tool calls
     /// (set_real_time). Resume lets it go.
@@ -105,44 +131,54 @@ final class MachineController {
     private(set) var lights = BBCMicro.Lights()
     @ObservationIgnored private var lightsTimer: Timer?
 
-    init() {
-        let model = UserDefaults.standard.string(forKey: Self.modelDefaultsKey)
-            .flatMap(BBCMicro.Model.init(rawValue:)) ?? .modelB
-        self.model = model
-        let secondProcessor = UserDefaults.standard.bool(forKey: Self.secondProcessorDefaultsKey)
-        self.secondProcessor = secondProcessor
-        let coprocessor = UserDefaults.standard.string(forKey: Self.coprocessorDefaultsKey)
-            .flatMap(BBCMicro.Coprocessor.init(rawValue:)) ?? .mos6502
-        self.coprocessor = coprocessor
-        let discInterface = UserDefaults.standard.string(forKey: Self.discInterfaceDefaultsKey)
-            .flatMap(BBCMicro.DiscInterface.init(rawValue:)) ?? .intel8271
-        self.discInterface = discInterface
-        let expansions = Self.savedExpansions
-        self.expansions = expansions
-        let powerOnImagePaths = Self.savedPowerOnImagePaths
-        self.powerOnImagePaths = powerOnImagePaths
-        let controllerROMPaths = Self.savedControllerROMPaths
-        self.controllerROMPaths = controllerROMPaths
-        let videoNuLA = Self.savedVideoNuLA
-        self.videoNuLA = videoNuLA
-        var built = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
-                                           discInterface: discInterface, expansions: expansions,
-                                           sidewaysImages: Self.images(at: powerOnImagePaths),
-                                           controllerROM: Self.controllerROM(for: expansions.board, paths: controllerROMPaths))
-        built.videoNuLA = videoNuLA
-        let configuration = built
-        let discDriveSounds = UserDefaults.standard.object(forKey: Self.discDriveSoundsDefaultsKey) as? Bool ?? true
-        self.discDriveSounds = discDriveSounds
-        host = EmulatorHost(discDriveSounds: Self.discDriveSounds(for:), discDriveSoundsOn: discDriveSounds) {
+    /// A standalone machine, set up as the last one was.
+    convenience init() {
+        let defaults = UserDefaults.standard
+        let setup = MachineSetup(
+            model: defaults.string(forKey: Self.modelDefaultsKey).flatMap(BBCMicro.Model.init(rawValue:)) ?? .modelB,
+            secondProcessor: defaults.bool(forKey: Self.secondProcessorDefaultsKey),
+            coprocessor: defaults.string(forKey: Self.coprocessorDefaultsKey).flatMap(BBCMicro.Coprocessor.init(rawValue:)) ?? .mos6502,
+            discInterface: defaults.string(forKey: Self.discInterfaceDefaultsKey)
+                .flatMap(BBCMicro.DiscInterface.init(rawValue:)) ?? .intel8271,
+            expansions: Self.savedExpansions, powerOnImagePaths: Self.savedPowerOnImagePaths,
+            controllerROMPaths: Self.savedControllerROMPaths, videoNuLA: Self.savedVideoNuLA)
+        let discDriveSounds = defaults.object(forKey: Self.discDriveSoundsDefaultsKey) as? Bool ?? true
+        let configuration = setup.configuration()
+        let host = EmulatorHost(discDriveSounds: Self.discDriveSounds(for:), discDriveSoundsOn: discDriveSounds) {
             BBCMicro(configuration: configuration)
         }
+        self.init(setup: setup, host: host, discDriveSounds: discDriveSounds, station: nil)
+    }
+
+    /// A network's station, which its network runs (already set up as
+    /// `setup`).
+    convenience init(station id: UUID, host: EmulatorHost, setup: MachineSetup, owner: StationOwner) {
+        self.init(setup: setup, host: host, discDriveSounds: false, station: (id, owner))
+    }
+
+    private init(setup: MachineSetup, host: EmulatorHost, discDriveSounds: Bool, station: (UUID, StationOwner)?) {
+        model = setup.model
+        secondProcessor = setup.secondProcessor
+        coprocessor = setup.coprocessor
+        discInterface = setup.discInterface
+        expansions = setup.expansions
+        powerOnImagePaths = setup.powerOnImagePaths
+        controllerROMPaths = setup.controllerROMPaths
+        videoNuLA = setup.videoNuLA
+        self.discDriveSounds = discDriveSounds
+        self.host = host
+        stationID = station?.0
+        self.station = station?.1
         audio = AudioOutput(host: host)
-        host.start()
-        audio.start()
-        if Joysticks.shared.machine == nil {
-            Joysticks.shared.machine = self
+        if station == nil {
+            host.start()
+            audio.start()
+            audible = true
+            if Joysticks.shared.machine == nil {
+                Joysticks.shared.machine = self
+            }
         }
-        startupDiscName = configuration.startupDisc?.name
+        startupDiscName = setup.configuration().startupDisc?.name
         discNames[0] = startupDiscName
         lightsTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
@@ -165,13 +201,56 @@ final class MachineController {
                 }
             }
         }
+        Self.all[id] = self
+        // A station is its network's: the agent server, documentation
+        // captures, self-tests and the Game Library use standalone machines.
+        guard station == nil else { return }
         startAgentServer()
         DocumentationCapture.start(for: self)
-        Self.all[id] = self
         if Self.frontmost == nil {
             Self.frontmost = self
         }
         runSelfTestIfRequested()
+    }
+
+    // MARK: Stations
+
+    /// The hardware as set up now.
+    var setup: MachineSetup {
+        MachineSetup(model: model, secondProcessor: secondProcessor, coprocessor: coprocessor, discInterface: discInterface,
+                     expansions: expansions, powerOnImagePaths: powerOnImagePaths, controllerROMPaths: controllerROMPaths,
+                     videoNuLA: videoNuLA)
+    }
+
+    /// Remembers a hardware choice: in the app's defaults for a standalone
+    /// machine (new windows start with it), or in a station's network.
+    func remember(_ value: Any?, forKey key: String) {
+        if let station {
+            station.stationSetupChanged(self)
+        } else if stationID == nil {
+            UserDefaults.standard.set(value, forKey: key)
+        }
+    }
+
+    /// Plays or silences a station's sound (a standalone machine's always
+    /// plays).
+    func setAudible(_ on: Bool) {
+        guard isStation, on != audible else { return }
+        audible = on
+        if on {
+            audio.start()
+        } else {
+            audio.stop()
+        }
+    }
+
+    /// The station's machine has gone (switched off, or its network
+    /// closed): stop watching it.
+    func detachFromNetwork() {
+        setAudible(false)
+        lightsTimer?.invalidate()
+        lightsTimer = nil
+        Self.all[id] = nil
     }
 
     /// The first window's machine is the one `macbeeb-mcp --attach` drives.
@@ -399,7 +478,7 @@ final class MachineController {
 
     func setDiscDriveSounds(_ on: Bool) {
         discDriveSounds = on
-        UserDefaults.standard.set(on, forKey: Self.discDriveSoundsDefaultsKey)
+        remember(on, forKey: Self.discDriveSoundsDefaultsKey)
         host.send(.setDiscDriveSounds(on))
     }
 
@@ -513,7 +592,7 @@ final class MachineController {
     func setModel(_ newModel: BBCMicro.Model) {
         guard newModel != model else { return }
         model = newModel
-        UserDefaults.standard.set(newModel.rawValue, forKey: Self.modelDefaultsKey)
+        remember(newModel.rawValue, forKey: Self.modelDefaultsKey)
         changeMachine()
     }
 
@@ -522,8 +601,8 @@ final class MachineController {
         guard newModel != model || fitted != secondProcessor else { return }
         model = newModel
         secondProcessor = fitted
-        UserDefaults.standard.set(newModel.rawValue, forKey: Self.modelDefaultsKey)
-        UserDefaults.standard.set(fitted, forKey: Self.secondProcessorDefaultsKey)
+        remember(newModel.rawValue, forKey: Self.modelDefaultsKey)
+        remember(fitted, forKey: Self.secondProcessorDefaultsKey)
         changeMachine()
     }
 
@@ -531,7 +610,7 @@ final class MachineController {
     func setDiscInterface(_ interface: BBCMicro.DiscInterface) {
         guard interface != discInterface else { return }
         discInterface = interface
-        UserDefaults.standard.set(interface.rawValue, forKey: Self.discInterfaceDefaultsKey)
+        remember(interface.rawValue, forKey: Self.discInterfaceDefaultsKey)
         if model == .modelB {
             changeMachine()
         }
@@ -542,8 +621,8 @@ final class MachineController {
         guard new != fittedCoprocessor else { return }
         secondProcessor = new != nil
         if let new { coprocessor = new }
-        UserDefaults.standard.set(secondProcessor, forKey: Self.secondProcessorDefaultsKey)
-        UserDefaults.standard.set(coprocessor.rawValue, forKey: Self.coprocessorDefaultsKey)
+        remember(secondProcessor, forKey: Self.secondProcessorDefaultsKey)
+        remember(coprocessor.rawValue, forKey: Self.coprocessorDefaultsKey)
         changeMachine()
     }
 
@@ -551,7 +630,7 @@ final class MachineController {
     func setSecondProcessor(_ fitted: Bool) {
         guard fitted != secondProcessor else { return }
         secondProcessor = fitted
-        UserDefaults.standard.set(fitted, forKey: Self.secondProcessorDefaultsKey)
+        remember(fitted, forKey: Self.secondProcessorDefaultsKey)
         changeMachine()
     }
 
@@ -565,11 +644,7 @@ final class MachineController {
     func restartWithHardware() { changeMachine() }
 
     private func changeMachine() {
-        var configuration = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
-                                                   discInterface: discInterface, expansions: expansions,
-                                                   sidewaysImages: Self.images(at: powerOnImagePaths),
-                                                   controllerROM: Self.controllerROM(for: expansions.board, paths: controllerROMPaths))
-        configuration.videoNuLA = videoNuLA
+        let configuration = setup.configuration()
         hardwareChanges += 1
         // As BBCMicro.insertDiscs: an empty drive 0, or one with the old
         // machine's system disc, gets the new machine's.
@@ -632,6 +707,11 @@ final class MachineController {
 
     /// Disc images the BBC has in its drives, by drive.
     private(set) var discNames: [Int: String] = [:]
+
+    /// A network put a disc in this station's drive as it switched it on.
+    func noteNetworkDisc(_ name: String, drive: Int) {
+        discNames[drive] = name
+    }
     /// The path of the disc image file in drive 0 (not a bundled disc's),
     /// whose own keys apply.
     private(set) var bootDiscPath: String?
@@ -757,6 +837,13 @@ final class MachineController {
     /// `media`: who the disc is, for quick saves (a library game's disc);
     /// otherwise it's looked up, or registered, by its file.
     func insertDisc(_ url: URL, drive: Int = 0, boot: Bool = true, media: DiscMedia? = nil) {
+        // A station uses its network's copy.
+        let original = url
+        var url = url
+        if let station {
+            guard let copy = station.station(self, willInsert: url, drive: drive) else { return }
+            url = copy
+        }
         guard let data = try? Data(contentsOf: url) else {
             NSAlert(error: CocoaError(.fileReadUnknown)).runModal()
             return
@@ -774,8 +861,8 @@ final class MachineController {
         }
         // Library discs are reached through the bookshelf.
         if !media.managed {
-            NSDocumentController.shared.noteNewRecentDocumentURL(url)
-            RecentDiscs.shared.add(url)
+            NSDocumentController.shared.noteNewRecentDocumentURL(original)
+            RecentDiscs.shared.add(original)
         }
         if boot && drive == 0 {
             host.send(.shiftBreak)
@@ -824,6 +911,7 @@ final class MachineController {
 
     func ejectDisc(drive: Int) {
         host.send(.insertDisc(image: nil, format: .ssd, drive: drive, onWrite: nil))
+        station?.station(self, didEject: drive)
         discChanges += 1
         discNames[drive] = nil
         setMedia(nil, drive: drive)
