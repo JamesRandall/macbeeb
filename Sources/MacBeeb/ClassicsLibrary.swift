@@ -58,6 +58,7 @@ final class ClassicsLibrary {
         let defaults = UserDefaults.standard
         return defaults.bool(forKey: startWithBookshelfKey)
             && defaults.string(forKey: "MacBeebSelfTest") == nil
+            && defaults.string(forKey: "MacBeebNetworkSelfTest") == nil
             && defaults.string(forKey: "MacBeebCaptureDirectory") == nil
     }()
 

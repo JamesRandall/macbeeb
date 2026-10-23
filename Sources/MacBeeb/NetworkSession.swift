@@ -186,9 +186,7 @@ final class NetworkSession: StationOwner {
         update { project in project.nodes.removeAll { ids.contains($0.id) } }
         selection.subtract(ids)
         project.workspace.tiles.removeAll { ids.contains($0) }
-        for media in NetworkPackage.unusedMedia(of: project, in: url) {
-            try? FileManager.default.removeItem(at: media)
-        }
+        removeUnusedMedia()
         saveNow()
     }
 
@@ -237,6 +235,7 @@ final class NetworkSession: StationOwner {
         guard let controller = controllers.removeValue(forKey: id) else { return }
         controller.detachFromNetwork()
         runtime.powerOff(id)
+        thumbnails.forget(id)
         if focused == id {
             focused = nil
             runtime.network.setAudioStation(nil)
@@ -296,6 +295,47 @@ final class NetworkSession: StationOwner {
         runtime.network.setPaused(paused)
     }
 
+    // MARK: Discs
+
+    /// Asks for a disc image and puts it in a machine's drive: into the
+    /// running machine if it's on, else for when it's switched on.
+    func chooseDisc(for id: UUID, drive: Int) {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = MachineController.discTypes
+        panel.allowsOtherFileTypes = true
+        guard panel.runModal() == .OK, let source = panel.url else { return }
+        insertDisc(source, into: id, drive: drive)
+    }
+
+    func insertDisc(_ source: URL, into id: UUID, drive: Int) {
+        if let controller = controllers[id] {
+            controller.insertDisc(source, drive: drive, boot: false)
+            return
+        }
+        do {
+            let media = try NetworkPackage.importMedia(source, into: url)
+            update { $0[id]?.discs[drive] = media }
+            removeUnusedMedia()
+        } catch {
+            NSAlert(error: error).runModal()
+        }
+    }
+
+    func eject(_ id: UUID, drive: Int) {
+        if let controller = controllers[id] {
+            controller.ejectDisc(drive: drive)
+        } else {
+            update { $0[id]?.discs[drive] = nil }
+            removeUnusedMedia()
+        }
+    }
+
+    private func removeUnusedMedia() {
+        for old in NetworkPackage.unusedMedia(of: project, in: url) {
+            try? FileManager.default.removeItem(at: old)
+        }
+    }
+
     // MARK: Focus
 
     /// The station typed into in the tiles, and heard.
@@ -336,9 +376,7 @@ final class NetworkSession: StationOwner {
         do {
             let media = try NetworkPackage.importMedia(source, into: url)
             update { $0[id]?.discs[drive] = media }
-            for old in NetworkPackage.unusedMedia(of: project, in: url) {
-                try? FileManager.default.removeItem(at: old)
-            }
+            removeUnusedMedia()
             return NetworkPackage.url(of: media, in: url)
         } catch {
             NSAlert(error: error).runModal()
@@ -349,9 +387,7 @@ final class NetworkSession: StationOwner {
     func station(_ controller: MachineController, didEject drive: Int) {
         guard let id = controller.stationID else { return }
         update { $0[id]?.discs[drive] = nil }
-        for old in NetworkPackage.unusedMedia(of: project, in: url) {
-            try? FileManager.default.removeItem(at: old)
-        }
+        removeUnusedMedia()
     }
 
     func stationTitle(_ controller: MachineController) -> String {

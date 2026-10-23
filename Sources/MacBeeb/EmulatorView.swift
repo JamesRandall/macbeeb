@@ -16,6 +16,11 @@ final class EmulatorNSView: MTKView {
     var onClose: () -> Void = {}
     /// Called with the TV pixel under the mouse (nil when it leaves).
     var onHover: ((Int, Int)?) -> Void = { _ in }
+    /// Whether it takes the keyboard when it appears (one of several
+    /// screens in a window may not).
+    var takesFocus = true
+    /// Called when it takes the keyboard.
+    var onFocus: () -> Void = {}
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -220,9 +225,24 @@ final class EmulatorNSView: MTKView {
 
     override var acceptsFirstResponder: Bool { true }
 
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { onFocus() }
+        return became
+    }
+
+    override func resignFirstResponder() -> Bool {
+        // Keys held down here mustn't stay down on the BBC.
+        translator.reset()
+        host?.send(.releaseAllKeys)
+        return super.resignFirstResponder()
+    }
+
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        window?.makeFirstResponder(self)
+        if takesFocus {
+            window?.makeFirstResponder(self)
+        }
         updateTranslator()
         NotificationCenter.default.addObserver(self, selector: #selector(windowDidResignKey),
                                                name: NSWindow.didResignKeyNotification, object: window)
@@ -317,6 +337,8 @@ struct EmulatorView: NSViewRepresentable {
     var keyboardDisc: () -> String? = { nil }
     var onBecomeKey: () -> Void = {}
     var onClose: () -> Void = {}
+    var takesFocus = true
+    var onFocus: () -> Void = {}
 
     func makeNSView(context: Context) -> EmulatorNSView {
         let device = MTLCreateSystemDefaultDevice()
@@ -327,6 +349,8 @@ struct EmulatorView: NSViewRepresentable {
         view.keyboardDisc = keyboardDisc
         view.onBecomeKey = onBecomeKey
         view.onClose = onClose
+        view.takesFocus = takesFocus
+        view.onFocus = onFocus
         view.colorPixelFormat = .bgra8Unorm
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
         view.preferredFramesPerSecond = 120
@@ -345,5 +369,10 @@ struct EmulatorView: NSViewRepresentable {
     func updateNSView(_ view: EmulatorNSView, context: Context) {
         view.renderer?.style = style
         view.renderer?.monitor = monitor
+        view.onFocus = onFocus
+        if takesFocus && !view.takesFocus, let window = view.window, window.firstResponder !== view {
+            window.makeFirstResponder(view)
+        }
+        view.takesFocus = takesFocus
     }
 }

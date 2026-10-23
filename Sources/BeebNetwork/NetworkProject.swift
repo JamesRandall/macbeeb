@@ -214,7 +214,8 @@ public struct CanvasPoint: Codable, Sendable, Equatable, Hashable {
 
 /// How the canvas was last shown.
 public struct CanvasLayout: Codable, Sendable, Equatable {
-    public var zoom = 1.0
+    /// 0 until the network's first shown: then it's fitted to the window.
+    public var zoom = 0.0
     /// The canvas point at the centre of the view.
     public var centre = CanvasPoint()
     public var snapToGrid = true

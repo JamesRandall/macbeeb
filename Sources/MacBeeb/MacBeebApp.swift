@@ -1,6 +1,7 @@
 import AppKit
 import BeebCore
 import BeebLibrary
+import BeebNetwork
 import BeebROMs
 import SwiftUI
 
@@ -33,6 +34,8 @@ struct MacBeebApp: App {
             CommandGroup(replacing: .newItem) {
                 BookshelfMenuItem()
                 NewMachineMenuItem()
+                Divider()
+                NetworkMenuItems()
                 Divider()
                 Button("New Disc…") { machine?.newDisc() }
                     .keyboardShortcut("n")
@@ -170,6 +173,10 @@ struct MacBeebApp: App {
                     .disabled(machine == nil)
                 Divider()
             }
+            CommandGroup(before: .windowList) {
+                NetworkStudioMenuItem()
+                Divider()
+            }
             CommandMenu("Debug") {
                 Button("Show Debugger") { machine?.debuggerRequested = true }
                     .keyboardShortcut("d", modifiers: [.command, .option])
@@ -253,6 +260,22 @@ struct MacBeebApp: App {
                     .help("The Model B's memory board and sideways ROM and RAM banks")
             }
         }
+
+        WindowGroup("Network", id: NetworkStudioWindow.windowID, for: URL.self) { $url in
+            NetworkStudioWindow(url: url)
+        }
+        .defaultSize(width: 1180, height: 780)
+
+        WindowGroup("Station", id: StationWindow.windowID, for: StationWindow.Ref.self) { $ref in
+            StationWindow(ref: ref)
+        }
+        .defaultSize(width: 800, height: 640)
+        .restorationBehavior(.disabled)
+
+        Window("New Network", id: NetworkStartView.windowID) {
+            NetworkStartView()
+        }
+        .windowResizability(.contentSize)
 
         WindowGroup("Debugger", id: "debugger", for: UUID.self) { $id in
             if let id, let machine = MachineController.all[id] {
@@ -467,6 +490,8 @@ struct MachineScreen: View {
 
     private func open(_ url: URL) -> Bool {
         switch url.pathExtension.lowercased() {
+        case NetworkPackage.fileExtension:
+            NetworkStudioCommands.open(url, openWindow: openWindow)
         case _ where Disc.ImageFormat(path: url.path) != nil:
             machine.insertDisc(url)
         case "uef", "csw":
@@ -514,11 +539,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Needed when run as a plain executable (swift run) rather than an
         // app bundle.
         NSApp.setActivationPolicy(.regular)
-        NSApp.activate()
+        // Self-tests run in the background, leaving whatever's in front.
+        if NetworkSelfTest.path == nil && UserDefaults.standard.string(forKey: "MacBeebSelfTest") == nil {
+            NSApp.activate()
+        }
         // Starts the background update checks.
         _ = Updates.shared
         // Picks up downloads awaited before the app last quit.
         _ = ClassicsLibrary.shared
+        NetworkSelfTest.runIfRequested()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

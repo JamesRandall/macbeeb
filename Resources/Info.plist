@@ -10,6 +10,20 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
+			<string>MacBeeb Network</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSTypeIsPackage</key>
+			<true/>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.accidentalfish.macbeeb.network</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
 			<string>BBC Micro Disc Image</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
@@ -82,6 +96,24 @@
 	<string>https://github.com/JamesRandall/macbeeb/releases/latest/download/appcast.xml</string>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>com.apple.package</string>
+				<string>public.composite-content</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>MacBeeb network</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.accidentalfish.macbeeb.network</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>macbeebnet</string>
+				</array>
+			</dict>
+		</dict>
 		<dict>
 			<key>UTTypeConformsTo</key>
 			<array>
