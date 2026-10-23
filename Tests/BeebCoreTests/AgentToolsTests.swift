@@ -147,3 +147,98 @@ struct AgentSnapshotTests {
         #expect(pixels.count { $0 != 0 } > pixels.count / 4, "the screenshot is all black")
     }
 }
+
+/// Additions from using the tools for real: memory screenshots, files,
+/// timing and scripted keys.
+struct AgentToolAdditionsTests {
+    let support = AgentToolsTests()
+
+    func png(_ result: ToolResult) throws -> Data {
+        guard case .png(let data) = try #require(result.content.first) else {
+            Issue.record("no image: \(support.text(result))")
+            return Data()
+        }
+        return data
+    }
+
+    func scratch(_ name: String) -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("AgentToolAdditionsTests-\(UUID().uuidString)")
+            .appendingPathComponent(name)
+    }
+
+    /// A memory screenshot shows a poke straight away, while the TV doesn't
+    /// change until the machine runs; neither moves the machine.
+    @Test func screenshotFromMemory() throws {
+        let tools = support.makeTools()
+        let tv = try png(tools.call("screenshot", arguments: [:]))
+        let before = try png(tools.call("screenshot", arguments: ["source": "memory"]))
+        let cycles = support.text(tools.call("registers", arguments: [:]))
+        #expect(!tools.call("poke", arguments: ["address": "&7C00", "bytes": .array(Array(repeating: 0x41, count: 40))]).isError)
+        let after = try png(tools.call("screenshot", arguments: ["source": "memory"]))
+        #expect(before != after)
+        #expect(try png(tools.call("screenshot", arguments: [:])) == tv)
+        #expect(!(try png(tools.call("screenshot", arguments: ["source": "beam"]))).isEmpty)
+        #expect(support.text(tools.call("registers", arguments: [:])) == cycles)
+    }
+
+    @Test func clearingSymbolsKeepsTheOtherCPUs() throws {
+        let tools = support.makeTools()
+        let file = scratch("labels.txt")
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "HOSTLABEL = $1234\n".write(to: file, atomically: true, encoding: .utf8)
+        #expect(!tools.call("load_symbols", arguments: ["path": .string(file.path)]).isError)
+        try "PARALABEL = $5678\n".write(to: file, atomically: true, encoding: .utf8)
+        #expect(!tools.call("load_symbols", arguments: ["path": .string(file.path), "cpu": "parasite", "clear": true]).isError)
+        #expect(support.text(tools.call("lookup_symbol", arguments: ["name": "HOSTLABEL"])).contains("&1234"))
+        #expect(support.text(tools.call("lookup_symbol", arguments: ["name": "PARALABEL", "cpu": "parasite"])).contains("&5678"))
+    }
+
+    @Test func peekToAFile() throws {
+        let tools = support.makeTools()
+        _ = tools.call("poke", arguments: ["address": "&3000", "bytes": [1, 2, 3]])
+        let file = scratch("dumps/screen.bin")
+        let result = tools.call("peek", arguments: ["address": "&3000", "length": 8192, "path": .string(file.path)])
+        #expect(!result.isError, "\(support.text(result))")
+        let bytes = [UInt8](try Data(contentsOf: file))
+        #expect(bytes.count == 8192 && Array(bytes.prefix(3)) == [1, 2, 3])
+    }
+
+    /// LDX #5, DEX/BNE five times, JMP back: 2 + (5*2 + 4*3 + 2) + 3 = 29
+    /// cycles a trip, more if an interrupt comes in the middle.
+    @Test func measureCyclesRoundALoop() {
+        let tools = support.makeTools()
+        _ = tools.call("run_command", arguments: ["text": "P%=&3000:[OPT0:.L LDX #5:.M DEX:BNE M:JMP L:]"])
+        _ = tools.call("type_text", arguments: ["text": "CALL &3000\n", "settle_seconds": 0])
+        let result = support.text(tools.call("measure_cycles", arguments: ["from": "&3000", "to": "&3000", "repeat": 20]))
+        #expect(result.contains("min 29 cycles"), "\(result)")
+        // LDX to the JMP: 2 + 24.
+        let part = support.text(tools.call("measure_cycles", arguments: ["from": "&3000", "to": "&3005", "repeat": 20]))
+        #expect(part.contains("min 26 cycles"), "\(part)")
+    }
+
+    @Test func keySequenceTypesInOrder() {
+        let tools = support.makeTools()
+        let result = tools.call("key_sequence", arguments: ["events": [
+            ["at_frame": 0, "down": ["SHIFT"]],
+            ["at_frame": 2, "down": ["A"]],
+            ["at_frame": 6, "up": ["A"]],
+            ["at_frame": 8, "up": ["SHIFT"]],
+            ["at_frame": 12, "down": ["B"]],
+            ["at_frame": 16, "up": ["B"]],
+        ]])
+        #expect(!result.isError)
+        // Caps Lock is on, so SHIFT+A is still A.
+        #expect(support.text(result).hasSuffix(">AB"), "\(support.text(result))")
+    }
+
+    @Test func recordingMakesItsFolder() {
+        let tools = support.makeTools()
+        let file = scratch("new/folder/clip.mp4")
+        let started = tools.call("start_recording", arguments: ["path": .string(file.path)])
+        #expect(!started.isError, "\(support.text(started))")
+        _ = tools.call("run", arguments: ["frames": 10])
+        #expect(!tools.call("stop_recording", arguments: [:]).isError)
+        #expect(FileManager.default.fileExists(atPath: file.path))
+    }
+}
+

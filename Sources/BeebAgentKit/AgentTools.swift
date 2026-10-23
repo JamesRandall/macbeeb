@@ -109,8 +109,13 @@ public final class AgentTools: Sendable {
     /// A TV that's just been attached (after restore_snapshot, load_state or
     /// a power cycle) has no picture until the machine draws one. This runs
     /// a copy of the machine to get it, leaving the real one where it was.
-    static func nextFrame(of machine: BBCMicro) throws -> TVOutput {
+    /// `holdingCPU` halts the copy's CPU first, so the frame shows screen
+    /// memory as it is now.
+    static func nextFrame(of machine: BBCMicro, holdingCPU: Bool = false) throws -> TVOutput {
         let copy = try SaveStateFile(machine).makeMachine()
+        if holdingCPU {
+            copy.cpu.halt()
+        }
         let tv = TVOutput()
         copy.tv = tv
         // A new TV's first frame is blank (it starts in vertical retrace)
@@ -493,6 +498,75 @@ public final class AgentTools: Sendable {
         },
 
         Tool(definition: ToolDefinition(
+            name: "key_sequence",
+            description: "Press and release keys on a timeline, in one call, exactly repeatably (e.g. a scripted flight: hold thrust while tapping turn). Each event is at a time from the start (at_frame, 50 a second, or at_seconds), and puts keys down and/or up. Keys can overlap. Any still down at the end are released then, unless keep_held. Key names as for press_keys. Stops early if the debugger stops the machine.",
+            inputSchema: schema(["events": ["type": "array",
+                                            "items": ["type": "object",
+                                                      "properties": ["at_frame": prop("number", "When, in frames (1/50s) from the start"),
+                                                                     "at_seconds": prop("number", "Or: when, in seconds from the start"),
+                                                                     "down": ["type": "array", "items": ["type": "string"], "description": "Keys to press"],
+                                                                     "up": ["type": "array", "items": ["type": "string"], "description": "Keys to release"]]],
+                                            "description": "The events, e.g. [{\"at_frame\":0,\"down\":[\"A\"]},{\"at_frame\":5,\"down\":[\"Z\"]},{\"at_frame\":20,\"up\":[\"A\",\"Z\"]}]"] as JSONValue,
+                                 "settle_seconds": prop("number", "Time to run after the last event (default 0.2)"),
+                                 "keep_held": prop("boolean", "Leave keys that are still down held (default false)"),
+                                 "resume": resumeProperty],
+                                required: ["events"])
+        )) { context, args in
+            guard let events = args["events"]?.arrayValue, !events.isEmpty else { throw ToolFailure("events is required") }
+            func keys(_ value: JSONValue?) throws -> [BeebKey] {
+                try (value?.arrayValue ?? []).map { item in
+                    guard let name = item.stringValue, let key = BeebKey.named(name) else {
+                        throw ToolFailure("unknown key \(item.stringValue ?? "\(item)")")
+                    }
+                    return key
+                }
+            }
+            let timeline = try events.enumerated().map { index, event -> (cycles: Int, down: [BeebKey], up: [BeebKey]) in
+                guard let seconds = event["at_seconds"]?.doubleValue ?? event["at_frame"]?.doubleValue.map({ $0 / 50 }),
+                      seconds >= 0 && seconds <= 3600 else {
+                    throw ToolFailure("event \(index) needs at_frame or at_seconds (0-3600s)")
+                }
+                return (Int(seconds * 2_000_000), try keys(event["down"]), try keys(event["up"]))
+            }.enumerated().sorted { ($0.element.cycles, $0.offset) < ($1.element.cycles, $1.offset) }.map(\.element)
+            let settle = args["settle_seconds"]?.doubleValue ?? 0.2
+            let keepHeld = args["keep_held"]?.boolValue ?? false
+            let resume = args["resume"]?.boolValue ?? true
+            return .text(try context.perform { session in
+                resumeIfStopped(session, resume)
+                let m = session.machine
+                let start = m.cycles
+                var held: [BeebKey] = []
+                var stopped = false
+                for event in timeline {
+                    let target = start + UInt64(event.cycles)
+                    while m.cycles < target && !m.isStoppedByDebugger {
+                        session.advance(cycles: Int(target - m.cycles))
+                    }
+                    if m.isStoppedByDebugger {
+                        stopped = true
+                        break
+                    }
+                    for key in event.up {
+                        m.setKey(key, down: false)
+                        held.removeAll { $0 == key }
+                    }
+                    for key in event.down where !held.contains(key) {
+                        m.setKey(key, down: true)
+                        held.append(key)
+                    }
+                }
+                if !keepHeld {
+                    for key in held.reversed() { m.setKey(key, down: false) }
+                }
+                if !stopped { session.advance(seconds: settle) }
+                var notes: [String] = []
+                if stopped { notes.append("stopped before the last events") }
+                if keepHeld && !held.isEmpty { notes.append("still held: " + held.map(\.name).joined(separator: " ")) }
+                return summary(session, extra: notes.joined(separator: "\n"))
+            })
+        },
+
+        Tool(definition: ToolDefinition(
             name: "run",
             description: "Run the machine for some emulated time (seconds, or frames at 50 per second). Runs faster than real time.",
             inputSchema: schema(["seconds": prop("number", "Emulated seconds"),
@@ -548,11 +622,21 @@ public final class AgentTools: Sendable {
 
         Tool(definition: ToolDefinition(
             name: "screenshot",
-            description: "The screen as a PNG image (736x576; the BBC's pixels are a little narrower than square). Straight after restore_snapshot, load_state or power_cycle, before the machine has drawn a frame, it's the frame the machine is about to draw (the machine itself doesn't move).",
-            inputSchema: schema()
-        )) { context, _ in
+            description: "The screen as a PNG image (736x576; the BBC's pixels are a little narrower than square). source tv (default) is the last complete field: it doesn't change while the debugger has the machine stopped. beam is the field being drawn, as far as the beam has got (the rest is the field before): frame-exact at a breakpoint. memory draws screen memory as it is now, as a whole frame, with the CPU held still (the machine itself doesn't move; palette or CRTC changes made part way down the screen aren't reproduced). Straight after restore_snapshot, load_state or power_cycle, before the machine has drawn a frame, tv is the frame the machine is about to draw.",
+            inputSchema: schema(["source": ["type": "string", "enum": ["tv", "beam", "memory"],
+                                            "description": "What to show (default tv)"] as JSONValue])
+        )) { context, args in
+            let source = args["source"]?.stringValue ?? "tv"
+            guard ["tv", "beam", "memory"].contains(source) else { throw ToolFailure("source must be tv, beam or memory") }
             let png = try context.perform { session -> Data? in
-                Screenshot.png(session.tv.frameCount > 0 ? session.tv : try nextFrame(of: session.machine))
+                switch source {
+                case "beam":
+                    return Screenshot.png(pixels: session.tv.currentFrame, width: TVOutput.width, height: TVOutput.height)
+                case "memory":
+                    return Screenshot.png(try nextFrame(of: session.machine, holdingCPU: true))
+                default:
+                    return Screenshot.png(session.tv.frameCount > 0 ? session.tv : try nextFrame(of: session.machine))
+                }
             }
             guard let png else { throw ToolFailure("no frame yet") }
             return ToolResult(content: [.png(png)], isError: false)

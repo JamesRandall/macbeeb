@@ -130,7 +130,8 @@ The app bundle includes it too, at `MacBeeb.app/Contents/MacOS/macbeeb-mcp`.
 `--attach` talks to the app over a user-only socket in
 `~/Library/Application Support/MacBeeb/`.
 
-Tools: `run_command`, `type_text`, `press_keys`, `load_disc`, `eject_disc`,
+Tools: `run_command`, `type_text`, `press_keys`, `key_sequence` (keys down
+and up on a timeline, for repeatable scripted play), `load_disc`, `eject_disc`,
 `load_tape`, `rewind_tape`,
 `load_program`, `run`, `run_until_idle`, `run_until_address`,
 `read_screen_text`, `screenshot`, `peek`, `poke`, `disassemble`,
@@ -140,9 +141,12 @@ Tools: `run_command`, `type_text`, `press_keys`, `load_disc`, `eject_disc`,
 `list_breakpoints`, `delete_breakpoint`, `continue`, `step` (including
 back), `reverse_continue`, `rewind`, `registers`,
 `set_register`, `memory_regions`, `trace`, `debug_log`, `load_symbols`,
-`lookup_symbol`, `assemble`, `profile` (with `peek`,
-`poke` and `disassemble` taking a CPU and address space), and
-`set_real_time`.
+`lookup_symbol`, `assemble`, `profile`, `measure_cycles` (a stopwatch
+between two addresses) (with `peek`, `poke` and `disassemble` taking a CPU
+and address space), and `set_real_time`. `screenshot` can show the last
+field, the field so far up to the beam (frame-exact at a breakpoint), or
+screen memory as it is now; `peek` can write up to 64K to a file instead
+of returning it.
 
 Agents can set up what they need and rely on it. Breakpoints and symbols
 survive `restore_snapshot`, `load_state` and `power_cycle`

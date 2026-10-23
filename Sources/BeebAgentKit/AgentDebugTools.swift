@@ -120,15 +120,17 @@ extension AgentTools {
     static let debugTools: [Tool] = [
         Tool(definition: ToolDefinition(
             name: "peek",
-            description: "Read memory without side effects (I/O registers are peeked, not read). Returns a hex dump. Addresses can be numbers or expressions (e.g. \"PC\", \"{&FFFE}\").",
+            description: "Read memory without side effects (I/O registers are peeked, not read). Returns a hex dump, or with path, writes the bytes to a file instead (raw binary, up to 64K: e.g. screen memory to compare against a reference). Addresses can be numbers or expressions (e.g. \"PC\", \"{&FFFE}\").",
             inputSchema: schema(["address": prop("string", "Start address: &1900, $1900, 0x1900, decimal or an expression"),
-                                 "length": prop("integer", "Bytes (default 64, max 4096)"),
+                                 "length": prop("integer", "Bytes (default 64; max 4096, or 65536 with path)"),
+                                 "path": prop("string", "Write the bytes to this file instead of returning them"),
                                  "space": spaceProperty, "cpu": cpuProperty],
                                 required: ["address"])
         )) { context, args in
             let cpu = try cpu(args)
             let space = try space(args, cpu: cpu)
-            let length = min(max(args["length"]?.intValue ?? 64, 1), 4096)
+            let path = args["path"]?.stringValue.map { ($0 as NSString).expandingTildeInPath }
+            let length = min(max(args["length"]?.intValue ?? 64, 1), path == nil ? 4096 : 65536)
             return .text(try context.perform { session in
                 let m = session.machine
                 guard let address = try address(args, "address", in: m, cpu: cpu) else { throw ToolFailure("address is required") }
@@ -138,7 +140,15 @@ extension AgentTools {
                     bytes.append(byte)
                 }
                 guard !bytes.isEmpty else { throw ToolFailure("nothing at &\(String(address, radix: 16, uppercase: true)) in \(space)") }
-                return hexDump(bytes, address: address)
+                guard let path else { return hexDump(bytes, address: address) }
+                let url = URL(fileURLWithPath: path)
+                do {
+                    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try Data(bytes).write(to: url)
+                } catch {
+                    throw ToolFailure("can't write \(path): \(error.localizedDescription)")
+                }
+                return "wrote \(bytes.count) bytes from &\(String(address, radix: 16, uppercase: true)) in \(space) to \(path)"
             })
         },
 
@@ -241,14 +251,14 @@ extension AgentTools {
 
         Tool(definition: ToolDefinition(
             name: "set_breakpoint",
-            description: "Stop when the CPU executes an address (default), or reads or writes it (a watchpoint). Then use continue. Ranges, conditions (e.g. \"A == &41 && [&70] > 3\"), hit counts, and log points (log_message, with {expression}s, instead of stopping) are supported. Returns the breakpoint's ID.",
+            description: "Stop when the CPU executes an address (default), or reads or writes it (a watchpoint). Then use continue. Ranges, conditions (e.g. \"A == &41 && [&70] > 3\"), hit counts, and log points (log_message, with {expression}s, instead of stopping) are supported. Expressions can use CYCLES, the 2MHz cycle count, e.g. log_message \"frame at {CYCLES}\"; measure_cycles times code more directly. Returns the breakpoint's ID.",
             inputSchema: schema(["address": prop("string", "Address, expression, symbol, or source line (hello.s:12, with debug info loaded)"),
                                  "end": prop("string", "Last address of a range (default: just address)"),
                                  "type": ["type": "string", "enum": ["execute", "read", "write", "access"],
                                           "description": "What to stop on (default execute; access is read or write)"] as JSONValue,
                                  "condition": prop("string", "Only when this is true"),
                                  "hit_count": prop("integer", "Only stop on this hit (and later ones)"),
-                                 "log_message": prop("string", "Log this instead of stopping, e.g. \"A={A} at {PC}\""),
+                                 "log_message": prop("string", "Log this instead of stopping, e.g. \"A={A} at {PC}, cycle {CYCLES}\""),
                                  "rom_bank": prop("integer", "Host only: only while this sideways bank (0-15) is paged in"),
                                  "cpu": cpuProperty],
                                 required: ["address"])
@@ -484,7 +494,7 @@ extension AgentTools {
             name: "load_symbols",
             description: "Load symbols for the debugger: ld65 debug info (ld65 --dbgfile, which also maps code to source lines, so breakpoints can be \"hello.s:12\"), or a label file (ld65 -Ln, VICE, \"name = $1234\" lists). Then addresses and expressions can use the names, and disassembly shows them. The OS entry points (OSWRCH...) and hardware registers are always known.",
             inputSchema: schema(["path": prop("string", "The .dbg or label file"),
-                                 "clear": prop("boolean", "Forget previously loaded symbols first"),
+                                 "clear": prop("boolean", "Forget this CPU's previously loaded symbols first (the other CPU's are kept)"),
                                  "cpu": cpuProperty],
                                 required: ["path"])
         )) { context, args in
@@ -499,7 +509,7 @@ extension AgentTools {
             let clear = args["clear"]?.boolValue ?? false
             return .text(try context.perform { session in
                 let debugger = session.machine.debugger
-                if clear { debugger.clearSymbols() }
+                if clear { debugger.clearSymbols(cpu) }
                 debugger.addSymbols(table, cpu: cpu)
                 return "loaded \(table.symbolCount) symbols and \(table.lineCount) source lines"
             })
@@ -561,6 +571,61 @@ extension AgentTools {
             return .text(try context.perform { session in
                 let log = session.machine.debugger.log.suffix(count)
                 return log.isEmpty ? "no log output" : log.map { "[\($0.cpu.rawValue) \($0.cycle)] \($0.text)" }.joined(separator: "\n")
+            })
+        },
+
+        Tool(definition: ToolDefinition(
+            name: "measure_cycles",
+            description: "A stopwatch: run to from, then to to, and report the cycles between (from the start of the instruction at from to the start of the one at to). With repeat, does it that many times and gives min, average and max. from and to can be the same address, to time one trip round a loop. Leaves the machine stopped at to. Cycles are 2MHz host cycles; for the parasite, its own cycles too (to within a host cycle).",
+            inputSchema: schema(["from": prop("string", "Start address, expression or symbol"),
+                                 "to": prop("string", "End address, expression or symbol"),
+                                 "repeat": prop("integer", "How many times (default 1, max 1000)"),
+                                 "max_seconds": prop("number", "Longest to wait for each address (default 10)"),
+                                 "cpu": cpuProperty],
+                                required: ["from", "to"])
+        )) { context, args in
+            let cpu = try cpu(args)
+            let repeats = min(max(args["repeat"]?.intValue ?? 1, 1), 1000)
+            let maxCycles = Int((args["max_seconds"]?.doubleValue ?? 10) * 2_000_000)
+            return .text(try context.perform { session in
+                let m = session.machine
+                guard m.hasDebugCPU(cpu) else { throw ToolFailure("there's no second processor") }
+                guard let from = try address(args, "from", in: m, cpu: cpu), let to = try address(args, "to", in: m, cpu: cpu),
+                      (0...0xFFFF).contains(from), (0...0xFFFF).contains(to) else {
+                    throw ToolFailure("from and to must be 0-&FFFF")
+                }
+                func run(to target: Int) throws {
+                    let reason = m.debugger.run(.runToAddress(UInt16(target)), cpu: cpu, maxCycles: maxCycles) { session.advance(cycles: $0) }
+                    guard reason == .stepped(cpu) else {
+                        throw ToolFailure("didn't reach &\(hex(UInt16(target), 4))" + (reason.map { ": \($0)" } ?? " in time")
+                                          + "\n" + debugSummary(session, cpu: cpu, reason: reason))
+                    }
+                }
+                var times: [Int] = []
+                for _ in 0..<repeats {
+                    try run(to: from)
+                    let start = m.cycles
+                    try run(to: to)
+                    times.append(Int(m.cycles - start))
+                }
+                // A 6502 parasite runs at parasiteMHz; a Z80 counts T-states at 6MHz.
+                let parasiteScale = cpu == .host ? nil : (m.debugCPUKind(cpu) == .z80 ? 6.0 : Double(m.parasiteMHz)) / 2
+                func describe(_ cycles: Double) -> String {
+                    var text = String(format: cycles == cycles.rounded() ? "%.0f" : "%.1f", cycles) + " cycles"
+                    if let parasiteScale { text += String(format: " (%.0f parasite cycles)", cycles * parasiteScale) }
+                    return text + String(format: ", %.1fus", cycles / 2)
+                }
+                let span = "&\(hex(UInt16(from), 4)) to &\(hex(UInt16(to), 4)) on the \(cpu.rawValue)"
+                if times.count == 1 {
+                    return "\(span): \(describe(Double(times[0])))"
+                }
+                let average = Double(times.reduce(0, +)) / Double(times.count)
+                var lines = ["\(span), \(times.count) times:",
+                             "  min \(describe(Double(times.min()!)))",
+                             "  avg \(describe(average))",
+                             "  max \(describe(Double(times.max()!)))"]
+                if times.count <= 50 { lines.append("  each: " + times.map(String.init).joined(separator: " ")) }
+                return lines.joined(separator: "\n")
             })
         },
     ]

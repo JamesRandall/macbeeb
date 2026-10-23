@@ -259,10 +259,14 @@ public final class Debugger {
         }
     }
 
-    /// Back to just the built-in symbols.
-    public func clearSymbols() {
-        hostSymbols = SymbolTable.builtIn(model: machine.model, cpu: .host)
-        parasiteSymbols = SymbolTable.builtIn(model: machine.model, cpu: .parasite, z80: machine.z80Processor != nil)
+    /// Back to just the built-in symbols, for one CPU or (nil) both.
+    public func clearSymbols(_ cpu: DebugCPU? = nil) {
+        if cpu != .parasite {
+            hostSymbols = SymbolTable.builtIn(model: machine.model, cpu: .host)
+        }
+        if cpu != .host {
+            parasiteSymbols = SymbolTable.builtIn(model: machine.model, cpu: .parasite, z80: machine.z80Processor != nil)
+        }
     }
 
     public private(set) var hostTrace = TraceBuffer(capacity: 1)

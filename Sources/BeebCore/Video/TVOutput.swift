@@ -46,6 +46,12 @@ public final class TVOutput {
     /// Incremented each time `lastFrame` is updated.
     public private(set) var frameCount = 0
 
+    /// The frame being scanned out, as far as the beam has got: above it
+    /// this field, below it the last one.
+    public var currentFrame: [UInt32] {
+        Array(UnsafeBufferPointer(start: pixels, count: TVOutput.width * TVOutput.height))
+    }
+
     /// Cells of 8 pixels by one scanline: what produced each (see
     /// `update(_:metadata:)`).
     public static let metadataWidth = width / 8

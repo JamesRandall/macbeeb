@@ -34,9 +34,28 @@ public final class VideoRecorder: @unchecked Sendable {
         }
     }
 
-    public enum RecorderError: Error {
+    public enum RecorderError: Error, CustomStringConvertible {
         case cannotStart(Error?)
         case writeFailed(Error?)
+
+        public var description: String {
+            switch self {
+            case .cannotStart(let error): "can't start recording" + Self.reason(error)
+            case .writeFailed(let error): "recording failed" + Self.reason(error)
+            }
+        }
+
+        /// AVFoundation's messages ("Cannot create file") say little; the
+        /// underlying error usually says why.
+        private static func reason(_ error: Error?) -> String {
+            guard let error = error as NSError? else { return "" }
+            var parts = [error.localizedDescription]
+            if let reason = error.localizedFailureReason { parts.append(reason) }
+            if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+                parts.append(underlying.localizedDescription)
+            }
+            return ": " + parts.joined(separator: " ")
+        }
     }
 
     public let url: URL
@@ -84,6 +103,7 @@ public final class VideoRecorder: @unchecked Sendable {
         self.sampleRate = sampleRate
         try? FileManager.default.removeItem(at: url)
         do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             writer = try AVAssetWriter(outputURL: url, fileType: codec.fileType)
         } catch {
             throw RecorderError.cannotStart(error)
