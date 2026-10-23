@@ -30,6 +30,8 @@ public final class NetworkHost: @unchecked Sendable {
         public var stoppedStations: Set<UUID> = []
         /// What each Econet station has put on the line, by station number.
         public var traffic: [UInt8: Traffic] = [:]
+        /// The threads the network's running on.
+        public var threads = 1
 
         public init() {}
     }
@@ -158,6 +160,8 @@ public final class NetworkHost: @unchecked Sendable {
 
     public func stop() {
         running.store(false, ordering: .releasing)
+        // Not started (a test's): its workers stop here.
+        if thread == nil { workers.stop() }
     }
 
     /// Pauses every station together: no emulated time passes anywhere,
@@ -244,32 +248,133 @@ public final class NetworkHost: @unchecked Sendable {
             }
         }
         let paused = (caller == nil && isPaused) || (!stopped.isEmpty && pausesOnBreakpoint)
-        latestStatus.withLock {
-            $0.paused = paused
-            $0.stoppedStations = stopped
+        if paused != publishedPaused || stopped != publishedStopped {
+            publishedPaused = paused
+            publishedStopped = stopped
+            latestStatus.withLock {
+                $0.paused = paused
+                $0.stoppedStations = stopped
+            }
         }
         guard !paused else { return false }
         if let bus {
+            var machinesChanged = false
             for station in stations {
                 let machine = station.host.drivingSession().machine
                 if attached[station.id] !== machine {
                     if let old = attached[station.id] { bus.detach(old) }
                     bus.attach(machine)
                     attached[station.id] = machine
+                    machinesChanged = true
                 }
             }
-            let running = Set(ready.compactMap { $0.drivingSession().machine.econet }.map(ObjectIdentifier.init))
+            if lineHosts.count != ready.count || !zip(lineHosts, ready).allSatisfy({ $0 === $1 }) || machinesChanged {
+                lineHosts = ready
+                lineRunning = Set(ready.compactMap { $0.drivingSession().machine.econet }.map(ObjectIdentifier.init))
+            }
+            let running = lineRunning
             bus.beginQuantum { running.contains(ObjectIdentifier($0)) }
         }
-        for host in ready {
-            host.drivingSession().step(cycles: quantum)
+        if workers.count == 0 {
+            for host in ready {
+                host.timedStep(cycles: quantum)
+            }
+        } else {
+            if rebalance || groupedHosts.count != ready.count || !zip(groupedHosts, ready).allSatisfy({ $0 === $1 }) {
+                groups = LockstepWorkers.balance(ready, into: workers.count + 1)
+                groupedHosts = ready
+                rebalance = false
+            }
+            workers.run(groups, cycles: quantum)
         }
         bus?.endQuantum(cycles: quantum)
         networkCycles += UInt64(quantum)
         return true
     }
 
+    // MARK: Threads
+
+    /// The extra threads, when one isn't enough.
+    private let workers = LockstepWorkers()
+    private var groups: [[EmulatorHost]] = []
+    private var publishedPaused = false
+    private var publishedStopped: Set<UUID> = []
+    /// Which machines are on the line this quantum, while that's unchanged.
+    private var lineHosts: [EmulatorHost] = []
+    private var lineRunning: Set<ObjectIdentifier> = []
+    private var groupedHosts: [EmulatorHost] = []
+    private var rebalance = false
+    /// Adding a thread is a trial: the speed before it, to see it helped.
+    private var speedBeforeTrial: Double?
+    private var growBlockedUntil = ContinuousClock.now
+
+    /// The most threads to use: the performance cores, less one for the
+    /// rest of the Mac.
+    static let maxThreads: Int = {
+        var cores: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        if sysctlbyname("hw.perflevel0.physicalcpu", &cores, &size, nil, 0) != 0 || cores <= 0 {
+            cores = Int32(ProcessInfo.processInfo.activeProcessorCount)
+        }
+        return max(1, Int(cores) - 1)
+    }()
+
+    /// Once a second: more threads if the network's falling short and never
+    /// rests, fewer if it rests a lot.
+    /// Runs on `count` threads from now on (for tests; on the network's
+    /// thread, or before it starts).
+    func useThreads(_ count: Int) {
+        workers.resize(to: max(0, count - 1))
+        groupedHosts = []
+    }
+
+    /// Runs the commands then `count` quanta (for tests, with the network
+    /// not started).
+    func runQuanta(_ count: Int) {
+        runCommands()
+        for _ in 0..<count { runQuantum() }
+    }
+
+    /// MACBEEB_NETWORK_THREADS fixes the count (for measuring).
+    static let fixedThreads = ProcessInfo.processInfo.environment["MACBEEB_NETWORK_THREADS"].flatMap(Int.init)
+
+    private func adjustThreads(speed: Double, restedFraction: Double, limited: Bool) {
+        if let fixed = Self.fixedThreads {
+            if workers.count != fixed - 1 { workers.resize(to: max(0, fixed - 1)); groupedHosts = [] }
+            rebalance = true
+            return
+        }
+        let threads = workers.count + 1
+        rebalance = true
+        if let before = speedBeforeTrial {
+            speedBeforeTrial = nil
+            // The extra thread didn't help (by 5%): back to fewer, for a while.
+            if speed < before * 1.05 {
+                workers.resize(to: threads - 2)
+                groupedHosts = []
+                growBlockedUntil = .now + .seconds(10)
+                return
+            }
+        }
+        let falling = (limited ? speed < 0.98 : true) && restedFraction < 0.02
+        if falling && threads < Self.maxThreads && stations.count > threads && ContinuousClock.now >= growBlockedUntil {
+            speedBeforeTrial = speed
+            workers.resize(to: threads)
+            groupedHosts = []
+        } else if threads > 1 && limited && (1 - restedFraction) * Double(threads) / Double(threads - 1) < 0.7 {
+            workers.resize(to: threads - 2)
+            groupedHosts = []
+        }
+    }
+
     private func threadMain() {
+        defer { workers.stop() }
+        var rested: Duration = .zero
+        func rest(_ seconds: Double) {
+            let start = ContinuousClock.now
+            Thread.sleep(forTimeInterval: seconds)
+            rested += ContinuousClock.now - start
+        }
         let clock = ContinuousClock()
         var wallStart = clock.now
         var wallStartCycles = networkCycles
@@ -295,9 +400,17 @@ public final class NetworkHost: @unchecked Sendable {
                 let elapsed = now - sampleStart
                 let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
                 let speed = Double(networkCycles - sampleCycles) / 2e6 / seconds
+                let restedSeconds = Double(rested.components.seconds) + Double(rested.components.attoseconds) / 1e18
+                if networkCycles > sampleCycles {
+                    adjustThreads(speed: speed, restedFraction: restedSeconds / seconds,
+                                  limited: speedLimitedFlag.load(ordering: .acquiring))
+                }
+                rested = .zero
+                let threads = workers.count + 1
                 latestStatus.withLock {
                     $0.speed = speed
                     $0.cycles = networkCycles
+                    $0.threads = threads
                 }
                 sampleStart = now
                 sampleCycles = networkCycles
@@ -310,7 +423,7 @@ public final class NetworkHost: @unchecked Sendable {
                 if let heard, heard.isAudioActive, !heard.paused {
                     if heard.audioRing.count >= audioTarget {
                         runCommandsOnly()
-                        Thread.sleep(forTimeInterval: 0.001)
+                        rest(0.001)
                         continue
                     }
                     resetWallClock()
@@ -320,7 +433,7 @@ public final class NetworkHost: @unchecked Sendable {
                         + Double(elapsed.components.attoseconds) / 1e18 * 2e6))
                     if networkCycles - wallStartCycles >= elapsedCycles {
                         runCommandsOnly()
-                        Thread.sleep(forTimeInterval: 0.001)
+                        rest(0.001)
                         continue
                     }
                     // More than 0.1s behind (the Mac was busy): carry on
@@ -332,7 +445,7 @@ public final class NetworkHost: @unchecked Sendable {
             }
 
             if !runQuantum() {
-                Thread.sleep(forTimeInterval: 0.005)
+                rest(0.005)
                 resetWallClock()
             }
         }

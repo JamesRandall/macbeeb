@@ -32,6 +32,8 @@ public final class EconetBus {
         /// When its last symbol ended (network time).
         var lastEnd: UInt64 = 0
         var collidedUntil: UInt64 = 0
+        /// What it was last told of the line (clock, bit time, collision).
+        var told: (Bool, Int, Bool)?
 
         init(econet: Econet, now: @escaping () -> UInt64) {
             self.econet = econet
@@ -81,7 +83,11 @@ public final class EconetBus {
             guard port.running else { continue }
             let local = port.now()
             port.offset = Int64(bitPattern: time) - Int64(bitPattern: local)
-            port.econet.setLine(clock: clockRate != nil, bitTime: bitTime, collision: time < port.collidedUntil, now: local)
+            let line = (clockRate != nil, bitTime, time < port.collidedUntil)
+            if port.told.map({ $0 != line }) ?? true {
+                port.told = line
+                port.econet.setLine(clock: line.0, bitTime: line.1, collision: line.2, now: local)
+            }
         }
     }
 

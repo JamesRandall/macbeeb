@@ -4,7 +4,8 @@
 import Foundation
 import Testing
 import BeebCore
-import BeebHost
+@testable import BeebHost
+import Synchronization
 import BeebROMs
 
 /// A network of Model Bs, running as fast as it can.
@@ -145,5 +146,43 @@ struct NetworkHostTests {
         let kept = hosts[0].cycles
         #expect(waitFor { hosts[0].cycles > kept + 2_000_000 })
         #expect(hosts[1].cycles == removed)
+    }
+}
+
+/// Machines spread over threads: the same results as on one.
+struct NetworkThreadsTests {
+    func run(threads: Int) -> [[UInt8]] {
+        let network = NetworkHost(econetClockRate: .some(200_000))
+        defer { network.stop() }
+        let hosts = (1...4).map { station in
+            let configuration = BeebROMs.configuration(for: .modelB, econetStation: station)
+            return network.addStation(id: UUID(uuidString: "00000000-0000-0000-0000-00000000000\(station)")!) {
+                BBCMicro(configuration: configuration)
+            }
+        }
+        network.useThreads(threads)
+        network.runQuanta(80_000)
+        for (i, host) in hosts.enumerated() {
+            host.send(.paste("FOR I%=0 TO 255:I%?&3000=(I%*\(i + 3)+RND(-\(i + 1))) AND 255:NEXT\n"))
+        }
+        network.runQuanta(120_000)
+        // (The network's not running a thread of its own: its commands run
+        // in its next quantum.)
+        let memories = Mutex<[Int: [UInt8]]>([:])
+        for (i, host) in hosts.enumerated() {
+            host.send(.perform { session in
+                let memory = (0..<0x8000).map { session.machine.peek(UInt16($0)) }
+                memories.withLock { $0[i] = memory }
+            })
+        }
+        network.runQuanta(1)
+        return memories.withLock { m in (0..<hosts.count).map { m[$0] ?? [] } }
+    }
+
+    @Test func threadsDontChangeResults() {
+        let one = run(threads: 1)
+        let three = run(threads: 3)
+        #expect(one == three)
+        #expect(one[0][0x3000..<0x3100] != one[1][0x3000..<0x3100])
     }
 }

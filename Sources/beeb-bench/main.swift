@@ -98,10 +98,12 @@ for econet in [false, true] where CommandLine.arguments.contains("network") {
         for host in hosts {
             host.send(.type("MODE 2\nREPEAT:GCOL0,RND(7):DRAW RND(1280),RND(1024):UNTIL FALSE\n"))
         }
-        Thread.sleep(forTimeInterval: 3.5)
-        let speed = network.status.speed
+        // It adds threads a second at a time, while they help.
+        Thread.sleep(forTimeInterval: 3.5 + Double(min(count, 12)) * 1.2)
+        let status = network.status
         network.stop()
         print("Network of \(count) Model B".padding(toLength: 28, withPad: " ", startingAt: 0)
-              + String(format: "%5.1fx real time (%.1fx in machine time)", speed, speed * Double(count)))
+              + String(format: "%5.1fx real time (%.1fx in machine time) on %d thread%@", status.speed, status.speed * Double(count),
+                       status.threads, status.threads == 1 ? "" : "s"))
     }
 }

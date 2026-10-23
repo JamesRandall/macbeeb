@@ -203,7 +203,12 @@ its machines start up afresh, as when they're switched on.
 
 ## Performance
 
-All of a network's machines run together, in step, on one of the Mac's
-processor cores. On an M-series Mac a network runs at full speed with up to
-about 16 Model Bs, and a small one has plenty to spare. The window's subtitle
-shows the network's speed.
+A network's machines run together, in step: every 16 microseconds of BBC
+time each one runs, and then the network passes on what they sent. One
+core runs about 14 Model Bs at full speed (fewer Masters or busy servers).
+When a network needs more than that, MacBeeb spreads its machines over
+more cores, adding one at a time while it helps (up to one fewer than the
+Mac's performance cores), and gives them back when they're not needed. The
+window's subtitle shows the network's speed, and how many cores it's
+using when it's more than one. Which core runs which machine never changes
+what they do.

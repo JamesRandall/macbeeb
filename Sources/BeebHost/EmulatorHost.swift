@@ -128,6 +128,10 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
     public internal(set) var isNetworkStation = false
     /// The network that runs it, if it's a station.
     weak var network: NetworkHost?
+    /// What a quantum of it costs, in nanoseconds (measured now and then,
+    /// for sharing stations among threads), and a count for when to.
+    var stepCost = 0.0
+    var stepCount = 0
     /// Where what the machine prints goes: a printer on its printer port,
     /// whose jobs go here (on the emulation thread). Set before it starts.
     public var printJobs: (@Sendable (PrintJob) -> Void)?
@@ -153,7 +157,12 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
 
     public func send(_ command: Command) {
         commands.withLock { $0.append(command) }
+        hasCommands.store(true, ordering: .releasing)
     }
+
+    /// Set with each command, so the driving thread needn't take the lock
+    /// to find there are none (a network checks every 16µs).
+    private let hasCommands = Atomic<Bool>(false)
 
     /// The most recent complete frame.
     public var frame: Frame? {
@@ -210,6 +219,7 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
     func runCommands() -> Bool {
         let session = drivingSession()
         var restart = false
+        guard hasCommands.exchange(false, ordering: .acquiringAndReleasing) else { return false }
         for command in commands.withLock({ list -> [Command] in
             defer { list.removeAll() }
             return list
@@ -314,9 +324,17 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
         let debugger = drivingSession().machine.debuggerIfCreated
         let stop = debugger?.stopReason
         let stopCount = debugger?.stopCount ?? 0
-        latestDebugStop.withLock { $0 = (stop, stopCount) }
+        // Published only when it changes.
+        if stop != publishedStop || stopCount != publishedStopCount {
+            publishedStop = stop
+            publishedStopCount = stopCount
+            latestDebugStop.withLock { $0 = (stop, stopCount) }
+        }
         return !paused && stop == nil && !isHeldForAgent
     }
+
+    private var publishedStop: StopReason?
+    private var publishedStopCount = 0
 
     /// Whether the audio output is playing this machine's sound.
     var isAudioActive: Bool { audioActive.load(ordering: .acquiring) }

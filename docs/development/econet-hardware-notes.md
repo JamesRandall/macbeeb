@@ -76,8 +76,19 @@ the hardware and no software yet.
   so it must stay well under 75 cycles. A variable delay (long quanta while
   quiet) can't work: the first burst after a quiet spell would arrive late
   and the reply would miss the sender's idle window.
-- Cost: about 15-25% (beeb-bench network): 8 Model Bs run at 1.6× real
-  time, 16 at 0.8×.
+- Cost: about 10% (beeb-bench network). On one thread, 8 Model Bs run at
+  1.7× real time, 16 at 0.9×.
+- **More threads** (LockstepWorkers): when one thread can't keep up, the
+  network's machines are shared among extra threads (balanced by measured
+  cost), each running its machines through the quantum, then meeting the
+  network's thread (a spin barrier: quanta are far too short to sleep
+  between; workers park after about 50µs idle). The line's delivery stays
+  on the network's thread, so results don't depend on the threads (a test
+  checks). Threads are added a second at a time while the network's short
+  of real time and never rests, kept only if they help by 5%. With Econet,
+  16 Model Bs: 0.9× on 1 thread, 1.4× on 2, 1.8× on 4 (M-series, 12
+  performance cores). Without it (2,000-cycle quanta) it scales nearly
+  linearly: 3.3× on 4.
 - **Collisions**: two stations' byte-times overlapping on the line spoil
   both (delivered as garbage, an error at the receiver) and raise both
   transmitters' /CTS until they're cleared.

@@ -46,7 +46,8 @@ struct NetworkInspector: View {
                 LabeledContent("Machines", value: "\(session.project.stations.count), \(session.controllers.count) on")
                 LabeledContent("Clock", value: session.project.hasClock ? "Fitted" : "None")
                 if session.status.speed > 0 && !session.controllers.isEmpty {
-                    LabeledContent("Speed", value: String(format: "%.0f%% of real time", session.status.speed * 100))
+                    LabeledContent("Speed", value: String(format: "%.0f%% of real time", session.status.speed * 100)
+                                   + (session.status.threads > 1 ? ", on \(session.status.threads) cores" : ""))
                 }
             }
             InspectorSection("Problems") {

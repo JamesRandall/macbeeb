@@ -531,8 +531,13 @@ public final class MC6854 {
     /// When something next happens without the CPU: a byte-time of
     /// transmission, or the line going idle.
     var nextEventTime: UInt64? {
-        let idle = idleDeadline
-        return [nextTxTime, idle].compactMap { $0 }.min()
+        // (No array: this runs for every station every quantum.)
+        switch (nextTxTime, idleDeadline) {
+        case (let tx?, let idle?): min(tx, idle)
+        case (let tx?, nil): tx
+        case (nil, let idle?): idle
+        case (nil, nil): nil
+        }
     }
 
     /// When the line will have been quiet for 15 bits (the receiver's idle).

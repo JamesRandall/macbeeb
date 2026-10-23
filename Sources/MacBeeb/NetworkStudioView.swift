@@ -124,6 +124,9 @@ struct NetworkStudioView: View {
             text += " · Paused for the debugger"
         } else if on > 0 && session.status.speed > 0 {
             text += String(format: " · %.0f%% speed", min(session.status.speed, 9.99) * 100)
+            if session.status.threads > 1 {
+                text += " · \(session.status.threads) cores"
+            }
         }
         return text
     }
