@@ -323,6 +323,11 @@ public final class NetworkHost: @unchecked Sendable {
                         Thread.sleep(forTimeInterval: 0.001)
                         continue
                     }
+                    // More than 0.1s behind (the Mac was busy): carry on
+                    // from now rather than rushing to catch up.
+                    if elapsedCycles - (networkCycles - wallStartCycles) > 200_000 {
+                        resetWallClock()
+                    }
                 }
             }
 

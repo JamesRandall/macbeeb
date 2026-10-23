@@ -580,6 +580,13 @@ public final class BBCMicro {
         }
         let cpu = cpu
         econet?.onNMI = { cpu.setNMI(NMIDevice.econet, $0) }
+        // The Master's ANFS takes its station number from CMOS RAM (byte 0,
+        // as *CONFIGURE STATION sets it), not the links.
+        if model.isMaster, let econet {
+            var cmos = rtc.ram
+            cmos[0] = econet.station
+            rtc.setRAM(cmos)
+        }
     }
 
     deinit {

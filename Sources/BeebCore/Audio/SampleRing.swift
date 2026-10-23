@@ -51,4 +51,9 @@ public final class SampleRing: @unchecked Sendable {
         read.store(r + n, ordering: .releasing)
         return n
     }
+
+    /// Consumer: drops everything waiting (sound from before it was heard).
+    public func discardAll() {
+        read.store(written.load(ordering: .acquiring), ordering: .releasing)
+    }
 }
