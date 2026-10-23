@@ -1254,6 +1254,10 @@ extension M6502 {
                 state = .Reset_4
             case .Reset_4:
                 data = dbus
+                i = true
+                if variant != .nmos {
+                    d = false
+                }
                 abus = 0xFFFC
                 access = .address
                 state = .Reset_5

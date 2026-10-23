@@ -166,6 +166,11 @@ private struct Emitter {
             }
         case "jmp":
             line("pc = ad")
+        case "reset":
+            // Set as the vector goes on the bus, as for an interrupt. The
+            // CMOS parts also clear D; on NMOS it's left as it was.
+            line("i = true")
+            block("if variant != .nmos") { $0.line("d = false") }
         default:
             preconditionFailure("unknown action \(c.action!)")
         }

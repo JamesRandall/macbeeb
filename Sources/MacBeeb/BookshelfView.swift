@@ -277,6 +277,7 @@ struct BookshelfView: View {
                         select(entry.id)
                         gridFocused = true
                     }
+                    .simultaneousGesture(TapGesture(count: 2).onEnded { playIfInstalled(entry) })
                     .accessibilityAction { select(entry.id) }
             }
         }
@@ -308,6 +309,9 @@ struct BookshelfView: View {
                         select(Self.myID(game))
                         gridFocused = true
                     }
+                    .simultaneousGesture(TapGesture(count: 2).onEnded {
+                        if game.discFile != nil { Player.play(game, openMachine: openMachine) }
+                    })
                     .accessibilityAction { select(Self.myID(game)) }
                     .contextMenu {
                         Button("Edit…") { classics.edit(game) }
@@ -382,6 +386,13 @@ struct BookshelfView: View {
             default: break
             }
         }
+    }
+
+    /// Double click on a tile: play it if it's been downloaded. (Return
+    /// also gets it, but a double click shouldn't start a download.)
+    private func playIfInstalled(_ entry: ShelfEntry) {
+        guard case .game(let game) = entry, case .installed(let record) = classics.state(of: game) else { return }
+        Player.play(game, record: record, openMachine: openMachine)
     }
 
     private func openMachine() {

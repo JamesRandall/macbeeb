@@ -3,6 +3,7 @@ import BeebCore
 import BeebHost
 import BeebROMs
 import Foundation
+import ImageIO
 import Testing
 
 struct AgentToolsTests {
@@ -121,5 +122,28 @@ struct AgentSnapshotTests {
         #expect(!restored.isError)
         let output = AgentToolsTests().text(tools.call("run_command", arguments: ["text": "PRINT A%"]))
         #expect(output.contains("         1"))
+    }
+
+    /// The TV is new after a restore; the screenshot still shows the screen,
+    /// and taking it doesn't move the machine.
+    @Test func screenshotAfterRestoreIsntBlank() throws {
+        let os = BeebROMs.data(.os12), basic = BeebROMs.data(.basic2), dfs = BeebROMs.data(.dfs12)
+        let session = HeadlessSession { BBCMicro(os: os, sidewaysROMs: [15: basic, 14: dfs]) }
+        session.machine.runUntilIdle()
+        let tools = AgentTools(context: session)
+        _ = tools.call("save_snapshot", arguments: [:])
+        #expect(!tools.call("restore_snapshot", arguments: [:]).isError)
+        let cycles = session.machine.cycles
+        let shot = tools.call("screenshot", arguments: [:])
+        guard case .png(let data) = try #require(shot.content.first) else {
+            Issue.record("no image")
+            return
+        }
+        #expect(session.machine.cycles == cycles)
+        let source = try #require(CGImageSourceCreateWithData(data as CFData, nil))
+        let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        let pixels = try #require(image.dataProvider?.data as Data?)
+        // Opaque black is one 0xFF (alpha) in four bytes; the text adds more.
+        #expect(pixels.count { $0 != 0 } > pixels.count / 4, "the screenshot is all black")
     }
 }

@@ -106,6 +106,23 @@ public final class AgentTools: Sendable {
         session.replace(with: machine)
     }
 
+    /// A TV that's just been attached (after restore_snapshot, load_state or
+    /// a power cycle) has no picture until the machine draws one. This runs
+    /// a copy of the machine to get it, leaving the real one where it was.
+    static func nextFrame(of machine: BBCMicro) throws -> TVOutput {
+        let copy = try SaveStateFile(machine).makeMachine()
+        let tv = TVOutput()
+        copy.tv = tv
+        // A new TV's first frame is blank (it starts in vertical retrace)
+        // and its second starts wherever the beam was: the third is whole.
+        var cycles = 0
+        while tv.frameCount < 3 && cycles < 2_000_000 {
+            copy.run(cycles: 10_000)
+            cycles += 10_000
+        }
+        return tv
+    }
+
     /// Screen text plus the state an agent needs to know what happened.
     static func summary(_ session: MachineSession, extra: String = "") -> String {
         let text = session.machine.screenText()
@@ -531,11 +548,11 @@ public final class AgentTools: Sendable {
 
         Tool(definition: ToolDefinition(
             name: "screenshot",
-            description: "The screen as a PNG image (736x576; the BBC's pixels are a little narrower than square).",
+            description: "The screen as a PNG image (736x576; the BBC's pixels are a little narrower than square). Straight after restore_snapshot, load_state or power_cycle, before the machine has drawn a frame, it's the frame the machine is about to draw (the machine itself doesn't move).",
             inputSchema: schema()
         )) { context, _ in
             let png = try context.perform { session -> Data? in
-                Screenshot.png(session.tv)
+                Screenshot.png(session.tv.frameCount > 0 ? session.tv : try nextFrame(of: session.machine))
             }
             guard let png else { throw ToolFailure("no frame yet") }
             return ToolResult(content: [.png(png)], isError: false)

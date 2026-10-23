@@ -144,8 +144,8 @@ public final class M6502 {
 
     // MARK: Control
 
-    /// Starts the reset sequence. The registers other than PC are left as
-    /// they are, as on the real chip.
+    /// Starts the reset sequence. It sets I (and on CMOS clears D); the other
+    /// registers are left as they are, as on the real chip.
     public func reset() {
         d1x1 = true
         state = .Reset_0

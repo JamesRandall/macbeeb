@@ -25,7 +25,7 @@ struct Cycle {
     /// Write source or read destination - see `Emitter.whatSource/whatDest`.
     var what: String?
     /// Action after the access: nil, call, maybeCall, callBCDCMOS,
-    /// maybeCallBCDCMOS, jmp.
+    /// maybeCallBCDCMOS, jmp, reset.
     var action: String?
 }
 
@@ -111,7 +111,7 @@ func allSequences() -> [BusSequence] {
 
     // Special cases.
     G("JSR", "JSR", [Ri("pc++", "adl"), Ru("sp", "data!"), W("sp--", "pch"), W("sp--", "pcl"), Ri("pc++", "adh", "jmp")])
-    G("Reset", "Reset", [Ri("pc", "data!"), Rd("sp--", "pch"), Rd("sp--", "pcl"), Rd("sp--", "data"), Ra("resl", "pcl"), Ra("resh", "pch")])
+    G("Reset", "Reset", [Ri("pc", "data!"), Rd("sp--", "pch"), Rd("sp--", "pcl"), Rd("sp--", "data", "reset"), Ra("resl", "pcl"), Ra("resh", "pch")])
     G("RTI", "RTI", [Ri("pc", "data!"), Rd("sp++", "data"), Rd("sp++", "p"), Rd("sp++", "pcl"), Rd("sp", "pch")])
     G("JMP_ABS", "JMP absolute", [Ri("pc++", "adl"), Ri("pc++", "adh", "jmp")])
     G("JMP_IND", "JMP indirect", [Ri("pc++", "ial"), Ri("pc++", "iah"), Ra("ia", "pcl"), Ra("ia+1(nocarry)", "pch")])
