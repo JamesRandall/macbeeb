@@ -116,6 +116,45 @@ ring, and it's the one you hear. ⌥⌘] and ⌥⌘[ move the keyboard to the ne
 or previous machine. **Show** chooses which machines have tiles, and
 **Columns** how they're laid out.
 
+## Traffic
+
+Click **Traffic** in the toolbar to see every frame that's crossed the
+network, newest last. Econet sends everything as a **four-way handshake**:
+a **scout** asking to send (who it's for, a control byte and a port), an
+**acknowledgement**, the **data**, and another acknowledgement. The
+Traffic view reads frames that way, numbers each transaction, and names the
+well-known ports (the file server's, the printer server's).
+
+- Choose a frame to see its bytes and what they mean. The machines it's
+  between are selected on the canvas too.
+- **Station**, **Problems only** (collided or abandoned frames) and the
+  search box (text or hex) narrow the list.
+- **Recording** stops and starts the capture; **Clear** empties it. The
+  last 4,096 frames are kept.
+- **Export…** saves the frames as JSON: MacBeeb's own format (`format`,
+  `network`, `cyclesPerSecond`, and `frames`, each with its `start` and
+  `end` in 2MHz cycles, `transmitter`, `bytes`, `status`, `kind` and
+  `transaction`). It isn't PCAP.
+
+## AI agents (MCP)
+
+Agents connected to MacBeeb (**MCP ▸ Connect an AI Agent…**) can work with
+networks too:
+
+- Every tool takes a `machine`: a station's name ("BBC 2"), number ("2") or
+  id, or "Network/name" when two networks have one alike. Without it, a
+  tool drives the standalone window's machine, as before. A tool that runs
+  a station (such as `run_command`) runs its whole network with it, so the
+  other machines don't miss what it sends.
+- `list_machines`, `network_status`, `network_power` (on, off, cold boot,
+  Break, suspend, resume, start a server), `network_pause`,
+  `network_trace` (frames, decoded, with `after` for polling),
+  `econet_status` (a station's ADLC registers and NMI state),
+  `print_jobs`, `print_job` and `export_print_job_pdf`, and
+  `network_create` and `network_open`.
+- Errors say what's wrong: `not_found:`, `ambiguous_machine:`,
+  `powered_off:`, `no_machine:`.
+
 ## The inspector
 
 With nothing selected, the inspector shows the network: its name, how many

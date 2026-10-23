@@ -113,6 +113,10 @@ struct TemplateCard: View {
 /// Opening networks, from the menus and the start page.
 @MainActor
 enum NetworkStudioCommands {
+    /// Posted (with the package's URL) to have a network's window opened,
+    /// by whichever window can.
+    static let openRequest = Notification.Name("MacBeebOpenNetworkWindow")
+
     static func open(_ url: URL, openWindow: OpenWindowAction) {
         openWindow(id: NetworkStudioWindow.windowID, value: url.standardizedFileURL)
     }

@@ -126,6 +126,8 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
     /// Whether a `NetworkHost` drives this machine (so it has no thread of
     /// its own).
     public internal(set) var isNetworkStation = false
+    /// The network that runs it, if it's a station.
+    weak var network: NetworkHost?
     /// Where what the machine prints goes: a printer on its printer port,
     /// whose jobs go here (on the emulation thread). Set before it starts.
     public var printJobs: (@Sendable (PrintJob) -> Void)?
@@ -366,7 +368,7 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
                 }
             }
 
-            session.advance(cycles: sliceCycles)
+            session.step(cycles: sliceCycles)
         }
     }
 
@@ -477,7 +479,19 @@ final class HostSession: MachineSession {
         machine.discDriveSounds = host.discDriveSoundsOn ? host.discDriveSounds?(machine.model) : nil
     }
 
+    /// Runs the machine: a tool asking for time. A network's station can't
+    /// run alone (the others would miss what it sends), so its whole
+    /// network runs, in lockstep.
     func advance(cycles: Int) {
+        if let network = host.network {
+            network.runNested(cycles: cycles, caller: host)
+        } else {
+            step(cycles: cycles)
+        }
+    }
+
+    /// Runs this machine alone (its driver's slice, or a network's quantum).
+    func step(cycles: Int) {
         // Slices of 1ms keep recording, the display and the cycle count
         // current during long runs.
         var remaining = cycles

@@ -383,3 +383,29 @@ Nothing is asserted on internal return values alone.
    that standalone windows and existing commands are unchanged.
 7. **The printer server's job boundaries**: depend on how PS signals the
    end of a job; observe first, then define (§2.4).
+
+## 6. As built (2026-10-23)
+
+Phases 1–4 are done (commits from 57a1908). Where the build differs from
+the plan above:
+
+- **No separate StationHost class.** `EmulatorHost` itself is the station:
+  its command handling and publishing are split from its thread, and a
+  `NetworkHost` drives many of them (`isNetworkStation`). A tool that asks
+  a station for time (`MachineSession.advance`) runs the whole network in
+  lockstep (`NetworkHost.runNested`), never the station alone.
+- **The quantum is fixed at 32 cycles with Econet** (no adaptive long
+  quanta): a variable line delay breaks the handshake's idle window. See
+  econet-hardware-notes.md.
+- **The printer server is MacBeeb's own BASIC program** (`PrinterServer`),
+  run on the printer server's BBC through its own DNFS, because Acorn's
+  printer server software isn't available. The protocol follows
+  PiEconetBridge's printer server (GPLv3) and DNFS's traffic.
+- **Documents autosave** in Documents ▸ MacBeeb Networks rather than using
+  `DocumentGroup` (which would have taken over File ▸ New and ⌘N).
+- **The trace** is assembled from line events (`EconetTrace`, 4,096 frames)
+  and exported as MacBeeb's own JSON.
+
+Not done (phase 5 and later): a host-directory file server, a native
+printer service, ESC/P graphics, Level 2 server tests, whole-network save
+states, a B+ NFS ROM, parallel scheduling, and remote networking.

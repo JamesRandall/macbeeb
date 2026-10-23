@@ -30,6 +30,7 @@ cp -R "$BIN/macbeeb_BeebLibrary.bundle" "$APP/Contents/Resources/"
 # The Hardware Expansion Guide (Help menu), from docs/.
 mkdir -p "$APP/Contents/Resources/Guides"
 cp -R docs/hardware-expansions "$APP/Contents/Resources/Guides/"
+cp docs/network-studio/README.md "$APP/Contents/Resources/Guides/hardware-expansions/network-studio.md"
 # The icon: Icon Composer's AppIcon.icon (drawn by Tools/icon/draw.py),
 # compiled to Assets.car for macOS 26 and AppIcon.icns.
 xcrun actool Resources/AppIcon.icon --compile "$APP/Contents/Resources" --platform macosx \

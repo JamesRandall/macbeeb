@@ -136,6 +136,7 @@ public final class NetworkHost: @unchecked Sendable {
             host.printJobs = printer.jobs
         }
         host.isNetworkStation = true
+        host.network = self
         host.keepsRewind = keepsRewind
         commands.withLock { $0.append(.add(id, host)) }
         return host
@@ -224,21 +225,25 @@ public final class NetworkHost: @unchecked Sendable {
     }
 
     /// Runs one quantum: every station that's ready runs `quantum` cycles,
-    /// in turn. Returns whether anything ran.
+    /// in turn. Returns whether anything ran. `caller`: a station whose
+    /// tool asked for time, which runs (with the network) even if it's held
+    /// or the network's paused.
     @discardableResult
-    func runQuantum() -> Bool {
+    func runQuantum(caller: EmulatorHost? = nil) -> Bool {
         runCommands()
         var ready: [EmulatorHost] = []
         var stopped: Set<UUID> = []
         for station in stations {
-            station.host.runCommands()
-            if station.host.readyToRun() {
+            if station.host !== caller {
+                station.host.runCommands()
+            }
+            if station.host === caller || station.host.readyToRun() {
                 ready.append(station.host)
             } else if station.host.debugStop != nil {
                 stopped.insert(station.id)
             }
         }
-        let paused = isPaused || (!stopped.isEmpty && pausesOnBreakpoint)
+        let paused = (caller == nil && isPaused) || (!stopped.isEmpty && pausesOnBreakpoint)
         latestStatus.withLock {
             $0.paused = paused
             $0.stoppedStations = stopped
@@ -257,7 +262,7 @@ public final class NetworkHost: @unchecked Sendable {
             bus.beginQuantum { running.contains(ObjectIdentifier($0)) }
         }
         for host in ready {
-            host.drivingSession().advance(cycles: quantum)
+            host.drivingSession().step(cycles: quantum)
         }
         bus?.endQuantum(cycles: quantum)
         networkCycles += UInt64(quantum)
@@ -325,6 +330,21 @@ public final class NetworkHost: @unchecked Sendable {
                 Thread.sleep(forTimeInterval: 0.005)
                 resetWallClock()
             }
+        }
+    }
+
+    /// A station's tool wants `cycles` of time (on the network's thread,
+    /// in the middle of the station's commands): the network runs that
+    /// long, as fast as it can. If it can't (another station's stopped in
+    /// its debugger, holding the network), the caller runs on alone.
+    func runNested(cycles: Int, caller: EmulatorHost) {
+        var left = cycles
+        while left > 0 {
+            guard runQuantum(caller: caller) else {
+                caller.drivingSession().step(cycles: left)
+                return
+            }
+            left -= quantum
         }
     }
 

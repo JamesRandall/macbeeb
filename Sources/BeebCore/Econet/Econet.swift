@@ -167,4 +167,31 @@ public final class Econet {
         outbox.removeAll()
         setLine(clock: false, bitTime: adlc.bitTime, collision: false, now: now)
     }
+
+    // MARK: Reporting
+
+    /// The module's state, for agents and the inspector.
+    public func statusReport() -> String {
+        let a = adlc
+        func bits(_ value: UInt8, _ names: [String]) -> String {
+            let set = (0..<8).filter { value & (1 << $0) != 0 }.map { names[$0] }
+            return String(format: "&%02X", value) + (set.isEmpty ? "" : " (" + set.joined(separator: " ") + ")")
+        }
+        var lines = [
+            "station: \(station)",
+            "NMI: \(nmiEnabled ? "enabled (INTON)" : "disabled (INTOFF)"), \(nmiCount) raised",
+            "line: \(bus == nil ? "not plugged in" : "plugged in"), " + (a.noClock ? "no clock (/DCD high)" : "clock, bit time \(a.bitTime) cycles"),
+            "CR1 " + bits(a.cr1, ["AC", "RIE", "TIE", "RDSR", "TDSR", "discontinue", "RX reset", "TX reset"]),
+            "CR2 " + bits(a.cr2, ["PSE", "2-byte", "flag idle", "FC", "TX last", "clear RX", "clear TX", "RTS"]),
+            "CR3 " + bits(a.cr3, ["LCF", "CEX", "AEX", "01/11 idle", "FDSE", "loop", "test", "DTR"]),
+            "CR4 " + bits(a.cr4, ["double flag", "TX len", "TX len", "RX len", "RX len", "abort", "abort ext", "NRZ"]),
+            "SR1 " + bits(a.sr1, ["RDA", "S2RQ", "loop", "FD", "CTS", "TU", "TDRA/FC", "IRQ"]),
+            "SR2 " + bits(a.sr2, ["AP", "FV", "idle", "abort", "error", "DCD", "overrun", "RDA"]),
+            "/CTS: \(a.notClearToSend ? "high (mustn't send)" : "low (clear to send)"), RTS out: \(a.rtsOut ? "on" : "off")",
+            "transmitter: \(a.txState), FIFO \(a.txFIFO.map { String(format: "%02X", $0.byte) + ($0.last ? "(last)" : "") })",
+            "receiver: \(a.rxState), FIFO \(a.rxFIFO.map { String(format: "%02X", $0.byte) + ($0.address ? "(address)" : "") + ($0.end != nil ? "(end)" : "") })",
+        ]
+        lines.append("IRQ: \(a.irq ? "asserted" : "off")")
+        return lines.joined(separator: "\n")
+    }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import BeebAgentKit
 import BeebNetwork
 import SwiftUI
 
@@ -8,7 +9,50 @@ import SwiftUI
 /// checking the studio end to end without looking at it.
 @MainActor
 enum NetworkSelfTest {
-    static var path: String? { UserDefaults.standard.string(forKey: "MacBeebNetworkSelfTest") }
+    static var path: String? {
+        UserDefaults.standard.string(forKey: "MacBeebNetworkSelfTest") ?? UserDefaults.standard.string(forKey: "MacBeebMCPSelfTest")
+    }
+
+    /// `-MacBeebMCPSelfTest /path/to/transcript.txt`: drives a network
+    /// through the MCP tools, as an agent would (in-process, not over the
+    /// socket), writes what they said, and quits.
+    static func runMCPIfRequested() -> Bool {
+        guard let path = UserDefaults.standard.string(forKey: "MacBeebMCPSelfTest") else { return false }
+        let tools = AgentTools(defaultContext: { nil }, directory: AppMachineDirectory())
+        Thread.detachNewThread {
+            var transcript = ""
+            func call(_ name: String, _ arguments: JSONValue = [:]) -> String {
+                let result = tools.call(name, arguments: arguments)
+                let text = result.content.compactMap { if case .text(let t) = $0 { t } else { nil } }.joined()
+                transcript += "> \(name) \(arguments)\n\(result.isError ? "ERROR " : "")\(text)\n\n"
+                return text
+            }
+            _ = call("network_create", ["template": "school_classroom", "name": .string("MCP Test \(Int(Date().timeIntervalSince1970))")])
+            _ = call("list_machines")
+            // The file server starts itself.
+            Thread.sleep(forTimeInterval: 15)
+            _ = call("type_text", ["machine": "BBC 1", "text": "*NET\n10 PRINT \"AGENT\"\nSAVE \"AGENT\"\n"])
+            Thread.sleep(forTimeInterval: 6)
+            _ = call("type_text", ["machine": "1", "text": "*FX5,4\nVDU 2:PRINT \"PRINTED BY AN AGENT\":VDU 3\n"])
+            Thread.sleep(forTimeInterval: 10)
+            _ = call("network_status")
+            _ = call("network_trace", ["limit": 12])
+            _ = call("econet_status", ["machine": "File Server"])
+            _ = call("screenshot", ["machine": "BBC 9"])
+            let jobs = call("print_jobs")
+            if let id = jobs.split(separator: ":").first.map(String.init) {
+                _ = call("print_job", ["id": .string(id)])
+                _ = call("export_print_job_pdf", ["id": .string(id)])
+            }
+            _ = call("network_power", ["machine": "File Server", "action": "off"])
+            _ = call("type_text", ["machine": "BBC 2", "text": "*NET\n*CAT\n"])
+            Thread.sleep(forTimeInterval: 8)
+            _ = call("read_screen_text", ["machine": "BBC 2"])
+            try? transcript.write(toFile: path, atomically: true, encoding: .utf8)
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+        }
+        return true
+    }
 
     /// Shows the studio in a window of its own (no scene needed, so it
     /// works whatever windows the app restores).

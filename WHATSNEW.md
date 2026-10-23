@@ -11,6 +11,11 @@ won't build a release without one.
 
 ## 1.5
 
+- **Network Studio:** File ▸ New Network… (⇧⌘N) builds a network of BBC Micros, each running for real, side by side: start from a template such as **School Classroom** (four BBCs, a file server and a printer server), then arrange machines on a canvas with their screens live, use them in tiles or their own windows, and save the network to open again. See Help ▸ Network Studio Guide.
+- **Econet:** the machines are linked by an emulated Econet: the MC6854 chip, the clock and the shared line, with Acorn's own network software (DNFS on the Model B, ANFS on the Master) and Acorn's Level 1 file server. On any machine, `*NET`, then `SAVE` on one and `LOAD` on another.
+- **Printing:** every BBC has a printer on its printer port, and a network has a printer server: `*FX5,4` and `VDU 2` print across the network. Window ▸ Print Centre (⌥⌘P) shows each job on paper (clean or dot matrix, A4, Letter or fanfold), and exports PDFs.
+- **Traffic:** the studio's Traffic view shows every frame on the network, read as Econet's four-way handshake.
+- **For AI agents (MCP):** every tool takes a `machine` (a network station), and there are tools for networks, their traffic, a station's Econet chip and print jobs.
 - **Hardware expansions:** Machine ▸ Hardware Expansions… (⌥⌘E) fits expansions to the Model B: Watford Electronics' 32K Shadow RAM board or the Aries B32 (with or without the B12 ROM board) in the 6502's socket, and a 16K or 32K sideways RAM module in a ROM socket, alone or with a board. The window shows the board's memory to scale, the sixteen sideways banks as the BBC uses them, and for shadow RAM, what programs and the screen each see. Load ROM images into sideways RAM from the Mac, or from the BBC with DFS 2.26's `*SRLOAD` or the Aries `*RLOAD`.
 - **The boards' own ROMs:** the Watford board comes with Shadow RAM OS 2.40 and the Aries B32 with ARIES-B32 1.00, so their commands work as the manuals describe (`*HELP RAMSTATUS`, `*XON 16`, `*XSTATUS`, `*RWRITE`), and the Aries' own `*XTEST` passes.
 - **VideoNuLA:** on any model, each of the sixteen colours can be any of 4,096. Turn it on under Video in the same window; the window shows the colours as programs set them.

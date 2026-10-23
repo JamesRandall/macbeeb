@@ -33,17 +33,46 @@ struct ToolFailure: Error {
 /// The tools an agent uses to drive a BBC Micro. All time is emulated time,
 /// so waits are exact and run as fast as the host can manage.
 public final class AgentTools: Sendable {
-    let context: MachineContext
+    /// The machine a call without `machine` drives, found when it's made.
+    let defaultContext: @Sendable () -> MachineContext?
+    /// The app's other machines (Network Studio stations), if any.
+    let directory: MachineDirectory?
     /// Named in-memory snapshots, for quick experiments.
     static let slots = Mutex<[String: SaveStateFile]>([:])
 
     public init(context: MachineContext) {
-        self.context = context
+        defaultContext = { context }
+        directory = nil
+    }
+
+    public init(defaultContext: @escaping @Sendable () -> MachineContext?, directory: MachineDirectory?) {
+        self.defaultContext = defaultContext
+        self.directory = directory
     }
 
     public func call(_ name: String, arguments: JSONValue) -> ToolResult {
+        if Self.networkToolNames.contains(name) {
+            guard let directory else {
+                return .error("not_available: \(name) works with MacBeeb's Network Studio; connect to the app (macbeeb-mcp --attach)")
+            }
+            return directory.networkTool(name, arguments: arguments)
+        }
         guard let tool = Self.tools.first(where: { $0.definition.name == name }) else {
             return .error("unknown tool \(name)")
+        }
+        let context: MachineContext
+        if let machine = arguments["machine"]?.stringValue {
+            guard let directory else {
+                return .error("not_found: there's only the one machine here; leave `machine` out")
+            }
+            switch directory.context(for: machine) {
+            case .success(let found): context = found
+            case .failure(let error): return .error(error.message)
+            }
+        } else if let standalone = defaultContext() {
+            context = standalone
+        } else {
+            return .error("no_machine: there's no standalone machine window; name a station with `machine` (list_machines)")
         }
         do {
             return try tool.run(context, arguments)
@@ -54,7 +83,18 @@ public final class AgentTools: Sendable {
         }
     }
 
-    public static var definitions: [ToolDefinition] { tools.map(\.definition) }
+    /// Every tool: each machine tool takes `machine` too.
+    public static var definitions: [ToolDefinition] {
+        tools.map { tool in
+            var definition = tool.definition
+            if case .object(var schema) = definition.inputSchema, case .object(var properties)? = schema["properties"] {
+                properties["machine"] = machineProperty
+                schema["properties"] = .object(properties)
+                definition.inputSchema = .object(schema)
+            }
+            return definition
+        } + networkToolDefinitions
+    }
 
     struct Tool: Sendable {
         var definition: ToolDefinition
@@ -141,7 +181,7 @@ public final class AgentTools: Sendable {
         return (notes.isEmpty ? "" : notes + "\n") + "[t=\(time)s] screen:\n" + lines.joined(separator: "\n")
     }
 
-    static let tools: [Tool] = coreTools + debugTools + hardwareTools + nulaTools
+    static let tools: [Tool] = coreTools + debugTools + hardwareTools + nulaTools + econetTools
 
     static let coreTools: [Tool] = [
         Tool(definition: ToolDefinition(

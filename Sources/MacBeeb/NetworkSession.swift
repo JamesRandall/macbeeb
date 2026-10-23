@@ -79,6 +79,9 @@ final class NetworkSession: StationOwner {
         }
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
         RecentNetworks.shared.add(url)
+        // Agents can reach the network's machines even with no standalone
+        // window open.
+        MachineController.startAgentServerIfNeeded()
     }
 
     /// Closes the network: its machines stop, and it's saved.

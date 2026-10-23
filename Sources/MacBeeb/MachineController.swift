@@ -283,26 +283,48 @@ final class MachineController {
     /// Whether this is that machine.
     private(set) var servesAgents = false
 
+    /// The standalone machine agents drive when they don't name one.
+    static weak var agentDefault: MachineController?
+
     private func startAgentServer() {
+        if Self.agentDefault == nil {
+            Self.agentDefault = self
+            startDebugAdapter()
+        }
+        if Self.startAgentServerIfNeeded() && Self.agentDefault === self {
+            servesAgents = true
+        }
+    }
+
+    /// Starts the socket `macbeeb-mcp --attach` talks to, once: for the
+    /// first standalone window, or a network if that comes first. Returns
+    /// whether it's serving.
+    @discardableResult
+    static func startAgentServerIfNeeded() -> Bool {
         // Self-tests leave a running copy's servers alone.
-        guard Self.agentServer == nil, UserDefaults.standard.string(forKey: "MacBeebSelfTest") == nil else { return }
-        let server = AgentSocketServer(tools: LoggedTools(tools: AgentTools(context: host)))
-        let host = host
+        guard agentServer == nil, UserDefaults.standard.string(forKey: "MacBeebSelfTest") == nil,
+              NetworkSelfTest.path == nil else { return agentServer != nil }
+        let tools = AgentTools(defaultContext: {
+            DispatchQueue.main.sync { MainActor.assumeIsolated { MachineController.agentDefault?.host } }
+        }, directory: AppMachineDirectory())
+        let server = AgentSocketServer(tools: LoggedTools(tools: tools))
         server.onConnection = { connected in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     AgentLog.shared.add(connected ? .connected : .disconnected)
-                    // The last agent's gone: don't leave the machine held.
+                    // The last agent's gone: don't leave machines held.
                     if !connected && AgentLog.shared.connections == 0 {
-                        host.setHeldForAgent(false)
+                        for controller in MachineController.all.values {
+                            controller.host.setHeldForAgent(false)
+                        }
                     }
                 }
             }
         }
         do {
             try server.start()
-            Self.agentServer = server
-            servesAgents = true
+            agentServer = server
+            agentDefault?.servesAgents = true
             AgentLog.shared.serverState = .serving
         } catch AgentSocketServer.StartError.inUse {
             AgentLog.shared.serverState = .inUse
@@ -310,7 +332,7 @@ final class MachineController {
             NSLog("MacBeeb: no agent socket: \(error)")
             AgentLog.shared.serverState = .failed(error.localizedDescription)
         }
-        startDebugAdapter()
+        return agentServer != nil
     }
 
     /// The first window's machine is the one DAP clients (VS Code) debug.

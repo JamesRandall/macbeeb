@@ -443,6 +443,11 @@ struct MachineScreen: View {
             .onOpenURL { url in
                 _ = open(url)
             }
+            .onReceive(NotificationCenter.default.publisher(for: NetworkStudioCommands.openRequest)) { note in
+                if let url = note.object as? URL, MachineController.agentDefault === machine {
+                    NetworkStudioCommands.open(url, openWindow: openWindow)
+                }
+            }
             .onChange(of: machine.debuggerRequested) {
                 if machine.debuggerRequested {
                     machine.debuggerRequested = false
@@ -553,7 +558,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = Updates.shared
         // Picks up downloads awaited before the app last quit.
         _ = ClassicsLibrary.shared
-        NetworkSelfTest.runIfRequested()
+        if !NetworkSelfTest.runMCPIfRequested() {
+            NetworkSelfTest.runIfRequested()
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

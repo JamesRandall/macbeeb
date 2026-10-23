@@ -114,6 +114,21 @@ struct NetworkHostTests {
         #expect(try hosts[0].perform { $0.machine.cycles } == before)
     }
 
+    /// A tool asking a station for time (as run_command does) runs the
+    /// whole network, in lockstep, so the others don't miss what it sends.
+    @Test func toolTimeRunsTheWholeNetwork() throws {
+        let (network, hosts) = modelBNetwork(2)
+        defer { network.stop() }
+        network.setPaused(true)
+        #expect(waitFor { network.status.paused })
+        let before = try hosts.map { host in try host.perform { $0.machine.cycles } }
+        try hosts[0].perform { $0.advance(seconds: 1) }
+        let after = try hosts.map { host in try host.perform { $0.machine.cycles } }
+        #expect(after[0] - before[0] >= 2_000_000)
+        #expect(after[1] - before[1] >= 2_000_000, "\(before) \(after)")
+        #expect(abs(Int64(after[0] - before[0]) - Int64(after[1] - before[1])) <= Int64(network.quantum))
+    }
+
     /// Removing a station stops it; the rest carry on.
     @Test func removeStation() throws {
         let network = NetworkHost()

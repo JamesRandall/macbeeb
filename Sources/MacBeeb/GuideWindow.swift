@@ -89,6 +89,7 @@ enum Guide {
         ("aries-b32-b12", "square.3.layers.3d"),
         ("videonula", "paintpalette"),
         ("developer-reference", "chevron.left.forwardslash.chevron.right"),
+        ("network-studio", "point.3.connected.trianglepath.dotted"),
     ]
 
     static var folder: URL? {
@@ -111,7 +112,11 @@ enum Guide {
     }
 
     static func text(_ id: String) -> String? {
-        guard let url = folder?.appendingPathComponent("\(id).md") else { return nil }
+        guard var url = folder?.appendingPathComponent("\(id).md") else { return nil }
+        // The Network Studio's guide lives in its own folder in the source.
+        if id == "network-studio" && !FileManager.default.fileExists(atPath: url.path) {
+            url = folder!.deletingLastPathComponent().appendingPathComponent("network-studio/README.md")
+        }
         return try? String(contentsOf: url, encoding: .utf8)
     }
 
@@ -332,5 +337,6 @@ struct GuideMenuItem: View {
 
     var body: some View {
         Button("Hardware Expansion Guide") { openWindow(id: GuideWindow.windowID, value: "README") }
+        Button("Network Studio Guide") { openWindow(id: GuideWindow.windowID, value: "network-studio") }
     }
 }
