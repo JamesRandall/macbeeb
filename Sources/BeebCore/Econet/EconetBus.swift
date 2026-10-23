@@ -75,11 +75,24 @@ public final class EconetBus {
 
     public var stations: [UInt8] { ports.map(\.econet.station) }
 
+    /// Which stations will run (the others aren't listening), until it's
+    /// said again.
+    public func setRunning(_ running: (Econet) -> Bool) {
+        for port in ports {
+            port.running = running(port.econet)
+        }
+    }
+
     /// Before the stations run: which of them will (the others aren't
     /// listening), and the line's state for each.
     public func beginQuantum(running: (Econet) -> Bool) {
+        setRunning(running)
+        beginQuantum()
+    }
+
+    /// Before the stations run: the line's state for each that will.
+    public func beginQuantum() {
         for port in ports {
-            port.running = running(port.econet)
             guard port.running else { continue }
             let local = port.now()
             port.offset = Int64(bitPattern: time) - Int64(bitPattern: local)

@@ -27,8 +27,11 @@ final class LockstepWorkers: @unchecked Sendable {
         var thread: Thread?
     }
 
-    /// Spins before parking: about 50µs.
-    static let spins = 20_000
+    /// How long a worker spins for the next round before parking: long
+    /// enough that a busy network's workers never park (a park and a wake
+    /// cost more than a round's work), short enough that an idle one's
+    /// soon stop using their cores.
+    static let spinNanoseconds: UInt64 = 300_000
 
     var count: Int { workers.count }
 
@@ -99,9 +102,14 @@ final class LockstepWorkers: @unchecked Sendable {
         while true {
             // Wait for the next round: spin, then park.
             var spins = 0
+            var spinStart: UInt64 = 0
             while generation.load(ordering: .acquiring) == seen {
-                spins += 1
-                if spins < Self.spins { continue }
+                spins &+= 1
+                // (The clock's read only every 1,024 turns.)
+                if spins & 1023 != 0 { continue }
+                let now = DispatchTime.now().uptimeNanoseconds
+                if spinStart == 0 { spinStart = now }
+                if now - spinStart < Self.spinNanoseconds { continue }
                 worker.parked.store(true, ordering: .sequentiallyConsistent)
                 if generation.load(ordering: .sequentiallyConsistent) != seen {
                     // A round started as we parked: if the network saw us
@@ -113,6 +121,7 @@ final class LockstepWorkers: @unchecked Sendable {
                 }
                 worker.wake.wait()
                 spins = 0
+                spinStart = 0
             }
             seen = generation.load(ordering: .acquiring)
             if stopping.load(ordering: .acquiring) {
@@ -153,6 +162,10 @@ extension EmulatorHost {
             stepCost = stepCost == 0 ? spent : stepCost * 0.9 + spent * 0.1
         } else {
             drivingSession().step(cycles: cycles)
+        }
+        // Stopped by its debugger in that quantum: the network should look.
+        if drivingSession().machine.isStoppedByDebugger {
+            needsAttention.store(true, ordering: .releasing)
         }
     }
 }

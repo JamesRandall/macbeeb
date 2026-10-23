@@ -82,13 +82,27 @@ the hardware and no software yet.
   network's machines are shared among extra threads (balanced by measured
   cost), each running its machines through the quantum, then meeting the
   network's thread (a spin barrier: quanta are far too short to sleep
-  between; workers park after about 50µs idle). The line's delivery stays
+  between; workers spin up to 300µs, then park). The line's delivery stays
   on the network's thread, so results don't depend on the threads (a test
-  checks). Threads are added a second at a time while the network's short
-  of real time and never rests, kept only if they help by 5%. With Econet,
-  16 Model Bs: 0.9× on 1 thread, 1.4× on 2, 1.8× on 4 (M-series, 12
-  performance cores). Without it (2,000-cycle quanta) it scales nearly
-  linearly: 3.3× on 4.
+  checks). The network's thread looks at a station's commands and state
+  only when it's flagged (a command, being held, a debugger stop); otherwise
+  it reuses the ready list, as the serial part is what limits scaling. A
+  thread is added a second at a time while the network's short of real time
+  and never rests, kept if machine time a second rises 5% (judged on machine
+  time, so adding machines during a trial doesn't fail it).
+  Measured (M-series, 12 performance cores), with Econet:
+
+  | Machines | 1 thread | 2 | 4 | 6 |
+  | --- | --- | --- | --- | --- |
+  | 16 Model Bs | 0.9× | 1.4× | 1.8× | |
+  | 37 (31 Masters) | 0.4× | 0.7× | 1.1× | 1.3× |
+
+  (A Master costs the same as a Model B.) Eight threads is slower than six
+  at 37 machines; the trials find the best.
+- **Frames**: the TV keeps two frame buffers and alternates, so publishing
+  a frame doesn't make the next one copy-on-write (1.7MB, a large
+  allocation, every frame, which across many machines queued on the
+  kernel's virtual memory).
 - **Collisions**: two stations' byte-times overlapping on the line spoil
   both (delivered as garbage, an error at the receiver) and raise both
   transmitters' /CTS until they're cleared.

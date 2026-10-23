@@ -43,6 +43,10 @@ public final class TVOutput {
 
     /// The last complete frame, copied at the start of each vertical retrace.
     public private(set) var lastFrame: [UInt32]
+    /// The frame before, whose buffer the next frame reuses: once whoever
+    /// was shown it has let it go, it's written in place, rather than a
+    /// fresh 1.7MB copy being made (copy-on-write) every frame.
+    private var spare: [UInt32] = []
     /// Incremented each time `lastFrame` is updated.
     public private(set) var frameCount = 0
 
@@ -126,9 +130,16 @@ public final class TVOutput {
         switch state {
         case .verticalRetrace:
             let source = pixels
-            lastFrame.withUnsafeMutableBufferPointer {
+            var frame = spare
+            spare = []
+            if frame.count != TVOutput.width * TVOutput.height {
+                frame = [UInt32](repeating: 0, count: TVOutput.width * TVOutput.height)
+            }
+            frame.withUnsafeMutableBufferPointer {
                 $0.baseAddress!.update(from: source, count: $0.count)
             }
+            spare = lastFrame
+            lastFrame = frame
             frameCount += 1
             if recordsMetadata, let metadata {
                 lastMetadata = Array(UnsafeBufferPointer(start: metadata, count: Self.metadataWidth * Self.metadataHeight))

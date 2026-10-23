@@ -84,13 +84,20 @@ for (withTV, secondProcessor, rewind) in [(false, false, false), (true, false, f
 
 // Networks of Model Bs on one NetworkHost, each drawing in Mode 2, as fast
 // as they'll go: the network's speed against real time.
-for econet in [false, true] where CommandLine.arguments.contains("network") {
+// BENCH_STATIONS=32,37 for other sizes, BENCH_MASTERS=n makes the first n
+// Master 128s, BENCH_ECONET_ONLY skips the networks without Econet.
+let benchEnvironment = ProcessInfo.processInfo.environment
+for econet in [false, true] where CommandLine.arguments.contains("network")
+    && (econet || benchEnvironment["BENCH_ECONET_ONLY"] == nil) {
     print(econet ? "With Econet (\(EconetBus().delay)-cycle quanta):" : "Without Econet:")
-    for count in [1, 2, 4, 8, 16] {
+    let counts = ProcessInfo.processInfo.environment["BENCH_STATIONS"].map { $0.split(separator: ",").compactMap { Int($0) } } ?? [1, 2, 4, 8, 16]
+    let masters = benchEnvironment["BENCH_MASTERS"].flatMap(Int.init) ?? 0
+    for count in counts {
         let network = NetworkHost(econetClockRate: econet ? .some(200_000) : nil)
         network.setSpeedLimited(false)
         let hosts = (0..<count).map { i in
-            let configuration = BeebROMs.configuration(for: .modelB, econetStation: econet ? i + 1 : nil)
+            let model: BBCMicro.Model = i < masters ? .master128 : .modelB
+            let configuration = BeebROMs.configuration(for: model, econetStation: econet ? i + 1 : nil)
             return network.addStation(id: UUID()) { BBCMicro(configuration: configuration) }
         }
         network.start()
@@ -102,7 +109,7 @@ for econet in [false, true] where CommandLine.arguments.contains("network") {
         Thread.sleep(forTimeInterval: 3.5 + Double(min(count, 12)) * 1.2)
         let status = network.status
         network.stop()
-        print("Network of \(count) Model B".padding(toLength: 28, withPad: " ", startingAt: 0)
+        print("Network of \(count) (\(min(masters, count)) Masters)".padding(toLength: 28, withPad: " ", startingAt: 0)
               + String(format: "%5.1fx real time (%.1fx in machine time) on %d thread%@", status.speed, status.speed * Double(count),
                        status.threads, status.threads == 1 ? "" : "s"))
     }

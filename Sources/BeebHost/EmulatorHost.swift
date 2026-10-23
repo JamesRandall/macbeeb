@@ -97,7 +97,13 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
 
     public func setHeldForAgent(_ held: Bool) {
         heldForAgent.store(held, ordering: .releasing)
+        needsAttention.store(true, ordering: .releasing)
     }
+
+    /// Something may have changed whether it runs (a command, being held,
+    /// a debugger stop): a network looks at it again before its next
+    /// quantum, and otherwise needn't (it checks every 16µs).
+    let needsAttention = Atomic<Bool>(true)
     private let audioActive = Atomic<Bool>(false)
     private let emulatedCycles = Atomic<Int>(0)
     private var thread: Thread?
@@ -132,6 +138,9 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
     /// for sharing stations among threads), and a count for when to.
     var stepCost = 0.0
     var stepCount = 0
+    /// The machine its network has on the line (a power cycle makes a new
+    /// one). The network's thread's.
+    var lineMachine: BBCMicro?
     /// Where what the machine prints goes: a printer on its printer port,
     /// whose jobs go here (on the emulation thread). Set before it starts.
     public var printJobs: (@Sendable (PrintJob) -> Void)?
@@ -158,6 +167,7 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
     public func send(_ command: Command) {
         commands.withLock { $0.append(command) }
         hasCommands.store(true, ordering: .releasing)
+        needsAttention.store(true, ordering: .releasing)
     }
 
     /// Set with each command, so the driving thread needn't take the lock
@@ -217,9 +227,9 @@ public final class EmulatorHost: MachineContext, @unchecked Sendable {
     /// starts again).
     @discardableResult
     func runCommands() -> Bool {
+        guard hasCommands.exchange(false, ordering: .acquiringAndReleasing) else { return false }
         let session = drivingSession()
         var restart = false
-        guard hasCommands.exchange(false, ordering: .acquiringAndReleasing) else { return false }
         for command in commands.withLock({ list -> [Command] in
             defer { list.removeAll() }
             return list

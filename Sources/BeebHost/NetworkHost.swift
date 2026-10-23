@@ -215,6 +215,7 @@ public final class NetworkHost: @unchecked Sendable {
                 stations.append((id, host))
                 stations.sort { $0.id.uuidString < $1.id.uuidString }
                 _ = host.drivingSession()
+                stationsChanged = true
             case .remove(let id):
                 if let station = stations.first(where: { $0.id == id }), let machine = attached[id] {
                     bus?.detach(machine)
@@ -222,6 +223,7 @@ public final class NetworkHost: @unchecked Sendable {
                     _ = station
                 }
                 stations.removeAll { $0.id == id }
+                stationsChanged = true
             case .setClock(let rate):
                 bus?.clockRate = rate
             }
@@ -235,7 +237,21 @@ public final class NetworkHost: @unchecked Sendable {
     @discardableResult
     func runQuantum(caller: EmulatorHost? = nil) -> Bool {
         runCommands()
-        var ready: [EmulatorHost] = []
+        // Only when a station needs looking at (a command, being held, a
+        // debugger stop, a station added or removed) is the ready list made
+        // again: this runs every 16µs.
+        var attention = caller != nil || stationsChanged || caller == nil && isPaused != publishedPaused
+        for station in stations where station.host.needsAttention.exchange(false, ordering: .acquiringAndReleasing) {
+            attention = true
+        }
+        if !attention && !publishedPaused && !readyBuffer.isEmpty {
+            return runReady(readyBuffer)
+        }
+        stationsChanged = false
+        var ready = readyBuffer
+        readyBuffer = []
+        ready.removeAll(keepingCapacity: true)
+        defer { readyBuffer = ready }
         var stopped: Set<UUID> = []
         for station in stations {
             if station.host !== caller {
@@ -245,7 +261,13 @@ public final class NetworkHost: @unchecked Sendable {
                 ready.append(station.host)
             } else if station.host.debugStop != nil {
                 stopped.insert(station.id)
+                // Look again next time: it's to be noticed when it resumes.
+                station.host.needsAttention.store(true, ordering: .releasing)
             }
+        }
+        if caller != nil {
+            // Called from inside a station's commands: look again after.
+            stationsChanged = true
         }
         let paused = (caller == nil && isPaused) || (!stopped.isEmpty && pausesOnBreakpoint)
         if paused != publishedPaused || stopped != publishedStopped {
@@ -257,23 +279,33 @@ public final class NetworkHost: @unchecked Sendable {
             }
         }
         guard !paused else { return false }
+        // Machines change only by commands (a power cycle, a save state):
+        // the line's told here, not every quantum.
         if let bus {
             var machinesChanged = false
             for station in stations {
                 let machine = station.host.drivingSession().machine
-                if attached[station.id] !== machine {
-                    if let old = attached[station.id] { bus.detach(old) }
+                if station.host.lineMachine !== machine {
+                    if let old = station.host.lineMachine { bus.detach(old) }
                     bus.attach(machine)
+                    station.host.lineMachine = machine
                     attached[station.id] = machine
                     machinesChanged = true
                 }
             }
-            if lineHosts.count != ready.count || !zip(lineHosts, ready).allSatisfy({ $0 === $1 }) || machinesChanged {
+            if machinesChanged || lineHosts.count != ready.count || !zip(lineHosts, ready).allSatisfy({ $0 === $1 }) {
                 lineHosts = ready
-                lineRunning = Set(ready.compactMap { $0.drivingSession().machine.econet }.map(ObjectIdentifier.init))
+                let running = Set(ready.compactMap { $0.drivingSession().machine.econet }.map(ObjectIdentifier.init))
+                bus.setRunning { running.contains(ObjectIdentifier($0)) }
             }
-            let running = lineRunning
-            bus.beginQuantum { running.contains(ObjectIdentifier($0)) }
+        }
+        return runReady(ready)
+    }
+
+    /// Runs a quantum of the stations that are ready.
+    private func runReady(_ ready: [EmulatorHost]) -> Bool {
+        if let bus {
+            bus.beginQuantum()
         }
         if workers.count == 0 {
             for host in ready {
@@ -297,15 +329,17 @@ public final class NetworkHost: @unchecked Sendable {
     /// The extra threads, when one isn't enough.
     private let workers = LockstepWorkers()
     private var groups: [[EmulatorHost]] = []
+    private var readyBuffer: [EmulatorHost] = []
+    /// Stations were added or removed (or a tool ran the network from
+    /// inside one's commands): look at them all again.
+    private var stationsChanged = true
     private var publishedPaused = false
     private var publishedStopped: Set<UUID> = []
     /// Which machines are on the line this quantum, while that's unchanged.
     private var lineHosts: [EmulatorHost] = []
-    private var lineRunning: Set<ObjectIdentifier> = []
+
     private var groupedHosts: [EmulatorHost] = []
     private var rebalance = false
-    /// Adding a thread is a trial: the speed before it, to see it helped.
-    private var speedBeforeTrial: Double?
     private var growBlockedUntil = ContinuousClock.now
 
     /// The most threads to use: the performance cores, less one for the
@@ -345,20 +379,30 @@ public final class NetworkHost: @unchecked Sendable {
             return
         }
         let threads = workers.count + 1
+        let machines = stations.count
+        // Machine time a second: what more threads can raise, whatever
+        // else changes.
+        let work = speed * Double(machines)
         rebalance = true
-        if let before = speedBeforeTrial {
-            speedBeforeTrial = nil
-            // The extra thread didn't help (by 5%): back to fewer, for a while.
-            if speed < before * 1.05 {
+        if let trial = trial {
+            self.trial = nil
+            if trial.machines == machines && work < trial.work * 1.05 {
+                // The extra thread didn't help (by 5%): back to fewer, for
+                // a while.
                 workers.resize(to: threads - 2)
                 groupedHosts = []
                 growBlockedUntil = .now + .seconds(10)
+                blockedAtMachines = machines
                 return
             }
+            // It helped, or the machines changed under it (no verdict, so
+            // it stays and the network carries on deciding).
         }
+        // Machines added or removed: a new network, as far as threads go.
+        if machines != blockedAtMachines { growBlockedUntil = .now }
         let falling = (limited ? speed < 0.98 : true) && restedFraction < 0.02
-        if falling && threads < Self.maxThreads && stations.count > threads && ContinuousClock.now >= growBlockedUntil {
-            speedBeforeTrial = speed
+        if falling && threads < Self.maxThreads && machines > threads && ContinuousClock.now >= growBlockedUntil {
+            trial = (work, machines)
             workers.resize(to: threads)
             groupedHosts = []
         } else if threads > 1 && limited && (1 - restedFraction) * Double(threads) / Double(threads - 1) < 0.7 {
@@ -366,6 +410,11 @@ public final class NetworkHost: @unchecked Sendable {
             groupedHosts = []
         }
     }
+
+    /// A thread on trial: the machine time a second before it, and the
+    /// machines then.
+    private var trial: (work: Double, machines: Int)?
+    private var blockedAtMachines = 0
 
     private func threadMain() {
         defer { workers.stop() }
