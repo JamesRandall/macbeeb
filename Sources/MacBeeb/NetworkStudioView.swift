@@ -54,10 +54,12 @@ struct NetworkStudioView: View {
     @State private var showsInspector = true
     @State private var confirmingReset = false
     @State private var confirmingPowerOff = false
+    /// Follows the Distributed Mandelbrot demo once its view's been shown.
+    @State private var mandelbrot = MandelbrotFeed()
     @Environment(\.openWindow) private var openWindow
 
     enum Mode: String, CaseIterable {
-        case canvas, tiles, traffic
+        case canvas, tiles, traffic, mandelbrot
     }
 
     var body: some View {
@@ -70,6 +72,8 @@ struct NetworkStudioView: View {
                     NetworkTiles(session: session, openStation: openStation)
                 case .traffic:
                     NetworkTrafficView(session: session)
+                case .mandelbrot:
+                    NetworkMandelbrotView(session: session, feed: mandelbrot)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -108,7 +112,7 @@ struct NetworkStudioView: View {
         switch mode {
         case .tiles:
             return session.focused.flatMap { session.controllers[$0] }
-        case .canvas, .traffic:
+        case .canvas, .traffic, .mandelbrot:
             guard session.selection.count == 1, let id = session.selection.first else { return nil }
             return session.controllers[id]
         }
@@ -138,6 +142,7 @@ struct NetworkStudioView: View {
                 Label("Canvas", systemImage: "point.3.connected.trianglepath.dotted").tag(Mode.canvas)
                 Label("Tiles", systemImage: "square.grid.2x2").tag(Mode.tiles)
                 Label("Traffic", systemImage: "waveform.path").tag(Mode.traffic)
+                Label("Mandelbrot", systemImage: "square.grid.3x3.square").tag(Mode.mandelbrot)
             }
             .pickerStyle(.segmented)
             .help("Arrange the network, or use its machines side by side")
