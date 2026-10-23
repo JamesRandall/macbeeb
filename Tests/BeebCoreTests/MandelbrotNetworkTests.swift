@@ -35,6 +35,16 @@ extension EconetRig {
         }
     }
 
+    /// Machine `index`'s MODE 2 screen, a logical colour a pixel.
+    func mode2Colours(_ index: Int) -> [UInt8] {
+        (0..<256).flatMap { y in
+            (0..<160).map { x -> UInt8 in
+                let byte = machines[index].peek(UInt16(0x3000 + y / 8 * 640 + x / 2 * 8 + y % 8)) << (x % 2)
+                return (byte >> 7 & 1) << 3 | (byte >> 5 & 1) << 2 | (byte >> 3 & 1) << 1 | (byte >> 1 & 1)
+            }
+        }
+    }
+
     /// What a worker's screen says it's done.
     func tilesDone(_ index: Int) -> Int {
         screen(index).split(separator: "\n").first { $0.contains("Tiles done") }
@@ -116,6 +126,43 @@ struct MandelbrotNetworkTests {
         rig.type(1, " ")
         #expect(rig.run(until: { rig.screen(1).contains("Iterations in all") }), "\(rig.screen(1))")
         #expect(rig.screen(1).contains("320 of 320 tiles"), "\(rig.screen(1))")
+    }
+}
+
+/// MANDEL2: the same render in MODE 2, on a Guide with VideoNuLA.
+struct MandelbrotInColourTests {
+    @Test func drawsInSixteenColoursAndCyclesThem() throws {
+        let rig = EconetRig([(.modelB, 254), (.modelB, 1), (.modelB, 2), (.modelB, 3)], nula: [1])
+        try rig.startMandelbrotServer(0, clients: [1, 2, 3])
+        rig.machines[1].insertDisc(try Disc.fromImage(MandelbrotNetwork.guideDisc(for: .mode2), format: .ssd), drive: 0)
+        rig.machines[1].shiftBreak()
+        for worker in [2, 3] { rig.bootFromNetwork(worker) }
+        #expect(rig.run(until: { [2, 3].allSatisfy { rig.screen($0).contains("Waiting for *CLUSTER") } }))
+        #expect(rig.screen(1).contains("MANDELBROT IN COLOUR") && rig.screen(1).contains("*MANDEL2"), "\(rig.screen(1))")
+        rig.type(1, "*CLUSTER\n")
+        #expect(rig.run(until: { rig.screen(1).contains("2 workers started.") }, seconds: 60), "\(rig.screen(1))")
+        rig.type(1, "*MANDEL2\n")
+        #expect(rig.run(until: { [2, 3].allSatisfy { rig.screen($0).contains("run complete") } }, seconds: 150),
+                "\(rig.screen(2))")
+        // Colour 0 inside the set; outside, 1 + (n - 1) MOD 15.
+        let picture = MandelbrotReference.image().map { $0 == 64 ? UInt8(0) : 1 + ($0 - 1) % 15 }
+        #expect(rig.mode2Colours(1) == picture)
+        // Its colours are NuLA's, straight, and they cycle; the picture stays.
+        let nula = try #require(rig.machines[1].nula)
+        #expect(nula.directPalette && nula.outputPalette[0] == 0)
+        let memory = (0x3000..<0x8000).map { rig.machines[1].peek(UInt16($0)) }
+        var palettes: Set<[UInt16]> = []
+        for _ in 0..<20 {
+            rig.run(seconds: 0.06)
+            let p = rig.machines[1].nula!.outputPalette; palettes.insert((0..<16).map { p[$0] })
+        }
+        #expect(palettes.count >= 10, "the colours don't cycle")
+        #expect(palettes.allSatisfy { $0[0] == 0 && Set($0[1...15]).count == 15 })
+        #expect((0x3000..<0x8000).map { rig.machines[1].peek(UInt16($0)) } == memory)
+        // A key: the summary, and the standard colours again.
+        rig.type(1, " ")
+        #expect(rig.run(until: { rig.screen(1).contains("Iterations in all  580816") }), "\(rig.screen(1))")
+        #expect(rig.machines[1].nula?.directPalette == false)
     }
 }
 

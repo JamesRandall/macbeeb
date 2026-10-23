@@ -3,7 +3,7 @@ import Foundation
 
 /// Ready-made networks to start from.
 public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
-    case econetDemo, distributedMandelbrot, twoBBCs, schoolClassroom, bbcAndMaster, empty
+    case econetDemo, distributedMandelbrot, mandelbrotInColour, twoBBCs, schoolClassroom, bbcAndMaster, empty
 
     public var id: String { rawValue }
 
@@ -11,6 +11,7 @@ public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .econetDemo: "Econet Demo"
         case .distributedMandelbrot: "Distributed Mandelbrot"
+        case .mandelbrotInColour: "Mandelbrot in Colour"
         case .twoBBCs: "Two BBCs"
         case .schoolClassroom: "School Classroom"
         case .bbcAndMaster: "BBC and Master"
@@ -22,6 +23,7 @@ public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .econetDemo: "A classroom ready to try: a welcome screen, and programs on the file server to chat, sign a shared visitors' book and print."
         case .distributedMandelbrot: "Eight BBCs draw the Mandelbrot set between them over Econet, each tile worked out by its own 6502: *CLUSTER, then *MANDEL."
+        case .mandelbrotInColour: "The Distributed Mandelbrot in MODE 2: the Guide's VideoNuLA gives it sixteen colours of 4,096, and cycles them when it's done. *CLUSTER, then *MANDEL2."
         case .twoBBCs: "The smallest network: two Model Bs, stations 1 and 2, and a clock."
         case .schoolClassroom: "Four Model Bs, a file server on station 254 and a printer server on 235, as a 1980s school had."
         case .bbcAndMaster: "A Model B and a Master 128 side by side, sharing a file server."
@@ -33,6 +35,7 @@ public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .econetDemo: "sparkles"
         case .distributedMandelbrot: "square.grid.3x3.fill"
+        case .mandelbrotInColour: "paintpalette"
         case .twoBBCs: "rectangle.on.rectangle"
         case .schoolClassroom: "building.columns"
         case .bbcAndMaster: "rectangle.split.2x1"
@@ -61,9 +64,11 @@ public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
             project.nodes = [welcome, station("BBC 2", 2, -0.5 * s, 0), station("BBC 3", 3, 0.5 * s, 0),
                              station("Master 4", 4, 1.5 * s, 0, setup: MachineSetup(model: .master128)),
                              server(.fileServer, -s / 2, 330), server(.printServer, s / 2, 330), .clock(at: CanvasPoint(x: 1.5 * s + 40, y: 330))]
-        case .distributedMandelbrot:
-            // The Guide, then the workers, along the trunk.
-            var guide = station("Guide", 1, -4 * s, 0)
+        case .distributedMandelbrot, .mandelbrotInColour:
+            // The Guide (with VideoNuLA for the colour one), then the
+            // workers, along the trunk.
+            var guide = station("Guide", 1, -4 * s, 0,
+                                setup: MachineSetup(model: .modelB, videoNuLA: self == .mandelbrotInColour))
             guide.bootsDisc = true
             project.nodes = [guide] + MandelbrotNetwork.workers.map { number in
                 var worker = station("Worker \(number)", number, Double(number - 5) * s, 0)
@@ -94,6 +99,8 @@ public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
             (booted, server) = (("Welcome.ssd", try DemoNetwork.welcomeDisc()), try DemoNetwork.fileServerDisc())
         case .distributedMandelbrot:
             (booted, server) = (("Guide.ssd", try MandelbrotNetwork.guideDisc()), try MandelbrotNetwork.fileServerDisc())
+        case .mandelbrotInColour:
+            (booted, server) = (("Guide.ssd", try MandelbrotNetwork.guideDisc(for: .mode2)), try MandelbrotNetwork.fileServerDisc())
         default:
             return []
         }

@@ -45,7 +45,7 @@ A receiver ignores a frame unless:
 | 3 | READY | station u8. **1 byte** |
 | 4 | ASSIGN | tileId u16, epoch u16, x u8, y u8, width u8, height u8, startReal i16, startImag i16, stepReal i16, stepImag i16, maxIterations u8, numericFormat u8 (1). **18 bytes** |
 | 5 | RESULT | tileId u16, epoch u16, x u8, y u8, width u8, height u8, format u8 (1 = raw 8-bit counts), then width × height counts, row-major from the top. **9 + 128 bytes** |
-| 6 | ACK | tileId u16, epoch u16, status u8 (0 = accepted, 1 = duplicate, already done, 2 = stale epoch or not assigned to you). **5 bytes** |
+| 6 | ACK | tileId u16, epoch u16, status u8 (0 = accepted, also for a resend of the accepted epoch, whose first ACK was lost; 1 = duplicate, done by another assignment; 2 = stale epoch or not assigned to you). **5 bytes** |
 | 8 | COMPLETE | tiles u16 (320). **2 bytes** |
 | 11 | DISCOVER | nonce u32, target u8, launcher u8. **6 bytes** |
 | 12 | BOOT_HELLO | nonce u32, station u8, state u8 (1 = bootstrap waiting, 2 = worker running), bootstrap version u8 (1), worker version u8 (0 from a bootstrap, 1 from a worker). **8 bytes** |

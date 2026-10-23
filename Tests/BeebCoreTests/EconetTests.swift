@@ -13,10 +13,13 @@ final class EconetRig {
     let bus: EconetBus
     var machines: [BBCMicro]
 
-    init(_ stations: [(BBCMicro.Model, Int)], clockRate: Int? = 200_000) {
+    /// `nula`: the machines (by index) with VideoNuLA fitted.
+    init(_ stations: [(BBCMicro.Model, Int)], clockRate: Int? = 200_000, nula: Set<Int> = []) {
         bus = EconetBus(clockRate: clockRate)
-        machines = stations.map { model, station in
-            BBCMicro(configuration: BeebROMs.configuration(for: model, econetStation: station))
+        machines = stations.enumerated().map { index, stationModel in
+            var configuration = BeebROMs.configuration(for: stationModel.0, econetStation: stationModel.1)
+            configuration.videoNuLA = nula.contains(index)
+            return BBCMicro(configuration: configuration)
         }
         for machine in machines { bus.attach(machine) }
     }

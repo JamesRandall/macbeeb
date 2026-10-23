@@ -237,6 +237,7 @@ final class AppMachineDirectory: MachineDirectory, @unchecked Sendable {
         let url: URL
         if name == "network_create" {
             let templates: [String: NetworkTemplate] = ["econet_demo": .econetDemo, "distributed_mandelbrot": .distributedMandelbrot,
+                                                        "mandelbrot_in_colour": .mandelbrotInColour,
                                                         "two_bbcs": .twoBBCs,
                                                         "school_classroom": .schoolClassroom,
                                                         "bbc_and_master": .bbcAndMaster, "empty": .empty]

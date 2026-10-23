@@ -38,11 +38,13 @@ ptr  = &78              \ the frame being built or read
 sptr = &7A              \ pstr's string
 tm   = &7C              \ elapsed's start time
 
-\ Where each program lives (MODE 7's screen is at &7C00, MODE 5's at &5800).
+\ Where each program lives (MODE 7's screen is at &7C00, MODE 5's at &5800,
+\ MODE 2's at &3000).
 WORKER_ORG = &3000 : SQUARES = &4000    \ S(a) low bytes &4000, high &4800
 WBOOT_ORG  = &6000
 TOOL_ORG   = &3000
 MANDEL_ORG = &3000
+MANDEL2_ORG = &1B00    \ PAGE on a Model B with DNFS
 
 \ Sends the VDU codes that follow (length first).
 MACRO VDUS n
