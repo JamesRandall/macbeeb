@@ -236,7 +236,8 @@ final class AppMachineDirectory: MachineDirectory, @unchecked Sendable {
     private func open(_ name: String, _ arguments: JSONValue) -> ToolResult {
         let url: URL
         if name == "network_create" {
-            let templates: [String: NetworkTemplate] = ["econet_demo": .econetDemo, "two_bbcs": .twoBBCs,
+            let templates: [String: NetworkTemplate] = ["econet_demo": .econetDemo, "distributed_mandelbrot": .distributedMandelbrot,
+                                                        "two_bbcs": .twoBBCs,
                                                         "school_classroom": .schoolClassroom,
                                                         "bbc_and_master": .bbcAndMaster, "empty": .empty]
             guard let template = arguments["template"]?.stringValue.flatMap({ templates[$0] }) else {

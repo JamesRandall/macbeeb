@@ -125,7 +125,11 @@ IF TOOL = 0
     JSR colour2
     JSR pstr : EQUS "WORKER ALREADY RUNNING", 13, 0
     INC already
-    JMP sendstart
+    \ It takes this station as its coordinator, and says so.
+    JSR sendstart : BCS launch0
+    LDA #T_STATUS : LDX #200 : JSR await
+.launch0
+    RTS
 .launch1
     JSR colour6
     JSR pstr : EQUS "BOOTSTRAP READY -> START", 0

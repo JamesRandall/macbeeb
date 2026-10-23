@@ -125,6 +125,15 @@ the hardware and no software yet.
 - Level 1 gives each station its own directory and refuses others' names
   ("Bad file name"), so files are shared by giving stations the same
   directory.
+- Level 1 has no boot options (`*OPT 4,3`: "Bad command") and can't open a
+  file for `*EXEC` ("Bad command"), so a station can't run a `!BOOT` from
+  it. `*name` runs `name` from the station's directory or the library
+  (`&`).
+- DNFS: OSWORD &13 function 8 reads the station number, functions 0 and 2
+  the file and printer servers'. A transmission to a station that isn't
+  listening fails in about 4 centiseconds. About eight receive blocks can
+  be open at once; reading a block that's received frees it. (Found by
+  the Distributed Mandelbrot demo, Examples/distributed-mandelbrot.)
 
 ## Not done (yet)
 

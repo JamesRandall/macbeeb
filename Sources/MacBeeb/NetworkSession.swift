@@ -245,6 +245,9 @@ final class NetworkSession: StationOwner {
         if node.bootsDisc == true {
             host.send(.shiftBreak)
         }
+        if node.bootsNetwork == true {
+            bootFromNetwork(id)
+        }
         let controller = MachineController(station: id, host: host, setup: setup, owner: self)
         controller.watchesConsole = node.kind != .station
         for (drive, media) in node.discs {
@@ -265,8 +268,43 @@ final class NetworkSession: StationOwner {
         }
     }
 
+    /// A station that boots from the network: once a file server's ready,
+    /// it selects the network and logs on as BOOT, and what the server's
+    /// !BOOT says is typed, as a Level 1 server can't have it run.
+    private func bootFromNetwork(_ id: UUID) {
+        Task { @MainActor [weak self] in
+            // (For two minutes: a server that hasn't started by then won't.)
+            for _ in 0..<240 {
+                guard let self, let controller = self.controllers[id] else { return }
+                if let commands = await self.serverBootCommands() {
+                    controller.host.send(.type((["*NET", "*I AM BOOT"] + commands).map { $0 + "\n" }.joined()))
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+        }
+    }
+
+    /// The file servers that have said they're ready, since they started.
+    @ObservationIgnored private var readyServers: Set<UUID> = []
+
+    /// The boot file of a ready file server, if there is one.
+    private func serverBootCommands() async -> [String]? {
+        for node in project.nodes where node.kind == .fileServer {
+            guard let controller = controllers[node.id] else { continue }
+            let (ready, commands) = (try? await controller.host.performAsync { session -> (Bool, [String]?) in
+                let ready = session.machine.screenText().contains { $0.trimmingCharacters(in: .whitespaces) == "Ready" }
+                return (ready, session.machine.drives[0].disc.flatMap(FileServerDisc.bootCommands(on:)))
+            }) ?? (false, nil)
+            if ready { readyServers.insert(node.id) }
+            if readyServers.contains(node.id) { return commands ?? [] }
+        }
+        return nil
+    }
+
     /// Switches a machine off: it stops, and what's in its memory is gone.
     func powerOff(_ id: UUID, remember: Bool = true) {
+        readyServers.remove(id)
         guard let controller = controllers.removeValue(forKey: id) else { return }
         controller.detachFromNetwork()
         runtime.powerOff(id)
@@ -393,6 +431,7 @@ final class NetworkSession: StationOwner {
     /// of the server disc goes in its drive 0 (if it hasn't one), it's
     /// reset, and the start-up is typed, as the server's manual says.
     func startFileServer(_ id: UUID) {
+        readyServers.remove(id)
         if !isOn(id) { powerOn(id, startingServer: false) }
         guard let controller = controllers[id] else { return }
         if project[id]?.discs[0] == nil, let image = try? FileServerDisc.image() {

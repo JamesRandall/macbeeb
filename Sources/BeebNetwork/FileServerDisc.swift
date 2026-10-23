@@ -38,4 +38,14 @@ public enum FileServerDisc {
         }
         return names
     }
+
+    /// What the boot file in the shared directory says, a command a line:
+    /// what a station logging on would run. (Level 1 can't run it itself.)
+    public static func bootCommands(on disc: Disc) -> [String]? {
+        guard let volume = try? DiscVolume(disc: disc),
+              let item = try? volume.items(at: .init()).first(where: { $0.fullName == "\(sharedDirectory).!BOOT" })
+        else { return nil }
+        return String(decoding: volume.contents(of: item, at: .init()), as: UTF8.self)
+            .split(whereSeparator: { $0 == "\r" || $0 == "\n" }).map(String.init)
+    }
 }

@@ -215,6 +215,10 @@ public struct NetworkNode: Codable, Sendable, Equatable, Identifiable {
     public var startsServerWhenOn: Bool { kind != .station && kind != .clock && startsServer != false }
     /// Boots the disc in its drive 0 when it's switched on (Shift-Break).
     public var bootsDisc: Bool?
+    /// Boots from the network when it's switched on, once the file server's
+    /// ready: logs on and runs the server's !BOOT. (Level 1 has no boot
+    /// options, so the Studio types what the !BOOT says.)
+    public var bootsNetwork: Bool?
 
     public var isMachine: Bool { kind != .clock }
 

@@ -22,6 +22,7 @@ of one.
 | Template | What's in it |
 | --- | --- |
 | Econet Demo | A classroom ready to try: a Welcome machine with instructions, two Model Bs, a Master, and demo programs on the file server |
+| Distributed Mandelbrot | Eight worker BBCs and a Guide machine draw the Mandelbrot set between them over Econet |
 | Two BBCs | Two Model Bs, stations 1 and 2, and a clock: the smallest network |
 | School Classroom | Four Model Bs (stations 1–4), a file server (254), a printer server (235) and a clock |
 | BBC and Master | A Model B and a Master 128, a file server and a clock |
@@ -42,6 +43,61 @@ instructions. On any machine, type `*NET`, then:
 | `CHAIN "WELCOME"` | The instructions again |
 
 Watch the **Traffic** view while they run to see the frames each one sends.
+
+## The Distributed Mandelbrot
+
+Ten machines in the 1980s, working together on one picture. **File ▸ New
+Network…**, then **Distributed Mandelbrot**:
+- eight **workers** (stations 2–9);
+- a **Guide** (station 1) whose screen says what to do;
+- a file server (254) with the programs.
+
+When the file server's ready, each worker logs on and loads its bootstrap,
+WBOOT, from the server. It shows *Waiting for \*CLUSTER*.
+
+On the Guide, type:
+
+1. `*CLUSTER`. It finds the waiting workers over Econet and asks each to
+   start. Each loads WORKER from the file server and says it's running.
+2. `*MANDEL`. The Guide becomes the **coordinator**. It hands out the
+   picture in 320 tiles of 16 × 8 pixels, and each worker works its tile
+   out in its own 6502 and sends it back. The picture builds on the Guide's
+   MODE 5 screen as the tiles come in, and each worker's screen shows its
+   tile, its progress and how many it has done.
+3. When it's complete, press a key on the Guide for a summary: how long it
+   took and what each worker did.
+
+Any BBC can be the coordinator: press Break on it, type `*NET`, then
+`*CLUSTER` and `*MANDEL`. `*WORKERS` lists the workers, and `*STOPWK` sends
+them back to waiting.
+
+Things to try:
+- **Switch a worker off part way.** Its tile is given to another after 20
+  seconds (emulated), and the picture still comes out right. Switch it back
+  on: it boots, MANDEL notices it waiting and starts it, and it joins in.
+- **Pause one worker.** It stalls, and the others carry on.
+- **Pause the whole network.** Everything stops together.
+- Watch the **Traffic** view: every ASSIGN, RESULT and ACK is there,
+  decoded, beside the Econet frames that carried it.
+
+Everything is real. Every pixel is worked out by an emulated BBC, and every
+message goes through Acorn's network software and the emulated Econet chip.
+The programs are 6502 assembly in `Examples/distributed-mandelbrot`, with
+the protocol they speak.
+
+On Acorn's Level 1 file server, a station can't run a boot file at log-on,
+so the Studio types the worker's log-on and `*WBOOT` for it, once.
+
+### The Mandelbrot view
+
+Click **Mandelbrot** in the toolbar to follow a render from the traffic:
+- the picture so far, made only from tiles the coordinator has
+  acknowledged, so a missing tile stays missing;
+- the tiles in flight, outlined in each worker's colour;
+- each worker's state and counts;
+- the time taken.
+
+**Authentic MODE 5 palette** shows it in the coordinator's own four colours.
 
 ## The canvas
 

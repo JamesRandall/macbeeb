@@ -3,13 +3,14 @@ import Foundation
 
 /// Ready-made networks to start from.
 public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
-    case econetDemo, twoBBCs, schoolClassroom, bbcAndMaster, empty
+    case econetDemo, distributedMandelbrot, twoBBCs, schoolClassroom, bbcAndMaster, empty
 
     public var id: String { rawValue }
 
     public var title: String {
         switch self {
         case .econetDemo: "Econet Demo"
+        case .distributedMandelbrot: "Distributed Mandelbrot"
         case .twoBBCs: "Two BBCs"
         case .schoolClassroom: "School Classroom"
         case .bbcAndMaster: "BBC and Master"
@@ -20,6 +21,7 @@ public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
     public var summary: String {
         switch self {
         case .econetDemo: "A classroom ready to try: a welcome screen, and programs on the file server to chat, sign a shared visitors' book and print."
+        case .distributedMandelbrot: "Eight BBCs draw the Mandelbrot set between them over Econet, each tile worked out by its own 6502: *CLUSTER, then *MANDEL."
         case .twoBBCs: "The smallest network: two Model Bs, stations 1 and 2, and a clock."
         case .schoolClassroom: "Four Model Bs, a file server on station 254 and a printer server on 235, as a 1980s school had."
         case .bbcAndMaster: "A Model B and a Master 128 side by side, sharing a file server."
@@ -30,6 +32,7 @@ public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
     public var symbolName: String {
         switch self {
         case .econetDemo: "sparkles"
+        case .distributedMandelbrot: "square.grid.3x3.fill"
         case .twoBBCs: "rectangle.on.rectangle"
         case .schoolClassroom: "building.columns"
         case .bbcAndMaster: "rectangle.split.2x1"
@@ -58,6 +61,15 @@ public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
             project.nodes = [welcome, station("BBC 2", 2, -0.5 * s, 0), station("BBC 3", 3, 0.5 * s, 0),
                              station("Master 4", 4, 1.5 * s, 0, setup: MachineSetup(model: .master128)),
                              server(.fileServer, -s / 2, 330), server(.printServer, s / 2, 330), .clock(at: CanvasPoint(x: 1.5 * s + 40, y: 330))]
+        case .distributedMandelbrot:
+            // The Guide, then the workers, along the trunk.
+            var guide = station("Guide", 1, -4 * s, 0)
+            guide.bootsDisc = true
+            project.nodes = [guide] + MandelbrotNetwork.workers.map { number in
+                var worker = station("Worker \(number)", number, Double(number - 5) * s, 0)
+                worker.bootsNetwork = true
+                return worker
+            } + [server(.fileServer, -s / 2, 330), .clock(at: CanvasPoint(x: s / 2 + 40, y: 330))]
         case .twoBBCs:
             project.nodes = [station("BBC 1", 1, -s / 2, 0), station("BBC 2", 2, s / 2, 0), .clock(at: CanvasPoint(x: 0, y: 200))]
         case .schoolClassroom:
@@ -76,13 +88,21 @@ public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
     /// The discs a template's machines start with, for `NetworkPackage`
     /// to put in the package: (node, drive, file name, image).
     public func discs(for project: NetworkProject) throws -> [(node: UUID, drive: Int, name: String, image: [UInt8])] {
-        guard self == .econetDemo else { return [] }
-        var discs: [(UUID, Int, String, [UInt8])] = []
-        if let welcome = project.nodes.first(where: { $0.bootsDisc == true }) {
-            discs.append((welcome.id, 0, "Welcome.ssd", try DemoNetwork.welcomeDisc()))
+        let booted: (name: String, image: [UInt8]), server: [UInt8]
+        switch self {
+        case .econetDemo:
+            (booted, server) = (("Welcome.ssd", try DemoNetwork.welcomeDisc()), try DemoNetwork.fileServerDisc())
+        case .distributedMandelbrot:
+            (booted, server) = (("Guide.ssd", try MandelbrotNetwork.guideDisc()), try MandelbrotNetwork.fileServerDisc())
+        default:
+            return []
         }
-        if let server = project.nodes.first(where: { $0.kind == .fileServer }) {
-            discs.append((server.id, 0, "File Server.ssd", try DemoNetwork.fileServerDisc()))
+        var discs: [(UUID, Int, String, [UInt8])] = []
+        if let node = project.nodes.first(where: { $0.bootsDisc == true }) {
+            discs.append((node.id, 0, booted.name, booted.image))
+        }
+        if let node = project.nodes.first(where: { $0.kind == .fileServer }) {
+            discs.append((node.id, 0, "File Server.ssd", server))
         }
         return discs
     }

@@ -160,4 +160,31 @@ struct DemoTemplateTests {
         }
         #expect(project.nodes.contains { $0.setup?.model == .master128 })
     }
+
+    /// The Distributed Mandelbrot: a Guide that boots its disc, eight
+    /// workers that boot from the network, and the programs in the file
+    /// server's library with the workers' !BOOT.
+    @Test func mandelbrotNetworkHasItsDiscs() throws {
+        let url = temporaryPackage()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let project = try NetworkPackage.create(.distributedMandelbrot, at: url)
+        #expect(try NetworkPackage.load(from: url) == project)
+        let workers = project.nodes.filter { $0.bootsNetwork == true }
+        #expect(workers.compactMap(\.stationNumber) == Array(MandelbrotNetwork.workers))
+        let guide = try #require(project.nodes.first { $0.bootsDisc == true })
+        #expect(guide.stationNumber == 1)
+        let server = try #require(project.nodes.first { $0.kind == .fileServer })
+        for (node, names) in [(guide, ["GUIDE", "!BOOT"]), (server, ["&.CLUSTER", "&.MANDEL", "&.WORKER", "&.WBOOT", "A.!BOOT"])] {
+            let media = try #require(node.discs[0])
+            let data = try Data(contentsOf: NetworkPackage.url(of: media, in: url))
+            let disc = try Disc.fromImage([UInt8](data), format: .ssd)
+            let items = try DiscVolume(disc: disc).items(at: .init())
+            for name in names {
+                #expect(items.contains { $0.name == name }, "\(name)")
+            }
+            if node.kind == .fileServer {
+                #expect(FileServerDisc.bootCommands(on: disc) == ["*WBOOT"])
+            }
+        }
+    }
 }

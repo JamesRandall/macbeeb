@@ -5,7 +5,9 @@
 \ flight for 20 seconds goes back in the queue for someone else; a late
 \ RESULT from an old assignment (epoch) isn't drawn. When the image is
 \ complete it tells the workers, and keeps the picture until a key's
-\ pressed: then a summary, and back to BASIC.
+\ pressed: then a summary, and back to BASIC. While it draws, it looks
+\ for bootstraps that have appeared since CLUSTER (a worker switched on
+\ part way), one station a second, and STARTs them to join in.
 \
 \ &3000 up: code, tables and buffers, below MODE 5's screen at &5800.
 
@@ -15,6 +17,7 @@ ORG MANDEL_ORG
 GUARD &5800
 
 NW = 16                     \ workers it can keep track of
+BLOCKS = 6                  \ receive blocks on its port (NFS has room for eight in all)
 TIMEOUT = 2000              \ centiseconds a tile may be out
 SCREEN = &5800
 
@@ -26,6 +29,7 @@ W_FREE = 0 : W_REGISTERED = 1 : W_IDLE = 2 : W_BUSY = 3 : W_UNRESPONSIVE = 4
 
 .mandel
     JSR getstn
+    JSR getservers
     JSR now
     LDX #3
 .mandel1
@@ -61,12 +65,14 @@ W_FREE = 0 : W_REGISTERED = 1 : W_IDLE = 2 : W_BUSY = 3 : W_UNRESPONSIVE = 4
     STA (tsp),Y
     INY : BNE mandel3
     INC tsp+1 : DEX : BNE mandel3
-    \ Eight receive blocks: a worker's frame needn't wait for another's.
-    LDX #7
+    \ Several receive blocks: a worker's frame needn't wait for another's.
+    LDX #BLOCKS-1
 .mandel4
     STX index
     JSR open
     DEX : BPL mandel4
+    JSR openlauncher
+    LDA #1 : STA candidate
     JSR now
     LDA clk : STA started : STA lastreg
     LDA clk+1 : STA started+1 : STA lastreg+1
@@ -78,6 +84,7 @@ W_FREE = 0 : W_REGISTERED = 1 : W_IDLE = 2 : W_BUSY = 3 : W_UNRESPONSIVE = 4
     LDA phase : BEQ register
     CMP #P_RENDER : BNE main1
     JSR timeouts
+    JSR recruit
     JMP main
 .main1
     \ Done: a key ends it.
@@ -119,6 +126,81 @@ W_FREE = 0 : W_REGISTERED = 1 : W_IDLE = 2 : W_BUSY = 3 : W_UNRESPONSIVE = 4
 .tomain
     JMP main
 
+\ Joining part way: every second, DISCOVER to the next candidate
+\ station that isn't working for us (the run's ID is the nonce), and
+\ START a bootstrap that answers.
+.recruit
+    LDX lblk : BNE recruit00
+    JSR openlauncher : JMP recruit2
+.recruit00
+    JSR pollrx : BPL recruit2
+    LDX lblk : JSR readrx
+    LDA #LO(lbuf) : STA ptr : LDA #HI(lbuf) : STA ptr+1
+    JSR check : BCS recruit1
+    CMP #T_BOOT_HELLO : BNE recruit1
+    LDA plen : CMP #8 : BNE recruit1
+    LDA lbuf+HEADER+5 : CMP #1 : BNE recruit1
+    LDX #3
+.recruit0
+    LDA lbuf+HEADER,X : CMP runid,X : BNE recruit1
+    DEX : BPL recruit0
+    \ START nonce target coordinator
+    JSR txptr
+    JSR runnonce
+    LDA rxstn : STA txm+HEADER+4
+    LDA mystn : STA txm+HEADER+5
+    LDA #6 : STA plen
+    LDA #T_START : JSR mhdr
+    LDA rxstn : LDX #PORT_MGMT : JSR send
+.recruit1
+    JSR openlauncher
+.recruit2
+    JSR now
+    LDA #LO(probed) : STA tm : LDA #HI(probed) : STA tm+1
+    JSR elapsed
+    LDA el+1 : BNE recruit3
+    LDA el : CMP #100 : BCC recruit9
+.recruit3
+    LDA clk : STA probed : LDA clk+1 : STA probed+1
+    \ The next candidate: not us, a server or a worker we have.
+    LDY #16
+.recruit4
+    INC candidate : LDA candidate : CMP #17 : BCC recruit5
+    LDA #1 : STA candidate
+.recruit5
+    DEY : BEQ recruit9
+    LDA candidate
+    CMP mystn : BEQ recruit4
+    CMP fsstn : BEQ recruit4
+    CMP psstn : BEQ recruit4
+    STA rxstn : STY index
+    JSR find : LDY index
+    LDX slot : BMI recruit6
+    LDA wstate,X : CMP #W_UNRESPONSIVE : BNE recruit4
+.recruit6
+    \ DISCOVER nonce target launcher
+    JSR txptr
+    JSR runnonce
+    LDA candidate : STA txm+HEADER+4
+    LDA mystn : STA txm+HEADER+5
+    LDA #6 : STA plen
+    LDA #T_DISCOVER : JSR mhdr
+    LDA candidate : LDX #PORT_MGMT : JSR send
+.recruit9
+    RTS
+
+.runnonce
+    LDX #3
+.runnonce1
+    LDA runid,X : STA txm+HEADER,X
+    DEX : BPL runnonce1
+    RTS
+
+.openlauncher
+    LDA #LO(lbuf) : STA ptr : LDA #HI(lbuf) : STA ptr+1
+    LDA #PORT_LAUNCHER : JSR openrx : STA lblk
+    RTS
+
 \ Opens receive block index.
 .open
     LDX index
@@ -129,7 +211,7 @@ W_FREE = 0 : W_REGISTERED = 1 : W_IDLE = 2 : W_BUSY = 3 : W_UNRESPONSIVE = 4
 
 \ Takes whatever's arrived in the receive blocks.
 .serve
-    LDX #7
+    LDX #BLOCKS-1
 .serve1
     STX index
     LDA blks,X : TAX : JSR pollrx : BPL serve2
@@ -487,10 +569,11 @@ W_FREE = 0 : W_REGISTERED = 1 : W_IDLE = 2 : W_BUSY = 3 : W_UNRESPONSIVE = 4
 
 \ The summary, in MODE 7.
 .summary
-    LDX #7
+    LDX #BLOCKS-1
 .summary1
     STX index : LDA blks,X : TAX : JSR delrx
     LDX index : DEX : BPL summary1
+    LDX lblk : JSR delrx
     VDUS 12 : EQUB 22, 7, 23, 1, 0, 0, 0, 0, 0, 0, 0, 0
     LDY #0 : JSR stitle : LDY #1 : JSR stitle
     LDX #0 : LDY #3 : JSR tab
@@ -555,9 +638,9 @@ W_FREE = 0 : W_REGISTERED = 1 : W_IDLE = 2 : W_BUSY = 3 : W_UNRESPONSIVE = 4
 .pix3 EQUB &00, &01, &10, &11
 
 .rxlo
-    FOR i, 0, 7 : EQUB LO(rxbufs + i * FRAME) : NEXT
+    FOR i, 0, BLOCKS-1 : EQUB LO(rxbufs + i * FRAME) : NEXT
 .rxhi
-    FOR i, 0, 7 : EQUB HI(rxbufs + i * FRAME) : NEXT
+    FOR i, 0, BLOCKS-1 : EQUB HI(rxbufs + i * FRAME) : NEXT
 
 .maxit  EQUB 0
 .maxp1  EQUB 0
@@ -581,7 +664,10 @@ W_FREE = 0 : W_REGISTERED = 1 : W_IDLE = 2 : W_BUSY = 3 : W_UNRESPONSIVE = 4
 .cell   EQUB 0
 .byte   EQUB 0
 .sy     EQUB 0
-.blks   SKIP 8
+.blks   SKIP BLOCKS
+.lblk   EQUB 0
+.candidate EQUB 0
+.probed EQUW 0
 .wstn   SKIP NW
 .wstate SKIP NW
 .wtilelo SKIP NW
@@ -598,7 +684,8 @@ W_FREE = 0 : W_REGISTERED = 1 : W_IDLE = 2 : W_BUSY = 3 : W_UNRESPONSIVE = 4
 .cmap   SKIP 256
 .tstate SKIP TILES
 .tepoch SKIP TILES
-.rxbufs SKIP 8 * FRAME
+.rxbufs SKIP BLOCKS * FRAME
+.lbuf   SKIP FRAME
 
 INCLUDE "lib.asm"
 SAVE "MANDEL", MANDEL_ORG, P%, MANDEL_ORG
