@@ -33,13 +33,15 @@ public struct MachineSetup: Codable, Sendable, Hashable {
         self.videoNuLA = videoNuLA
     }
 
-    /// The machine's configuration, ROMs and all. Images that have gone
-    /// are left out.
-    public func configuration() -> BBCMicro.Configuration {
+    /// The machine's configuration, ROMs and all, with an Econet module
+    /// at `econetStation` if there is one. Images that have gone are left
+    /// out.
+    public func configuration(econetStation: Int? = nil) -> BBCMicro.Configuration {
         var built = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
                                            discInterface: discInterface, expansions: expansions,
                                            sidewaysImages: Self.images(at: powerOnImagePaths),
-                                           controllerROM: Self.controllerROM(for: expansions.board, paths: controllerROMPaths))
+                                           controllerROM: Self.controllerROM(for: expansions.board, paths: controllerROMPaths),
+                                           econetStation: econetStation)
         built.videoNuLA = videoNuLA
         return built
     }

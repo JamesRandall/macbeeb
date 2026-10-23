@@ -47,6 +47,33 @@ of one.
 - **Problems** show at the top of the canvas, for example two machines with
   the same station number, or a network without a clock.
 
+## Econet
+
+Every machine on a network has an Econet module, with its station number,
+and Acorn's network filing system: DNFS on a Model B (it's DFS 1.20 as
+well), ANFS 4.25 on a Master. It's the real hardware, emulated: the
+machines' own network software does everything, just as on a 1980s
+network.
+
+- **The clock**: an Econet carries nothing without one. Every template has
+  one. Take it away and the machines' network software reports "No clock".
+- **The file server**: Acorn's Level 1 file server, running on its BBC
+  (station 254), from its disc. It starts itself when the network's
+  switched on: its console (on its card, or in its window) says `Ready`.
+  Every other machine shares its directory, A.
+- **Using it**: on any machine, type `*NET` to change to the network
+  filing system. Then `SAVE "PROG"`, `LOAD "PROG"`, `CHAIN "PROG"`, `*CAT`,
+  `*SAVE` and `*LOAD` work over the network. Save on one machine and load
+  on another.
+- **Traffic**: a machine sending on the network glows green on the canvas,
+  with a radio-wave sign on its card.
+- **When things go wrong**: the network software's own messages, as on a
+  real network. With the file server off, `*CAT` says "Not listening".
+  Switch it back on and it starts again, with its files still on its disc.
+
+To start the server by hand (after Break, for example), choose **Start File
+Server** in its inspector or right-click menu.
+
 ## Tiles
 
 Click **Tiles** in the toolbar to see the machines that are on side by

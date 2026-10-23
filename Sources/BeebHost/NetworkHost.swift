@@ -12,6 +12,8 @@ public final class NetworkHost: @unchecked Sendable {
     enum Command {
         case add(UUID, EmulatorHost)
         case remove(UUID)
+        /// The Econet's clock rate (bits a second), or nil for none.
+        case setClock(Int?)
     }
 
     /// The network's state as of its last quantum.
@@ -25,8 +27,20 @@ public final class NetworkHost: @unchecked Sendable {
         public var paused = false
         /// The stations stopped by their debuggers.
         public var stoppedStations: Set<UUID> = []
+        /// What each Econet station has put on the line, by station number.
+        public var traffic: [UInt8: Traffic] = [:]
 
         public init() {}
+    }
+
+    /// A station's transmissions so far.
+    public struct Traffic: Sendable, Equatable {
+        public var bytes = 0
+        /// Each frame ends with two check bytes.
+        var checkBytes = 0
+        public var frames: Int { checkBytes / 2 }
+        /// Byte-times spoiled by collisions.
+        public var collisions = 0
     }
 
     public let sampleRate: Int
@@ -41,12 +55,44 @@ public final class NetworkHost: @unchecked Sendable {
     private let audioStation = Mutex<UUID?>(nil)
     private var thread: Thread?
 
-    /// Emulated cycles each station runs before the others catch up.
+    /// Emulated cycles each station runs before the others catch up:
+    /// short enough, with an Econet, for the line's timing.
     public let quantum: Int
+    /// The network's Econet, if its machines have one. Used only on the
+    /// network's thread.
+    let bus: EconetBus?
+    /// Sees every symbol on the line (on the network's thread).
+    public var lineObserver: ((EconetLineEvent) -> Void)?
+    private var traffic: [UInt8: Traffic] = [:]
 
-    public init(sampleRate: Int = 48_000, quantum: Int = 2_000) {
+    private func observe(_ event: EconetLineEvent) {
+        switch event.symbol {
+        case .byte: traffic[event.station, default: Traffic()].bytes += 1
+        case .check: traffic[event.station, default: Traffic()].checkBytes += 1
+        default: break
+        }
+        if event.collided {
+            traffic[event.station, default: Traffic()].collisions += 1
+        }
+        lineObserver?(event)
+    }
+
+    public init(sampleRate: Int = 48_000, quantum: Int = 2_000, econetClockRate: Int?? = nil) {
         self.sampleRate = sampleRate
-        self.quantum = quantum
+        if let clock = econetClockRate {
+            let bus = EconetBus(clockRate: clock)
+            self.bus = bus
+            self.quantum = bus.delay
+        } else {
+            bus = nil
+            self.quantum = quantum
+        }
+        bus?.observer = { [unowned self] event in observe(event) }
+    }
+
+    /// Changes the Econet's clock (nil takes it away).
+    public func setClock(_ rate: Int?) {
+        commands.withLock { $0.append(.setClock(rate)) }
     }
 
     deinit {
@@ -120,6 +166,9 @@ public final class NetworkHost: @unchecked Sendable {
     /// The stations, in the order they run: by ID, so runs repeat.
     private var stations: [(id: UUID, host: EmulatorHost)] = []
     private var networkCycles: UInt64 = 0
+    /// The machine each station has on the line (a power cycle makes a new
+    /// one).
+    private var attached: [UUID: BBCMicro] = [:]
 
     private func runCommands() {
         for command in commands.withLock({ list -> [Command] in
@@ -133,7 +182,14 @@ public final class NetworkHost: @unchecked Sendable {
                 stations.sort { $0.id.uuidString < $1.id.uuidString }
                 _ = host.drivingSession()
             case .remove(let id):
+                if let station = stations.first(where: { $0.id == id }), let machine = attached[id] {
+                    bus?.detach(machine)
+                    attached[id] = nil
+                    _ = station
+                }
                 stations.removeAll { $0.id == id }
+            case .setClock(let rate):
+                bus?.clockRate = rate
             }
         }
     }
@@ -159,9 +215,22 @@ public final class NetworkHost: @unchecked Sendable {
             $0.stoppedStations = stopped
         }
         guard !paused else { return false }
+        if let bus {
+            for station in stations {
+                let machine = station.host.drivingSession().machine
+                if attached[station.id] !== machine {
+                    if let old = attached[station.id] { bus.detach(old) }
+                    bus.attach(machine)
+                    attached[station.id] = machine
+                }
+            }
+            let running = Set(ready.compactMap { $0.drivingSession().machine.econet }.map(ObjectIdentifier.init))
+            bus.beginQuantum { running.contains(ObjectIdentifier($0)) }
+        }
         for host in ready {
             host.drivingSession().advance(cycles: quantum)
         }
+        bus?.endQuantum(cycles: quantum)
         networkCycles += UInt64(quantum)
         return true
     }
@@ -180,8 +249,14 @@ public final class NetworkHost: @unchecked Sendable {
             wallStartCycles = networkCycles
         }
 
+        var trafficPublished = clock.now
         while running.load(ordering: .acquiring) {
             let now = clock.now
+            if now - trafficPublished >= .milliseconds(100) {
+                trafficPublished = now
+                let traffic = traffic
+                latestStatus.withLock { $0.traffic = traffic }
+            }
             if now - sampleStart >= .seconds(1) {
                 let elapsed = now - sampleStart
                 let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18

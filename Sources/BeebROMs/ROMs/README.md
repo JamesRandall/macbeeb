@@ -21,6 +21,8 @@ included, as b2 and jsbeeb do, so the emulator works out of the box.
 | mos320-*.rom | Master 128 MOS 3.20 set: MOS, Terminal (F), View (E), ADFS (D), BASIC 4 (C), Edit (B), ViewSheet (A), DFS 2.24 (9) | b2 |
 | watford-32kram-240.rom | Watford Electronics 32K RAM board: Shadow RAM OS 2.40, (C)1985 Ian Smith (8K) | mdfs.net (WERAMv240); = MAME's we32kram_v2.40.rom |
 | aries-b32-100.rom | Aries B32: ARIES-B32 1.00, (C)1985 David Barnett & Chris Jordan (16K) | mdfs.net (Aries32v10); = MAME's aries-b32_v2.2.rom |
+| dnfs.rom | Acorn DNFS: DFS 1.20 and NFS 3.00 in one ROM, for the Model B's Econet module | BeebEm (BBC/DNFS.rom) |
+| anfs425.rom | Acorn ANFS 4.25, the Master's Econet filing system | jsbeeb (master/anfs-4.25.rom) = BeebEm (M128/ANFS-4.25-2201351.rom) |
 
 ## Expansion boards' controller ROMs
 

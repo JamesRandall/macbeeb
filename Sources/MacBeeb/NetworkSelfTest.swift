@@ -31,8 +31,10 @@ enum NetworkSelfTest {
         window.title = session.project.name
         window.orderBack(nil)
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(3))
+            // The file server starts itself; give it time.
+            try? await Task.sleep(for: .seconds(10))
             let programs = [
+                "*NET\n10 PRINT \"SAVED ON THE FILE SERVER\"\nSAVE \"HELLO\"\n*CAT\n",
                 "MODE 2:FOR I%=0 TO 7:GCOL0,I%:X%=I%*160:MOVE X%,0:MOVE X%,1023:PLOT 85,X%+159,0:PLOT 85,X%+159,1023:NEXT\n",
                 "MODE 1:FOR I%=0 TO 300 STEP 10:GCOL0,1+I% MOD 3:MOVE 640,512:DRAW 640+I%*COS(I%),512+I%*SIN(I%):NEXT\n",
                 "MODE 7:FOR I%=1 TO 20:PRINT CHR$(129+I% MOD 7);\"STATION 3 SAYS HELLO\":NEXT\n",
@@ -41,7 +43,12 @@ enum NetworkSelfTest {
             for (node, program) in zip(session.project.stations.filter { $0.kind == .station }, programs) {
                 session.controllers[node.id]?.host.send(.type(program))
             }
-            try? await Task.sleep(for: .seconds(6))
+            try? await Task.sleep(for: .seconds(8))
+            // Station 2 runs what station 1 saved.
+            if let second = session.project.stations.filter({ $0.kind == .station }).dropFirst().first {
+                session.controllers[second.id]?.host.send(.type("*NET\nCHAIN \"HELLO\"\n"))
+            }
+            try? await Task.sleep(for: .seconds(4))
             capture(window, to: path)
             session.selection = [session.project.stations[0].id]
             try? await Task.sleep(for: .seconds(1))

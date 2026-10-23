@@ -84,12 +84,15 @@ for (withTV, secondProcessor, rewind) in [(false, false, false), (true, false, f
 
 // Networks of Model Bs on one NetworkHost, each drawing in Mode 2, as fast
 // as they'll go: the network's speed against real time.
-if CommandLine.arguments.contains("network") {
+for econet in [false, true] where CommandLine.arguments.contains("network") {
+    print(econet ? "With Econet (\(EconetBus().delay)-cycle quanta):" : "Without Econet:")
     for count in [1, 2, 4, 8, 16] {
-        let network = NetworkHost()
+        let network = NetworkHost(econetClockRate: econet ? .some(200_000) : nil)
         network.setSpeedLimited(false)
-        let configuration = BeebROMs.configuration(for: .modelB)
-        let hosts = (0..<count).map { _ in network.addStation(id: UUID()) { BBCMicro(configuration: configuration) } }
+        let hosts = (0..<count).map { i in
+            let configuration = BeebROMs.configuration(for: .modelB, econetStation: econet ? i + 1 : nil)
+            return network.addStation(id: UUID()) { BBCMicro(configuration: configuration) }
+        }
         network.start()
         Thread.sleep(forTimeInterval: 1)
         for host in hosts {

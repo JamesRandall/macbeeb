@@ -490,8 +490,16 @@ final class HostSession: MachineSession {
                 host.latestFrame.withLock { $0 = frame }
             }
         }
-        host.didAdvance(self)
+        // (A network's stations run in short quanta: the lights and the
+        // rest needn't be published every one.)
+        cyclesSincePublished += cycles
+        if cyclesSincePublished >= 2_000 {
+            cyclesSincePublished = 0
+            host.didAdvance(self)
+        }
     }
+
+    private var cyclesSincePublished = 0
 
     func powerCycle(configuration: BBCMicro.Configuration?) {
         if let configuration {

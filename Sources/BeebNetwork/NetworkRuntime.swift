@@ -14,11 +14,16 @@ public final class NetworkRuntime: @unchecked Sendable {
     /// Builds each station's disc drive sounds.
     private let discDriveSounds: (@Sendable (BBCMicro.Model) -> DiscDriveSounds?)?
 
-    public init(packageURL: URL, discDriveSounds: (@Sendable (BBCMicro.Model) -> DiscDriveSounds?)? = nil,
-                quantum: Int = 2_000) {
+    /// `clockRate`: the Econet clock's (nil: no clock).
+    public init(packageURL: URL, clockRate: Int?, discDriveSounds: (@Sendable (BBCMicro.Model) -> DiscDriveSounds?)? = nil) {
         self.packageURL = packageURL
         self.discDriveSounds = discDriveSounds
-        network = NetworkHost(quantum: quantum)
+        network = NetworkHost(econetClockRate: .some(clockRate))
+    }
+
+    /// The clock's rate for a project: its clock node's, if it has one.
+    public static func clockRate(of project: NetworkProject) -> Int? {
+        project.nodes.first { $0.kind == .clock }.map { $0.clockRate ?? NetworkNode.defaultClockRate }
     }
 
     public func start() {
@@ -36,7 +41,7 @@ public final class NetworkRuntime: @unchecked Sendable {
     public func powerOn(_ node: NetworkNode, discDriveSoundsOn: Bool = false) -> EmulatorHost? {
         guard node.isMachine, let setup = node.setup else { return nil }
         if let running = stations[node.id] { return running }
-        let configuration = setup.configuration()
+        let configuration = setup.configuration(econetStation: node.stationNumber)
         let host = network.addStation(id: node.id, discDriveSounds: discDriveSounds, discDriveSoundsOn: discDriveSoundsOn) {
             BBCMicro(configuration: configuration)
         }

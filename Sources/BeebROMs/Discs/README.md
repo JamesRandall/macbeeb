@@ -16,3 +16,13 @@ the box.
 
 GEM is copyright Digital Research. The `.img` discs are in the Master 512's
 800K DOS format.
+
+## Econet
+
+| File | What | Source |
+| --- | --- | --- |
+| econet-level1.ssd | Acorn Econet Level 1 file server (FS), printer server (PS) and utilities | BeebEm (DiscIms/econet_level_1_utils.ssd) |
+| econet-level2.ssd | Acorn Econet Level 2 file server and disc manager | BeebEm (DiscIms/econet_level_2_utils.ssd) |
+
+Copyright Acorn Computers; bundled as BeebEm bundles them, on the same basis
+as the ROMs (see ROMs/README.md).

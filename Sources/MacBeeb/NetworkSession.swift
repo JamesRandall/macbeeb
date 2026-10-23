@@ -2,6 +2,7 @@ import AppKit
 import BeebCore
 import BeebHost
 import BeebNetwork
+import BeebROMs
 import Observation
 
 /// An open network: its project, saved as it changes, and its machines,
@@ -26,6 +27,8 @@ final class NetworkSession: StationOwner {
     private(set) var paused = false
     /// The network's status, refreshed a few times a second.
     private(set) var status = NetworkHost.Status()
+    /// The nodes that put something on the line since the last refresh.
+    private(set) var transmitting: Set<UUID> = []
     /// A save failed: why.
     private(set) var saveError: String?
     @ObservationIgnored private var saveTask: Task<Void, Never>?
@@ -46,8 +49,10 @@ final class NetworkSession: StationOwner {
 
     private init(url: URL) throws {
         self.url = url
-        project = try NetworkPackage.load(from: url)
-        runtime = NetworkRuntime(packageURL: url, discDriveSounds: MachineController.discDriveSounds(for:))
+        let loaded = try NetworkPackage.load(from: url)
+        project = loaded
+        runtime = NetworkRuntime(packageURL: url, clockRate: NetworkRuntime.clockRate(of: loaded),
+                                 discDriveSounds: MachineController.discDriveSounds(for:))
         runtime.start()
         for node in project.nodes where node.isMachine && node.poweredOn {
             powerOn(node.id, remember: false)
@@ -59,7 +64,17 @@ final class NetworkSession: StationOwner {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let status = self.runtime.network.status
-                if status != self.status { self.status = status }
+                guard status != self.status else {
+                    if !self.transmitting.isEmpty { self.transmitting = [] }
+                    return
+                }
+                let before = self.status.traffic
+                let sent = Set(status.traffic.compactMap { station, traffic in
+                    traffic.bytes != before[station]?.bytes ? station : nil
+                })
+                let nodes = Set(self.project.nodes.filter { $0.stationNumber.map { sent.contains(UInt8(clamping: $0)) } ?? false }.map(\.id))
+                if nodes != self.transmitting { self.transmitting = nodes }
+                self.status = status
             }
         }
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
@@ -86,6 +101,10 @@ final class NetworkSession: StationOwner {
         var project = self.project
         change(&project)
         guard project != self.project else { return }
+        let clock = NetworkRuntime.clockRate(of: project)
+        if clock != NetworkRuntime.clockRate(of: self.project) {
+            runtime.network.setClock(clock)
+        }
         self.project = project
         scheduleSave()
     }
@@ -214,16 +233,20 @@ final class NetworkSession: StationOwner {
     func isOn(_ id: UUID) -> Bool { controllers[id] != nil }
 
     /// Switches a machine on: a fresh machine, as at power on.
-    func powerOn(_ id: UUID, remember: Bool = true) {
+    func powerOn(_ id: UUID, remember: Bool = true, startingServer: Bool = true) {
         guard controllers[id] == nil, let node = project[id], node.isMachine, let setup = node.setup,
               let host = runtime.powerOn(node) else { return }
         let controller = MachineController(station: id, host: host, setup: setup, owner: self)
+        controller.watchesConsole = node.kind != .station
         for (drive, media) in node.discs {
             controller.noteNetworkDisc(media.displayName, drive: drive)
         }
         controllers[id] = controller
         if remember {
             update { $0[id]?.poweredOn = true }
+        }
+        if startingServer && node.kind == .fileServer && node.startsServerWhenOn {
+            startFileServer(id)
         }
         if focused == nil {
             focus(id)
@@ -336,6 +359,47 @@ final class NetworkSession: StationOwner {
         }
     }
 
+    // MARK: Servers
+
+    /// What a file server should type to start Acorn's Level 1 server:
+    /// `CH."FS"`, then its questions answered, giving every other machine
+    /// on the network the class's shared directory, A.
+    func fileServerStartup(for id: UUID) -> String {
+        let clients = project.stations.filter { $0.id != id && $0.kind == .station }.compactMap(\.stationNumber)
+        var text = "CH.\"FS\"\n3\nY\n"
+        for station in clients.prefix(30) {
+            text += "A\n\(station)\n"
+        }
+        return text + "\n"
+    }
+
+    /// Starts Acorn's Level 1 file server on a machine: the network's copy
+    /// of the server disc goes in its drive 0 (if it hasn't one), it's
+    /// reset, and the start-up is typed, as the server's manual says.
+    func startFileServer(_ id: UUID) {
+        if !isOn(id) { powerOn(id, startingServer: false) }
+        guard let controller = controllers[id] else { return }
+        if project[id]?.discs[0] == nil {
+            let disc = BeebROMs.BundledDisc.econetLevel1
+            let staged = FileManager.default.temporaryDirectory.appendingPathComponent("Econet Level 1.ssd")
+            try? Data(disc.data).write(to: staged)
+            controller.insertDisc(staged, drive: 0, boot: false)
+        }
+        controller.host.send(.pressBreak)
+        let startup = fileServerStartup(for: id)
+        Task { @MainActor in
+            // After Break's banner.
+            try? await Task.sleep(for: .seconds(1.5))
+            controller.host.send(.type(startup))
+        }
+    }
+
+    /// What a server's console says: its last non-blank line.
+    func serverStatus(_ id: UUID) -> String? {
+        guard let controller = controllers[id] else { return nil }
+        return controller.consoleLine
+    }
+
     // MARK: Focus
 
     /// The station typed into in the tiles, and heard.
@@ -388,6 +452,10 @@ final class NetworkSession: StationOwner {
         guard let id = controller.stationID else { return }
         update { $0[id]?.discs[drive] = nil }
         removeUnusedMedia()
+    }
+
+    func stationNumber(_ controller: MachineController) -> Int? {
+        controller.stationID.flatMap { project[$0]?.stationNumber }
     }
 
     func stationTitle(_ controller: MachineController) -> String {

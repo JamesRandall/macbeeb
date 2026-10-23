@@ -31,6 +31,8 @@ public enum BeebROMs {
         /// Expansion boards' controller ROMs (see Firmware).
         case watford32KRAM240 = "watford-32kram-240"
         case ariesB32100 = "aries-b32-100"
+        case dnfs = "dnfs"
+        case anfs425 = "anfs425"
     }
 
     /// The resource bundle. In an app it's in Contents/Resources (SwiftPM's
@@ -57,6 +59,12 @@ public enum BeebROMs {
         case gemApplications = "gem-applications.img"
         case gemData = "gem-data.img"
         case master512Miscellaneous = "master512-miscellaneous.img"
+        /// Acorn's Econet Level 1 file server (FS), with the printer server
+        /// (PS), NETMON, NOTIFY, REMOTE, VIEW and the protection utilities.
+        case econetLevel1 = "econet-level1.ssd"
+        /// The Level 2 file server and its disc manager (needs a 6502
+        /// Second Processor).
+        case econetLevel2 = "econet-level2.ssd"
 
         /// The disc the co-processor boots from, if it needs one.
         public static func system(for coprocessor: BBCMicro.Coprocessor) -> BundledDisc? {
@@ -74,6 +82,8 @@ public enum BeebROMs {
             case .gemApplications: "GEM Applications (Master 512, disc 2)"
             case .gemData: "GEM Data (Master 512, disc 3)"
             case .master512Miscellaneous: "Miscellaneous (Master 512, disc 4)"
+            case .econetLevel1: "Econet Level 1 File and Printer Server"
+            case .econetLevel2: "Econet Level 2 File Server"
             }
         }
 
@@ -154,7 +164,8 @@ extension BeebROMs {
                                      systemDisc: Bool = true,
                                      expansions: BBCMicro.Expansions = .none,
                                      sidewaysImages: [Int: [UInt8]] = [:],
-                                     controllerROM: [UInt8]? = nil) -> BBCMicro.Configuration {
+                                     controllerROM: [UInt8]? = nil,
+                                     econetStation: Int? = nil) -> BBCMicro.Configuration {
         var configuration = standardConfiguration(for: model)
         configuration.coprocessor = coprocessor
         if model == .modelB {
@@ -166,6 +177,20 @@ extension BeebROMs {
             case .watfordDDB2: data(.watfordDDFS153)
             case .watfordDDB3: data(.watfordDDFS154T)
             case .opus: data(.opusDDOS345)
+            }
+        }
+        // Econet: the network filing system's ROM. The B's DNFS has DFS
+        // 1.20 in it, so it takes the 8271 DFS's place; with another disc
+        // interface it goes in bank 13. The Masters' ANFS goes in bank 8.
+        if let econetStation, model != .modelA {
+            configuration.econetStation = econetStation
+            switch model {
+            case .modelB:
+                configuration.sidewaysROMs[discInterface == .intel8271 ? 14 : 13] = data(.dnfs)
+            case .master128, .masterCompact:
+                configuration.sidewaysROMs[8] = data(.anfs425)
+            case .modelA, .bPlus:
+                break
             }
         }
         if secondProcessor && coprocessor.fits(model) {

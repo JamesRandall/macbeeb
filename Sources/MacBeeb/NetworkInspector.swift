@@ -164,6 +164,21 @@ struct MachineInspector: View {
             .onChange(of: node.name) { name = node.name }
             .onChange(of: node.stationNumber) { number = node.stationNumber.map(String.init) ?? "" }
 
+            if node.kind == .fileServer {
+                InspectorSection("File Server") {
+                    if let line = controller?.consoleLine {
+                        LabeledContent("Console", value: line)
+                            .font(.callout.monospaced())
+                    }
+                    Button("Start File Server") { session.startFileServer(node.id) }
+                        .help("Runs Acorn's Level 1 file server from its disc, giving every other machine the shared directory A")
+                    Text("Acorn's Level 1 file server runs on this BBC, from its disc. Every other machine on the network shares directory A: on them, type *NET, then SAVE, LOAD, CHAIN and *CAT use the server. Open its window to see the server's console.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             InspectorSection("Machine") {
                 LabeledContent("Model") {
                     Picker("Model", selection: Binding(get: { node.setup?.model ?? .modelB }, set: { setModel($0) })) {

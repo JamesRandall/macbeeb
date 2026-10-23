@@ -130,6 +130,7 @@ public final class BBCMicro {
 
     public enum NMIDevice {
         public static let fdc: UInt8 = 1 << 0
+        public static let econet: UInt8 = 1 << 1
     }
 
     public let model: Model
@@ -142,6 +143,11 @@ public final class BBCMicro {
     /// it uses).
     public internal(set) var nula: VideoNuLA?
     public let nulaFitted: Bool
+    /// The printer on the printer port, if one's plugged in.
+    public var printer: ParallelPrinter?
+    /// The Econet module, if fitted.
+    public let econet: Econet?
+    let econetFitted: Bool
     public var saa5050 = SAA5050()
     public var adc = UPD7002()
     public var soundChip = SN76489()
@@ -366,6 +372,9 @@ public final class BBCMicro {
         public var expansions: Expansions
         /// VideoNuLA fitted in place of the Video ULA.
         public var videoNuLA: Bool
+        /// An Econet module, with this station number (1-254), or none.
+        /// The B, B+ and Masters take one.
+        public var econetStation: Int?
         /// A disc in drive 0 at power on: the co-processor's system disc,
         /// so it boots. Not saved with the configuration (a save state has
         /// its discs).
@@ -386,7 +395,9 @@ public final class BBCMicro {
         public init(model: Model = .modelB, os: [UInt8], sidewaysROMs: [Int: [UInt8]],
                     sidewaysRAMBanks: Set<Int>? = nil, secondProcessorROM: [UInt8]? = nil,
                     discInterface: DiscInterface = .intel8271, coprocessor: Coprocessor = .mos6502,
-                    startupDisc: StartupDisc? = nil, expansions: Expansions = .none, videoNuLA: Bool = false) {
+                    startupDisc: StartupDisc? = nil, expansions: Expansions = .none, videoNuLA: Bool = false,
+                    econetStation: Int? = nil) {
+            self.econetStation = econetStation
             self.discInterface = discInterface
             self.expansions = expansions
             self.videoNuLA = videoNuLA
@@ -406,6 +417,7 @@ public final class BBCMicro {
 
         enum CodingKeys: CodingKey {
             case model, os, sidewaysROMs, sidewaysRAMBanks, secondProcessorROM, discInterface, coprocessor, expansions, videoNuLA
+            case econetStation
         }
 
         public init(from decoder: Decoder) throws {
@@ -420,6 +432,7 @@ public final class BBCMicro {
             // Older save states have none.
             expansions = try c.decodeIfPresent(Expansions.self, forKey: .expansions) ?? .none
             videoNuLA = try c.decodeIfPresent(Bool.self, forKey: .videoNuLA) ?? false
+            econetStation = try c.decodeIfPresent(Int.self, forKey: .econetStation)
         }
 
         /// What's wrong with the expansions, if anything: bad wiring, or a
@@ -463,6 +476,12 @@ public final class BBCMicro {
         ariesStartUpLink = configuration.fittedExpansions.ariesStartUpLink
         nulaFitted = configuration.videoNuLA
         nula = nulaFitted ? VideoNuLA() : nil
+        if let station = configuration.econetStation, configuration.model != .modelA, (1...254).contains(station) {
+            econet = Econet(station: UInt8(station))
+        } else {
+            econet = nil
+        }
+        econetFitted = econet != nil
         let master = model.isMaster
         cpu = M6502(variant: master ? .cmos : .nmos)
 
@@ -559,6 +578,8 @@ public final class BBCMicro {
             startupDisc = try? Disc.fromImage(startup.image, format: startup.format)
             insertDisc(startupDisc)
         }
+        let cpu = cpu
+        econet?.onNMI = { cpu.setNMI(NMIDevice.econet, $0) }
     }
 
     deinit {
@@ -714,12 +735,15 @@ public final class BBCMicro {
                 }
             case 0xFE40: return systemVIA.peek(Int(address))
             case 0xFE60: return userVIA.peek(Int(address))
+            case 0xFEA0 where econetFitted: return econet!.adlc.peek(Int(address & 3))
         case 0xFEE0 where tubeAccessible: return tube.hostPeek(Int(address))
             default: break
             }
             return 0xFF
         }
         switch address & 0xFFE0 {
+        case 0xFEA0 where econetFitted: return econet!.adlc.peek(Int(address & 3))
+        case 0xFE00 where econetFitted && address & 0x18 == 0x18: return econet!.station
         case 0xFE40: return systemVIA.peek(Int(address))
         case 0xFE60 where model.hasUserVIA: return userVIA.peek(Int(address))
         case 0xFEE0 where tubeAccessible: return tube.hostPeek(Int(address))
@@ -749,12 +773,20 @@ public final class BBCMicro {
             case 0x08:
                 // ACIA (&FE08-&FE0F): status/data on A0.
                 return serial.readACIA(Int(address))
+            case 0x18 where econetFitted:
+                // The station number links, and INTOFF.
+                return econet!.readStation(now: cycles)
             default:
                 // Serial ULA: there's no read/write line, so a read writes
                 // the stale bus. Reads give 0 on the B (as b2).
                 writeSerialULA(cpu.dbus)
                 return 0
             }
+        case 0xFE20 where econetFitted && address & 0x10 == 0:
+            // A read of the Video ULA's addresses is INTON.
+            econet!.inton(now: cycles)
+        case 0xFEA0 where econetFitted:
+            return econet!.read(Int(address & 3), now: cycles)
         case 0xFE40:
             if watchForIdle {
                 systemVIARead(address)
@@ -796,9 +828,13 @@ public final class BBCMicro {
                 }
             case 0x08:
                 serial.writeACIA(Int(address), value)
+            case 0x18 where econetFitted:
+                econet!.intoff(now: cycles)
             default:
                 writeSerialULA(value)
             }
+        case 0xFEA0 where econetFitted:
+            econet!.write(Int(address & 3), value, now: cycles)
         case 0xFE20:
             if address & 0x10 == 0 {
                 // Video ULA (&FE20-&FE2F); with VideoNuLA, A1 set is its
@@ -1007,8 +1043,13 @@ public final class BBCMicro {
             case 0x08: return wd1770!.read(Int(address))
             case 0x10: return romsel
             case 0x14: return acccon
+            case 0x18 where econetFitted: return econet!.readStation(now: cycles)
+            case 0x1C where econetFitted:
+                econet!.inton(now: cycles)
             default: break
             }
+        case 0xFEA0 where econetFitted:
+            return econet!.read(Int(address & 3), now: cycles)
         case 0xFE40:
             if watchForIdle {
                 systemVIARead(address)
@@ -1070,9 +1111,13 @@ public final class BBCMicro {
                 acccon = value
                 updatePaging()
                 cpu.setIRQ(IRQDevice.acccon, value & 0x80 != 0)
+            case 0x18 where econetFitted:
+                econet!.intoff(now: cycles)
             default:
                 break
             }
+        case 0xFEA0 where econetFitted:
+            econet!.write(Int(address & 3), value, now: cycles)
         case 0xFE40:
             systemVIA.write(Int(address), value)
         case 0xFE60:
@@ -1265,6 +1310,7 @@ public final class BBCMicro {
                 secondProcessor?.cpu.halt()
             } else {
                 cpu.reset()
+                econet?.reset(now: cycles)
                 if let secondProcessor {
                     secondProcessor.reset()
                     tube.reset()
@@ -1438,6 +1484,11 @@ public final class BBCMicro {
             userVIAIRQ = userVIA.updatePhi2LeadingEdge()
         }
 
+        // Econet: the line and the ADLC's own timing.
+        if econetFitted && cycles >= econet.unsafelyUnwrapped.nextEvent {
+            econet.unsafelyUnwrapped.advance(to: cycles)
+        }
+
         cycles &+= 1
     }
 
@@ -1566,6 +1617,9 @@ public final class BBCMicro {
             systemVIA.a.c1 = 0
         }
 
+        if let printer {
+            printer.tick(&userVIA, cycles: cycles)
+        }
         systemVIAIRQ |= systemVIA.updatePhi2TrailingEdge()
         userVIAIRQ |= userVIA.updatePhi2TrailingEdge()
         cpu.setIRQ(IRQDevice.systemVIA, systemVIAIRQ != 0)

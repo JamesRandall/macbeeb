@@ -84,7 +84,7 @@ struct NetworkProjectTests {
         project.nodes[0].discs[0] = media
         try NetworkPackage.save(project, to: url)
 
-        let runtime = NetworkRuntime(packageURL: url)
+        let runtime = NetworkRuntime(packageURL: url, clockRate: NetworkRuntime.clockRate(of: project))
         runtime.network.setSpeedLimited(false)
         let host = try #require(runtime.powerOn(project.nodes[0]))
         runtime.powerOn(project.nodes[1])

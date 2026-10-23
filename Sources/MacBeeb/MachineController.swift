@@ -24,6 +24,8 @@ protocol StationOwner: AnyObject {
     func station(_ controller: MachineController, didEject drive: Int)
     /// "BBC 2 · station 2", for the window title.
     func stationTitle(_ controller: MachineController) -> String
+    /// Its Econet station number, which its machine is built with.
+    func stationNumber(_ controller: MachineController) -> Int?
 }
 
 /// One emulated machine and its window's actions.
@@ -41,6 +43,11 @@ final class MachineController {
     /// Whether its sound is playing (a station's is only while it's the
     /// one chosen).
     private(set) var audible = false
+    /// For a server: the last line on its screen, read about once a
+    /// second while `watchesConsole`.
+    private(set) var consoleLine: String?
+    @ObservationIgnored var watchesConsole = false
+    @ObservationIgnored private var consoleTick = 0
     private(set) var paused = false
     /// An agent's holding the machine still between its tool calls
     /// (set_real_time). Resume lets it go.
@@ -183,6 +190,10 @@ final class MachineController {
         lightsTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
+                self.consoleTick += 1
+                if self.watchesConsole && self.consoleTick % 15 == 0 {
+                    self.readConsole()
+                }
                 let lights = self.host.lights
                 if lights != self.lights {
                     self.lights = lights
@@ -214,6 +225,17 @@ final class MachineController {
     }
 
     // MARK: Stations
+
+    private func readConsole() {
+        Task {
+            let line = try? await host.performAsync { session in
+                session.machine.screenText().map { $0.trimmingCharacters(in: .whitespaces) }.last { !$0.isEmpty }
+            }
+            if let line, line != consoleLine {
+                consoleLine = line
+            }
+        }
+    }
 
     /// The hardware as set up now.
     var setup: MachineSetup {
@@ -644,7 +666,7 @@ final class MachineController {
     func restartWithHardware() { changeMachine() }
 
     private func changeMachine() {
-        let configuration = setup.configuration()
+        let configuration = setup.configuration(econetStation: station?.stationNumber(self))
         hardwareChanges += 1
         // As BBCMicro.insertDiscs: an empty drive 0, or one with the old
         // machine's system disc, gets the new machine's.

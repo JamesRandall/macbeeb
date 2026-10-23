@@ -162,6 +162,11 @@ public struct NetworkNode: Codable, Sendable, Equatable, Identifiable {
     public var poweredOn = true
     /// The clock's rate, in bits per second (the clock only).
     public var clockRate: Int?
+    /// A server: whether its server software starts when it's switched on
+    /// (nil, the default, is yes).
+    public var startsServer: Bool?
+
+    public var startsServerWhenOn: Bool { kind != .station && kind != .clock && startsServer != false }
 
     public var isMachine: Bool { kind != .clock }
 

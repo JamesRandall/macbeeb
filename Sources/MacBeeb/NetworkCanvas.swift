@@ -32,7 +32,7 @@ struct NetworkCanvas: View {
             ZStack(alignment: .topLeading) {
                 background
                 BusDrawing(nodes: session.project.nodes, position: { viewPoint(position(of: $0)) }, zoom: zoom,
-                           lit: Set(session.controllers.keys))
+                           lit: Set(session.controllers.keys), transmitting: session.transmitting)
                     .allowsHitTesting(false)
                 ForEach(session.project.nodes) { node in
                     nodeView(node)
@@ -224,6 +224,10 @@ struct NetworkCanvas: View {
             Button("Insert Disc in Drive 0…") { session.chooseDisc(for: node.id, drive: 0) }
             Button("Eject Drive 0") { session.eject(node.id, drive: 0) }
                 .disabled(node.discs[0] == nil)
+            if node.kind == .fileServer {
+                Divider()
+                Button("Start File Server") { session.startFileServer(node.id) }
+            }
             Divider()
             Button("Duplicate") { session.duplicate(node.id) }
         }
@@ -429,6 +433,8 @@ struct BusDrawing: View {
     let zoom: Double
     /// The nodes that are on.
     let lit: Set<UUID>
+    /// The nodes sending just now: their drops glow.
+    let transmitting: Set<UUID>
 
     var body: some View {
         Canvas { context, _ in
@@ -447,7 +453,11 @@ struct BusDrawing: View {
                 drop.move(to: point)
                 drop.addLine(to: CGPoint(x: point.x, y: busY))
                 let on = lit.contains(node.id) || node.kind == .clock
-                context.stroke(drop, with: .color(on ? Color.accentColor.opacity(0.55) : .secondary.opacity(0.3)),
+                let sending = transmitting.contains(node.id)
+                if sending {
+                    context.stroke(drop, with: .color(.green.opacity(0.35)), style: StrokeStyle(lineWidth: lineWidth * 3, lineCap: .round))
+                }
+                context.stroke(drop, with: .color(sending ? .green : on ? Color.accentColor.opacity(0.55) : .secondary.opacity(0.3)),
                                style: StrokeStyle(lineWidth: lineWidth * 0.8, lineCap: .round, dash: on ? [] : [4 * zoom, 4 * zoom]))
                 let tap = CGRect(x: point.x - lineWidth * 1.5, y: busY - lineWidth * 1.5, width: lineWidth * 3, height: lineWidth * 3)
                 context.fill(Path(ellipseIn: tap), with: .color(on ? Color.accentColor : .secondary.opacity(0.5)))
@@ -483,7 +493,21 @@ struct MachineCard: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
+                if session.transmitting.contains(node.id) {
+                    Image(systemName: "dot.radiowaves.up.forward")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.green)
+                        .help("Sending on the network")
+                        .accessibilityLabel("Sending")
+                }
                 StateIndicator(state: state(controller))
+            }
+            if node.kind == .fileServer, let controller {
+                Label(controller.consoleLine ?? "Starting…", systemImage: "text.alignleft")
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .help("The server's console: its last line")
             }
         }
         .padding(10)
