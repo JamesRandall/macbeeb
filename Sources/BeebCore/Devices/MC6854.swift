@@ -92,6 +92,11 @@ public final class MC6854 {
     /// Bit-time in cycles, from the network's clock.
     public private(set) var bitTime = 10
     var byteTime: Int { bitTime * 8 }
+    /// Cycles the line takes to bring a symbol in (the network's delay; a
+    /// real line's is a few microseconds). What arrives is that late, so the
+    /// receiver counts idle from when it was enabled plus this: otherwise a
+    /// reply that's prompt on the line looks late.
+    var lineDelay = 0
     /// The IRQ output.
     public private(set) var irq = false
     /// Called when `irq` changes.
@@ -543,8 +548,11 @@ public final class MC6854 {
     /// When the line will have been quiet for 15 bits (the receiver's idle).
     private var idleDeadline: UInt64? {
         guard cr1 & CR1.rxReset == 0, !noClock, !idleKnown else { return nil }
-        return max(lineQuietSince, receiverEnabledAt) + UInt64(bitTime * 15)
+        return idleFrom + UInt64(bitTime * 15)
     }
+
+    /// When the line went quiet, as the receiver can tell.
+    private var idleFrom: UInt64 { max(lineQuietSince, receiverEnabledAt + UInt64(lineDelay)) }
 
     private var idleKnown = false
 
@@ -560,7 +568,7 @@ public final class MC6854 {
 
     private func update(now: UInt64) {
         let enabled = cr1 & CR1.rxReset == 0 && !noClock
-        let idle = enabled && now >= max(lineQuietSince, receiverEnabledAt) + UInt64(bitTime * 15)
+        let idle = enabled && now >= idleFrom + UInt64(bitTime * 15)
         if idle && !idleKnown, case .frame = rxState {
             // Idle in a frame is an abort.
             abortReceived = true
