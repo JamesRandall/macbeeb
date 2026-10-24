@@ -90,6 +90,17 @@ enum NetworkSelfTest {
             // Another, deleted.
             if let draft = try? NetworkStudioCommands.createDraft(.twoBBCs), let session = try? NetworkSession.session(for: draft) {
                 Task { @MainActor in
+                    // A running machine renumbered: a new machine, at its new number.
+                    let demo = folder.appendingPathComponent("Renumber.\(NetworkPackage.fileExtension)")
+                    if (try? NetworkPackage.create(.twoBBCs, at: demo)) != nil, let other = try? NetworkSession.session(for: demo),
+                       let node = other.project.stations.first, other.controllers[node.id] != nil {
+                        try? await Task.sleep(for: .seconds(1))
+                        let problem = other.renumber(node.id, to: 42)
+                        try? await Task.sleep(for: .seconds(1))
+                        let station = try? await other.controllers[node.id]?.host.performAsync { $0.machine.econet?.station }
+                        report += "Renumbered running \(node.name): \(problem ?? "ok"), its interface now station \(station.flatMap { $0 }.map(String.init) ?? "?")\n"
+                        other.close()
+                    }
                     await session.discard()
                     session.close()
                     report += "Deleted: gone \(!FileManager.default.fileExists(atPath: draft.path)), in recents \(RecentNetworks.shared.urls.contains(draft.standardizedFileURL))\n"

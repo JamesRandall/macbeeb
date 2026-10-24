@@ -207,13 +207,7 @@ extension NetworkSession {
     /// interface takes its number when it starts, so a machine that's on
     /// starts again (its memory is lost; its discs stay).
     func renumberForRoom(_ id: UUID, to number: Int) -> String? {
-        if let problem = setStationNumber(id, to: number) { return problem }
-        // (Off and on: a power cycle would rebuild it with its old number.)
-        if controllers[id] != nil {
-            powerOff(id, remember: false)
-            powerOn(id, remember: false)
-        }
-        return nil
+        renumber(id, to: number)
     }
 
     // MARK: Screens

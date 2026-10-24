@@ -127,6 +127,9 @@ struct MachineInspector: View {
     @State private var name = ""
     @State private var number = ""
     @State private var numberProblem: String?
+    /// A new number for a machine that's on, waiting for the go-ahead to
+    /// restart it.
+    @State private var pendingNumber: Int?
 
     var body: some View {
         let controller = session.controllers[node.id]
@@ -144,7 +147,20 @@ struct MachineInspector: View {
                         .labelsHidden()
                         .frame(width: 64)
                         .onSubmit(applyNumber)
-                        .help("1 to 254; each machine on a network needs its own")
+                        .help("1 to 254; each machine on a network needs its own. A machine that's on restarts to take it.")
+                        .confirmationDialog("Change \(node.name) to station \(pendingNumber ?? 0)?",
+                                            isPresented: Binding(get: { pendingNumber != nil }, set: { if !$0 { pendingNumber = nil } })) {
+                            Button("Change and Restart") {
+                                if let value = pendingNumber { numberProblem = session.renumber(node.id, to: value) }
+                                pendingNumber = nil
+                            }
+                            Button("Cancel", role: .cancel) {
+                                number = node.stationNumber.map(String.init) ?? ""
+                                pendingNumber = nil
+                            }
+                        } message: {
+                            Text("Its network interface takes its number when it starts, so it starts again: what's in its memory is lost. Its discs stay in their drives.")
+                        }
                 }
                 if let numberProblem {
                     Label(numberProblem, systemImage: "exclamationmark.triangle.fill")
@@ -311,9 +327,16 @@ struct MachineInspector: View {
             numberProblem = "A station number is a number from 1 to 254"
             return
         }
-        numberProblem = session.setStationNumber(node.id, to: value)
-        if numberProblem != nil {
+        guard value != node.stationNumber else { return }
+        if let problem = session.project.stationNumberProblem(value, for: node.id) {
+            numberProblem = problem
             number = node.stationNumber.map(String.init) ?? ""
+        } else if session.controllers[node.id] != nil {
+            // On: it has to restart, so ask.
+            numberProblem = nil
+            pendingNumber = value
+        } else {
+            numberProblem = session.setStationNumber(node.id, to: value)
         }
     }
 

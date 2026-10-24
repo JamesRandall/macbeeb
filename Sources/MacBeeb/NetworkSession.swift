@@ -381,6 +381,20 @@ final class NetworkSession: StationOwner {
         return nil
     }
 
+    /// A new station number, taking effect now: a machine's network
+    /// interface takes its number when it starts, so a machine that's on
+    /// starts again (its memory is lost; its discs stay). Off and on, not a
+    /// power cycle, which would rebuild it with its old number.
+    func renumber(_ id: UUID, to number: Int) -> String? {
+        guard number != project[id]?.stationNumber else { return nil }
+        if let problem = setStationNumber(id, to: number) { return problem }
+        if controllers[id] != nil {
+            powerOff(id, remember: false)
+            powerOn(id, remember: false)
+        }
+        return nil
+    }
+
     // MARK: Power
 
     func isOn(_ id: UUID) -> Bool { controllers[id] != nil }
