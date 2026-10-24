@@ -165,8 +165,7 @@ struct NetworkCanvas: View {
             if node.kind == .clock {
                 ClockCard(node: node, selected: selected)
             } else {
-                MachineCard(session: session, node: node, selected: selected, problem: problem?.message,
-                            showsScreen: zoom >= 0.35)
+                MachineCard(session: session, node: node, selected: selected, problem: problem?.message)
                     .dropDestination(for: URL.self) { urls, _ in
                         // Mac files onto the file server go on its disc.
                         guard node.kind == .fileServer, !urls.isEmpty else { return false }
@@ -669,7 +668,6 @@ struct MachineCard: View {
     let node: NetworkNode
     let selected: Bool
     let problem: String?
-    let showsScreen: Bool
 
     static let width = 236.0
     static let height = 230.0
@@ -729,7 +727,7 @@ struct MachineCard: View {
     private func screen(_ controller: MachineController?) -> some View {
         ZStack(alignment: .bottomTrailing) {
             Color.black
-            if let controller, showsScreen {
+            if let controller {
                 StationThumbnail(cache: session.thumbnails, id: node.id, host: controller.host)
             } else if controller == nil {
                 VStack(spacing: 4) {
