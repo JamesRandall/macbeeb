@@ -164,7 +164,7 @@ struct WelcomeView: View {
                 .foregroundStyle(.secondary)
             HStack(spacing: 12) {
                 ExploreTile(symbol: "sparkles", colour: .purple, title: "Eight-BBC Mandelbrot",
-                            detail: "Shared out over Econet") {
+                            detail: "In colour, over Econet") {
                     go(mandelbrot)
                 }
                 ExploreTile(symbol: "cpu", colour: .green, title: "Plug in ROMs",
@@ -186,9 +186,9 @@ struct WelcomeView: View {
     }
 
     private func mandelbrot() {
-        let url = RecentNetworks.newURL(named: NetworkTemplate.distributedMandelbrot.title)
+        let url = RecentNetworks.newURL(named: NetworkTemplate.mandelbrotInColour.title)
         do {
-            try NetworkPackage.create(.distributedMandelbrot, at: url)
+            try NetworkPackage.create(.mandelbrotInColour, at: url)
             NetworkStudioCommands.open(url, openWindow: openWindow)
         } catch {
             self.error = error.localizedDescription

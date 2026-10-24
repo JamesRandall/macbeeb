@@ -17,6 +17,7 @@ struct MCPMenu: View {
 struct MCPSetupView: View {
     static let windowID = "mcp-setup"
     private let log = AgentLog.shared
+    @Environment(\.openWindow) private var openWindow
 
     /// The MCP server, next to the app's executable.
     private static var serverURL: URL {
@@ -65,9 +66,23 @@ struct MCPSetupView: View {
             }
 
             Section {
-                Text("The commands use this copy of MacBeeb, where it is now: if you move the app, add it again. MCP > Activity Log shows everything agents do here. (Without `--attach`, the server runs a hidden BBC Micro of its own instead.)")
+                Text("The commands use this copy of MacBeeb, where it is now: if you move the app, add it again. MCP > Activity Log shows everything agents do here.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+            }
+
+            Section {
+                Text("Leave out `--attach` and the server runs a hidden BBC Micro of its own, with or without MacBeeb open. It only runs during the agent's tool calls, as fast as your Mac allows, and gives the same result every time: good for testing programs, and it leaves your BBC Micro alone.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                CommandBlock(text: "claude mcp add macbeeb-headless -- \(Self.shellPath)")
+                Button("AI Agents Guide") { openWindow(id: GuideWindow.windowID, value: "ai-agents") }
+                    .buttonStyle(.link)
+            } header: {
+                Text("Headless")
+            }
+
+            Section {
                 if !FileManager.default.isExecutableFile(atPath: Self.serverURL.path) {
                     Text("The server isn't at \(Self.serverURL.path).")
                         .foregroundStyle(.orange)

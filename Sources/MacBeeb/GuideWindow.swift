@@ -91,6 +91,7 @@ enum Guide {
         ("videonula", "paintpalette"),
         ("developer-reference", "chevron.left.forwardslash.chevron.right"),
         ("network-studio", "point.3.connected.trianglepath.dotted"),
+        ("ai-agents", "brain"),
     ]
 
     static var folder: URL? {
@@ -339,5 +340,6 @@ struct GuideMenuItem: View {
     var body: some View {
         Button("Hardware Expansion Guide") { openWindow(id: GuideWindow.windowID, value: "README") }
         Button("Network Studio Guide") { openWindow(id: GuideWindow.windowID, value: "network-studio") }
+        Button("AI Agents Guide") { openWindow(id: GuideWindow.windowID, value: "ai-agents") }
     }
 }
