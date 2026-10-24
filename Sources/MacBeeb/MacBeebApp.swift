@@ -129,11 +129,25 @@ struct MacBeebApp: App {
                     .disabled(machine == nil)
             }
             CommandGroup(replacing: .pasteboard) {
+                // In a text field (joining a network, settings, names),
+                // the usual editing; at a BBC, copy its screen and paste
+                // text into it.
+                Button("Cut") { TextEditing.send(#selector(NSText.cut(_:))) }
+                    .keyboardShortcut("x")
+                Button("Copy") {
+                    if TextEditing.active { TextEditing.send(#selector(NSText.copy(_:))) } else { machine?.copyScreenshot() }
+                }
+                .keyboardShortcut("c")
+                Button("Paste") {
+                    if TextEditing.active { TextEditing.send(#selector(NSText.paste(_:))) } else { machine?.pasteText() }
+                }
+                .keyboardShortcut("v")
+                Button("Select All") { TextEditing.send(#selector(NSText.selectAll(_:))) }
+                    .keyboardShortcut("a")
+                Divider()
                 Button("Copy Screenshot") { machine?.copyScreenshot() }
-                    .keyboardShortcut("c")
                     .disabled(machine == nil)
-                Button("Paste Text") { machine?.pasteText() }
-                    .keyboardShortcut("v")
+                Button("Paste Text into BBC") { machine?.pasteText() }
                     .disabled(machine == nil)
             }
             CommandGroup(after: .toolbar) {
@@ -629,5 +643,19 @@ struct ROMLibraryMenuItem: View {
     var body: some View {
         Button("ROM Library…") { openWindow(id: ROMLibraryWindow.windowID) }
             .help("The sideways ROM images you've added, to plug into machines")
+    }
+}
+
+/// Text being edited in the key window (a field's editor has the
+/// keyboard), so Edit menu commands go to it rather than to a BBC.
+@MainActor
+enum TextEditing {
+    static var active: Bool {
+        NSApp.keyWindow?.firstResponder is NSText
+    }
+
+    /// Sends an editing action down the responder chain.
+    static func send(_ action: Selector) {
+        NSApp.sendAction(action, to: nil, from: nil)
     }
 }

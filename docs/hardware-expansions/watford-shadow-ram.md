@@ -79,7 +79,7 @@ the screen:
 100 PRINT "Free for programs: ";HIMEM-TOP-4*2500;" bytes"
 ```
 
-Type it in, or paste it with **Edit ▸ Paste Text** (⌘V), then `RUN`.
+Type it in, or paste it with **Edit ▸ Paste** (⌘V), then `RUN`.
 
 On a stock Model B it stops at line 40:
 

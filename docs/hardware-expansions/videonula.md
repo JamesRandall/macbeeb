@@ -10,7 +10,7 @@ once and 160×256 pixels; they're just far better colours.
 
 1. **Machine ▸ Hardware…** (⌥⌘E). Under **Video**, turn on
    **VideoNuLA fitted**, then click **Restart BBC**.
-2. Paste `Examples/videonula/ramp.bas` (**Edit ▸ Paste Text**, ⌘V) and
+2. Paste `Examples/videonula/ramp.bas` (**Edit ▸ Paste**, ⌘V) and
    type `RUN`.
 
 ![Sixteen MODE 2 bars in a smooth ramp from red to yellow](images/videonula-ramp-nula.png)
