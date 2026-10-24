@@ -51,10 +51,11 @@ Ten machines in the 1980s, working together on one picture. **File ▸ New
 Network…**, then **Distributed Mandelbrot**:
 - eight **workers** (stations 2–9);
 - a **Guide** (station 1) whose screen says what to do;
-- a file server (254) with the programs.
+- a Level 2 file server (254) with the programs.
 
-When the file server's ready, each worker logs on and loads its bootstrap,
-WBOOT, from the server. It shows *Waiting for \*CLUSTER*.
+When the file server's ready, each worker logs on as BOOT, and the server
+has it run BOOT's `!BOOT`, which loads the bootstrap, WBOOT. It shows
+*Waiting for \*CLUSTER*. The Guide logs on as GUEST.
 
 On the Guide, type:
 
@@ -68,8 +69,8 @@ On the Guide, type:
 3. When it's complete, press a key on the Guide for a summary: how long it
    took and what each worker did.
 
-Any BBC can be the coordinator: press Break on it, type `*NET`, then
-`*CLUSTER` and `*MANDEL`. `*WORKERS` lists the workers, and `*STOPWK` sends
+Any BBC can be the coordinator: press Break on it, type `*NET` and
+`*I AM GUEST`, then `*CLUSTER` and `*MANDEL`. `*WORKERS` lists the workers, and `*STOPWK` sends
 them back to waiting.
 
 Things to try:
@@ -86,8 +87,9 @@ message goes through Acorn's network software and the emulated Econet chip.
 The programs are 6502 assembly in `Examples/distributed-mandelbrot`, with
 the protocol they speak.
 
-On Acorn's Level 1 file server, a station can't run a boot file at log-on,
-so the Studio types the worker's log-on and `*WBOOT` for it, once.
+The programs are in the server's `$.LIBRARY`, so any station that's logged
+on can run them as `*` commands. The Studio only types each worker's log-on,
+`*NET` and `*I AM BOOT`, once; the rest is BOOT's boot option (3, Exec).
 
 ### Mandelbrot in Colour
 

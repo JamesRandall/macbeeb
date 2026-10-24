@@ -9,22 +9,22 @@ through Acorn's network filing system and the emulated ADLC: MacBeeb only
 watches.
 
 The Network Studio's **Distributed Mandelbrot** template is this, set up:
-eight workers, a Guide machine with instructions, and a file server with
-the programs. See the Network Studio guide (docs/network-studio) for
+eight workers, a Guide machine with instructions, and a Level 2 file
+server with the programs. See the Network Studio guide (docs/network-studio) for
 using it; this file is for the programs themselves.
 
 ## The programs
 
-All six live in the file server's library (`&`), so any station can run
-them as `*` commands.
+They live in the file server's library (`$.LIBRARY`), so any station
+that's logged on can run them as `*` commands.
 
 | Program | Source | Where it runs | What it does |
 | --- | --- | --- | --- |
-| `WBOOT` | wboot.asm | &6000–&67FF, MODE 7 | A worker's bootstrap. The station's `!BOOT` runs it at log-on. It listens on port &B3: it answers DISCOVER, and on START it loads `WORKER` from the server (`*WORKER`, through NFS). A load that fails is reported to the launcher, and it carries on listening. |
+| `WBOOT` | wboot.asm | &6000–&67FF, MODE 7 | A worker's bootstrap. BOOT's `!BOOT` runs it at log-on. It listens on port &B3: it answers DISCOVER, and on START it loads `WORKER` from the server (`*WORKER`, through NFS). A load that fails is reported to the launcher, and it carries on listening. |
 | `WORKER` | worker.asm | &3000 up, squares table &4000–&4FFF, MODE 7 | Registers with its coordinator, takes tiles, computes them and sends the counts back until they're acknowledged. Its screen shows its state, tile, progress and counters. `STOP` sends it back to `WBOOT`. |
 | `CLUSTER` | cluster.asm → launcher.asm | &3000, any mode | On the BBC that's to be the coordinator. It probes stations 1–16, except itself and the servers, then STARTs each waiting bootstrap, waits to hear it's running, and adopts any worker already running. |
 | `WORKERS` | workers.asm → launcher.asm | &3000 | Lists the bootstraps and workers. |
-| `STOPWK` | stopwk.asm → launcher.asm | &3000 | Stops every worker, sending it back to its bootstrap. (Level 1's DFS-style names have at most 7 letters, so not STOPWORK.) |
+| `STOPWK` | stopwk.asm → launcher.asm | &3000 | Stops every worker, sending it back to its bootstrap. (Named when the demo ran on Level 1, whose names have at most 7 letters.) |
 | `MANDEL` | mandel.asm → coordinator.asm | &3000–&57FF, MODE 5 | The coordinator. It registers workers, keeps the queue of 320 tiles with an epoch for each assignment, reassigns a tile out for more than 20 emulated seconds, rejects stale results, and draws accepted tiles straight into screen memory. While drawing, it recruits bootstraps that appear: one candidate station a second gets a DISCOVER, and a bootstrap that answers gets a START. When the picture's done, it sends COMPLETE and keeps the picture until a key is pressed, then shows a MODE 7 summary. |
 | `MANDEL2` | mandel2.asm → coordinator.asm | &1B00–&2FFF, MODE 2 | The same coordinator in MODE 2, for a BBC with VideoNuLA. It sets NuLA to direct palette (`&FE22=&11`) with sixteen of its 4,096 colours: black inside the set, then fifteen that go round (blues, cyan, white, yellow, orange, red, purple), coloured `1 + (n − 1) MOD 15`. When the picture's complete it **cycles** them, the classic way: every third frame, at the vertical sync (`*FX19`), each colour takes the next one's shade, so the bands flow. Only NuLA's palette changes, not screen memory. A key resets NuLA (`&40`) for the summary. Without VideoNuLA the colours are wrong, as with any NuLA program on a stock BBC. |
 
@@ -61,7 +61,7 @@ for the whole picture at 64 iterations a pixel.
   - WBOOT is at &6000, clear of WORKER (code below &4000, with its table at &4000–&4FFF).
 - **Zero page:** the programs use only &70–&8F, BASIC's user area. NFS keeps &90 up.
 - **WBOOT to WORKER:** WBOOT leaves WORKER the coordinator's station (&70), the launcher's nonce (&71–&74) and station (&75), and a mark (&76 = 'W').
-- **Receive blocks:** NFS has room for eight. MANDEL uses six on its own port (MANDEL2 three) and one for recruiting; a worker uses two; a launcher uses two.
+- **Receive blocks:** NFS has room for eight, and being logged on to Level 2 takes one more than Level 1. MANDEL uses five on its own port (MANDEL2 three) and one for recruiting; a worker uses two; a launcher uses two. (With six, logged on to Level 2, the recruiting block came back from OSWORD &11 as number 9, and nothing ever arrived on it.)
 
 ## Building
 
@@ -77,14 +77,17 @@ builds it) and fails if they don't match. An AI agent can assemble any of
 them on a station with MacBeeb's `assemble` tool (MCP), which loads the
 symbols for source-level debugging.
 
-## On a Level 1 file server
+## The file server
 
-Acorn's Level 1 server has no boot options: `*OPT 4,3` gives "Bad command",
-and it can't `*EXEC` a file either. So a station can't run its `!BOOT`. The
-Studio stands in for the server: once the file server says it's ready, it
-types into each worker what a boot would do: `*NET`, `*I AM BOOT`, and the
-lines of the server's `A.!BOOT` (here, `*WBOOT`). Everything after that is
-the guests' own Econet traffic.
+Acorn's Level 2 server (`MandelbrotNetwork.fileServerDisc()` makes its
+disc):
+- **BOOT** has boot option 3 (Exec), and its `!BOOT` says `*WBOOT`. Logging on as BOOT runs it, so a worker needs only `*NET` and `*I AM BOOT`, which the Studio types once the server's ready. (On a Model B, Shift-N-Break does the same.)
+- **GUEST** is for the Guide and anyone else. Its directory has the guide programs, GUIDE and GUIDE2. The Guide's own copy selects the network and logs on as GUEST, trying again every second until the server answers.
+- **`$.LIBRARY`** has the programs, readable by everyone.
+
+It began on Level 1, which has no boot options (`*OPT 4,3` gives "Bad
+command", and it can't `*EXEC` a file), so the Studio had to type the
+`!BOOT`'s lines itself. It still does that for a Level 1 server.
 
 ## Tests
 
@@ -96,15 +99,15 @@ typing at the BBCs as a person would:
 - a worker switched off part way: its tile is reassigned after the timeout. Switched on and booted again, it's recruited and joins in.
 
 `MANDELBROT_BENCH=1` times renders with 1, 2, 4 and 8 workers. Measured
-(Model B workers, emulated seconds from the first tile handed out to the
+(Model B workers, a Level 2 file server, emulated seconds from the first tile handed out to the
 last accepted):
 
 | Workers | Render | Speed-up |
 | --- | --- | --- |
-| 1 | 116.1s | 1× |
-| 2 | 61.1s | 1.9× |
-| 4 | 34.9s | 3.3× |
-| 8 | 20.7s | 5.6× |
+| 1 | 116.5s | 1× |
+| 2 | 59.2s | 2.0× |
+| 4 | 35.4s | 3.3× |
+| 8 | 21.9s | 5.3× |
 
 It falls short of linear for three reasons:
 - the tiles aren't equal work: those inside the set take 64 iterations a pixel;

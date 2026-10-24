@@ -275,8 +275,9 @@ final class NetworkSession: StationOwner {
     }
 
     /// A station that boots from the network: once a file server's ready,
-    /// it selects the network and logs on as BOOT, and what the server's
-    /// !BOOT says is typed, as a Level 1 server can't have it run.
+    /// it selects the network and logs on as BOOT. A Level 2 server then
+    /// has it run BOOT's !BOOT (boot option 3); for Level 1, which can't,
+    /// what the server's !BOOT says is typed.
     private func bootFromNetwork(_ id: UUID) {
         Task { @MainActor [weak self] in
             // (For two minutes: a server that hasn't started by then won't.)
@@ -298,9 +299,11 @@ final class NetworkSession: StationOwner {
     private func serverBootCommands() async -> [String]? {
         for node in project.nodes where node.kind == .fileServer {
             guard let controller = controllers[node.id] else { continue }
+            let level2 = node.level == .level2
             let (ready, commands) = (try? await controller.host.performAsync { session -> (Bool, [String]?) in
-                let ready = session.machine.screenText().contains { $0.trimmingCharacters(in: .whitespaces) == "Ready" }
-                return (ready, session.machine.drives[0].disc.flatMap(FileServerDisc.bootCommands(on:)))
+                // Level 1 says "Ready", Level 2 "Starting - Ready".
+                let ready = session.machine.screenText().contains { $0.trimmingCharacters(in: .whitespaces).hasSuffix("Ready") }
+                return (ready, level2 ? [] : session.machine.drives[0].disc.flatMap(FileServerDisc.bootCommands(on:)))
             }) ?? (false, nil)
             if ready { readyServers.insert(node.id) }
             if readyServers.contains(node.id) { return commands ?? [] }

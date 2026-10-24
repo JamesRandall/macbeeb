@@ -60,7 +60,7 @@ ENDIF
     LDA mystn : STA txm+HEADER+5
     LDA #6 : STA plen
     LDA #T_DISCOVER : JSR mhdr
-    LDA target : LDX #PORT_MGMT : JSR send
+    JSR sendmgmt
     BNE notprepared
     LDA #T_BOOT_HELLO : LDX #100 : JSR await
     BCS notprepared
@@ -118,6 +118,22 @@ ENDIF
     LDX blk2 : JSR delrx
     RTS
 
+\ Sends the message at ptr to target's management port: Z set if it
+\ went. Three tries, a few centiseconds apart: a station that's sending
+\ just then (a worker calling its coordinator) can't take it.
+.sendmgmt
+    LDA #3 : STA attempts
+.sendmgmt1
+    LDA target : LDX #PORT_MGMT : JSR send
+    BEQ sendmgmt2
+    DEC attempts : BEQ sendmgmt3
+    LDA #19 : JSR OSBYTE : LDA #19 : JSR OSBYTE
+    JMP sendmgmt1
+.sendmgmt3
+    LDA #&FF
+.sendmgmt2
+    RTS
+
 IF TOOL = 0
 \ Starts the bootstrap at target (or adopts its worker).
 .launch
@@ -167,7 +183,7 @@ IF TOOL = 0
     LDA mystn : STA txm+HEADER+5
     LDA #6 : STA plen
     LDA #T_START : JSR mhdr
-    LDA target : LDX #PORT_MGMT : JSR send
+    JSR sendmgmt
     BNE sendstart8
     LDA #T_START_ACK : LDX #200 : JSR await
     BCS sendstart8
@@ -218,7 +234,7 @@ IF TOOL = 2
     JSR putnonce
     LDA #4 : STA plen
     LDA #T_STOP : JSR mhdr
-    LDA target : LDX #PORT_MGMT : JSR send
+    JSR sendmgmt
     BNE stop9
     LDA #T_STATUS : LDX #200 : JSR await
     BCS stop9
@@ -312,6 +328,7 @@ ENDIF
 .mode   EQUB 0
 .nonce  EQUD 0
 .target EQUB 0
+.attempts EQUB 0
 .tstate EQUB 0
 .blk1   EQUB 0
 .blk2   EQUB 0

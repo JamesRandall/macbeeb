@@ -162,8 +162,8 @@ struct DemoTemplateTests {
     }
 
     /// The Distributed Mandelbrot: a Guide that boots its disc, eight
-    /// workers that boot from the network, and the programs in the file
-    /// server's library with the workers' !BOOT.
+    /// workers that boot from the network, and a Level 2 file server with
+    /// the programs in its library and BOOT's !BOOT.
     @Test func mandelbrotNetworkHasItsDiscs() throws {
         let url = temporaryPackage()
         defer { try? FileManager.default.removeItem(at: url) }
@@ -174,17 +174,13 @@ struct DemoTemplateTests {
         let guide = try #require(project.nodes.first { $0.bootsDisc == true })
         #expect(guide.stationNumber == 1)
         let server = try #require(project.nodes.first { $0.kind == .fileServer })
-        for (node, names) in [(guide, ["GUIDE", "!BOOT"]), (server, ["&.CLUSTER", "&.MANDEL", "&.WORKER", "&.WBOOT", "A.!BOOT"])] {
-            let media = try #require(node.discs[0])
-            let data = try Data(contentsOf: NetworkPackage.url(of: media, in: url))
-            let disc = try Disc.fromImage([UInt8](data), format: .ssd)
-            let items = try DiscVolume(disc: disc).items(at: .init())
-            for name in names {
-                #expect(items.contains { $0.name == name }, "\(name)")
-            }
-            if node.kind == .fileServer {
-                #expect(FileServerDisc.bootCommands(on: disc) == ["*WBOOT"])
-            }
-        }
+        #expect(server.level == .level2 && server.setup?.secondProcessor == true)
+        let guideDisc = try Disc.fromImage([UInt8](Data(contentsOf: NetworkPackage.url(of: #require(guide.discs[0]), in: url))), format: .ssd)
+        #expect(Set(try DiscVolume(disc: guideDisc).items(at: .init()).map(\.name)) == ["GUIDE", "!BOOT"])
+        let disc = try Level2FileServerDisc(image: [UInt8](Data(contentsOf: NetworkPackage.url(of: #require(server.discs[0]), in: url))))
+        #expect(Set(try disc.entries(in: "$.LIBRARY").map(\.name)) == Set(MandelbrotGuest.files.map(\.name)))
+        #expect(try disc.contents(of: "$.BOOT.!BOOT") == Array("*WBOOT\r".utf8))
+        #expect(disc.users.first { $0.name == "BOOT" }?.bootOption == .exec)
+        #expect(try disc.entries(in: "$.GUEST").map(\.name) == ["GUIDE", "GUIDE2"])
     }
 }

@@ -250,8 +250,11 @@ S_WAIT = 0 : S_HELLO = 1 : S_READY = 2 : S_COMPUTING = 3 : S_SENT = 4 : S_DONE =
     LDA #S_READY : JSR setstate
     JSR now : JMP duenow
 
+\ COMPLETE: done, unless a RESULT's waiting for its ACK (lost, if the run's
+\ complete): that's resent until it comes, and READY then gets COMPLETE.
 .complete
     LDA plen : CMP #2 : BNE coordinator9
+    LDA state : CMP #S_SENT : BEQ coordinator9
     LDA #S_DONE : JSR setstate
     JSR now : LDA #250 : JMP after
 

@@ -1,5 +1,5 @@
-// The Distributed Mandelbrot demo, run as its guide says: a file server
-// with the programs, workers that boot into WBOOT, and a coordinator
+// The Distributed Mandelbrot demo, run as its guide says: a Level 2 file
+// server with the programs, workers whose !BOOT it runs (WBOOT), and a coordinator
 // typing *CLUSTER and *MANDEL. Everything between the machines goes over
 // the emulated Econet through Acorn's NFS; the picture on the
 // coordinator's screen is checked against the reference, pixel by pixel.
@@ -11,17 +11,20 @@ import BeebNetwork
 import BeebROMs
 
 extension EconetRig {
-    /// Starts Level 1 on machine `index` with the Mandelbrot server disc.
-    func startMandelbrotServer(_ index: Int, clients: [Int]) throws {
-        try startLevel1FileServer(index, clients: clients, directories: clients.map { _ in "A" },
-                                  disc: Disc.fromImage(MandelbrotNetwork.fileServerDisc(), format: .ssd))
+    /// Starts Level 2 on machine `index` with the Mandelbrot server disc.
+    func startMandelbrotServer(_ index: Int) throws {
+        try startLevel2FileServer(index, disc: MandelbrotNetwork.fileServerDisc(date: Self.level2Date))
     }
 
     /// Boots machine `index` from the network as the Studio does: logs on
-    /// as BOOT and types what the server's !BOOT says.
-    func bootFromNetwork(_ index: Int, server: Int = 0) {
-        let commands = FileServerDisc.bootCommands(on: machines[server].drives[0].disc!) ?? []
-        type(index, (["*NET", "*I AM BOOT"] + commands).map { $0 + "\n" }.joined())
+    /// as BOOT, and the server has it run BOOT's !BOOT.
+    func bootFromNetwork(_ index: Int) {
+        type(index, "*NET\n*I AM BOOT\n")
+    }
+
+    /// Logs machine `index` on as GUEST, as the guide says to.
+    func logOnAsGuest(_ index: Int) {
+        type(index, "*NET\n*I AM GUEST\n")
     }
 
     /// Machine `index`'s MODE 5 screen, a logical colour a pixel.
@@ -59,7 +62,7 @@ struct MandelbrotNetworkTests {
     /// 1): workers on 2 and 3, and station 4 at BASIC, not prepared.
     @Test func launchRenderAndStop() throws {
         let rig = EconetRig([(.modelB, 254), (.modelB, 1), (.modelB, 2), (.modelB, 3), (.modelB, 4)])
-        try rig.startMandelbrotServer(0, clients: [1, 2, 3, 4])
+        try rig.startMandelbrotServer(0)
         rig.machines[1].insertDisc(try Disc.fromImage(MandelbrotNetwork.guideDisc(), format: .ssd), drive: 0)
         rig.machines[1].shiftBreak()
         for worker in [2, 3] { rig.bootFromNetwork(worker) }
@@ -107,10 +110,10 @@ struct MandelbrotNetworkTests {
     /// joins in. The picture's still right.
     @Test func workerLostAndJoining() throws {
         let rig = EconetRig([(.modelB, 254), (.modelB, 1), (.modelB, 2), (.modelB, 3)])
-        try rig.startMandelbrotServer(0, clients: [1, 2, 3])
+        try rig.startMandelbrotServer(0)
         for worker in [2, 3] { rig.bootFromNetwork(worker) }
         #expect(rig.run(until: { [2, 3].allSatisfy { rig.screen($0).contains("Waiting for *CLUSTER") } }))
-        rig.type(1, "*NET\n")
+        rig.logOnAsGuest(1)
         rig.type(1, "*CLUSTER\n")
         #expect(rig.run(until: { rig.screen(1).contains("2 workers started.") }, seconds: 60), "\(rig.screen(1))")
         rig.type(1, "*MANDEL\n")
@@ -134,9 +137,12 @@ struct MandelbrotNetworkTests {
 struct MandelbrotInColourTests {
     @Test func drawsInSixteenColoursAndCyclesThem() throws {
         let rig = EconetRig([(.modelB, 254), (.modelB, 1), (.modelB, 2), (.modelB, 3)], nula: [1])
-        try rig.startMandelbrotServer(0, clients: [1, 2, 3])
+        // The Guide boots before the server's up, as in the Studio: its
+        // log-on tries again until it is.
         rig.machines[1].insertDisc(try Disc.fromImage(MandelbrotNetwork.guideDisc(for: .mode2), format: .ssd), drive: 0)
         rig.machines[1].shiftBreak()
+        rig.run(seconds: 3)
+        try rig.startMandelbrotServer(0)
         for worker in [2, 3] { rig.bootFromNetwork(worker) }
         #expect(rig.run(until: { [2, 3].allSatisfy { rig.screen($0).contains("Waiting for *CLUSTER") } }))
         #expect(rig.screen(1).contains("MANDELBROT IN COLOUR") && rig.screen(1).contains("*MANDEL2"), "\(rig.screen(1))")
@@ -175,10 +181,10 @@ struct MandelbrotBenchmark {
     func render(workers: Int) throws {
         let stations = Array(2..<(2 + workers))
         let rig = EconetRig([(.modelB, 254), (.modelB, 1)] + stations.map { (.modelB, $0) })
-        try rig.startMandelbrotServer(0, clients: [1] + stations)
+        try rig.startMandelbrotServer(0)
         for index in 2..<(2 + workers) { rig.bootFromNetwork(index) }
         rig.run(until: { (2..<(2 + workers)).allSatisfy { rig.screen($0).contains("Waiting for *CLUSTER") } }, seconds: 60)
-        rig.type(1, "*NET\n")
+        rig.logOnAsGuest(1)
         rig.type(1, "*CLUSTER\n")
         rig.run(until: { rig.screen(1).contains("failed.") }, seconds: 120)
         rig.type(1, "*MANDEL\n")

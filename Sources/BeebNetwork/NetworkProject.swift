@@ -216,8 +216,8 @@ public struct NetworkNode: Codable, Sendable, Equatable, Identifiable {
     /// Boots the disc in its drive 0 when it's switched on (Shift-Break).
     public var bootsDisc: Bool?
     /// Boots from the network when it's switched on, once the file server's
-    /// ready: logs on and runs the server's !BOOT. (Level 1 has no boot
-    /// options, so the Studio types what the !BOOT says.)
+    /// ready: logs on as BOOT, and Level 2 runs its !BOOT. (Level 1 has no
+    /// boot options, so the Studio types what its !BOOT says.)
     public var bootsNetwork: Bool?
     /// A file server: which of Acorn's servers it runs (nil, the default
     /// and what networks saved before had, is Level 1).

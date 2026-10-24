@@ -35,6 +35,10 @@ GUARD &6800
 .discover
     LDA plen : CMP #6 : BNE listen
     JSR takenonce
+    \ Listening again before answering: START can follow at once, and
+    \ would find no block open ("not listening").
+    LDA #LO(rxm) : STA ptr : LDA #HI(rxm) : STA ptr+1
+    LDA #PORT_MGMT : JSR openrx : STA blk
     LDA #LO(txm) : STA ptr : LDA #HI(txm) : STA ptr+1
     JSR putnonce
     LDA mystn : STA txm+HEADER+4
@@ -45,6 +49,9 @@ GUARD &6800
     LDA #T_BOOT_HELLO : JSR mhdr
     LDA rxstn : LDX #PORT_LAUNCHER : JSR send
     JSR event : JSR pstr : EQUS "Seen by station ", 0 : LDA rxstn : JSR pstn : JSR clearline
+    LDA blk : BEQ discover9
+    JMP wait
+.discover9
     JMP listen
 
 \ START nonce4 target coordinator: load WORKER, leaving it who to work

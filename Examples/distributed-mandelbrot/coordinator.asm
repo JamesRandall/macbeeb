@@ -25,7 +25,7 @@ IF SCREEN_MODE = 5
     SCREEN = &5800 : ROW_BYTES = 320
     ORG MANDEL_ORG
     GUARD SCREEN
-    BLOCKS = 6              \ receive blocks on its port (NFS has room for eight in all)
+    BLOCKS = 5              \ receive blocks on its port (NFS has eight, and logging on to Level 2 takes one)
     NW = 16                 \ workers it can keep track of
 ELSE
     SCREEN = &3000 : ROW_BYTES = 640

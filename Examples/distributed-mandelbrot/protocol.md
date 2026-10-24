@@ -91,11 +91,12 @@ return max
 ## Exchanges
 
 - **Launch** (`CLUSTER` at station C):
-  1. C probes each candidate station 1–16, except itself, the file server and the printer server, with DISCOVER on &B3. A transmit failure means "not prepared".
+  1. C probes each candidate station 1–16, except itself, the file server and the printer server, with DISCOVER on &B3. Three transmit failures, a few centiseconds apart, mean "not prepared". (A station that's transmitting just then can't take a frame, and a worker calls its coordinator often.) START and STOP are tried the same way.
   2. C waits up to 1s for BOOT_HELLO on &B2.
   3. C sends START and waits up to 2s for START_ACK, then up to 30s for STATUS running. Or it gets LAUNCH_ERROR.
-  4. A bootstrap on START: it closes its block, then does `*WORKER`, which goes through NFS and the library. The coordinator and launcher stations, and the nonce, are left for WORKER at &70 (coordinator), &71–&74 (nonce), &75 (launcher) and &76 = &57 ('W', present).
-  5. A worker that gets START (it's running already) answers START_ACK 1, takes the new coordinator, sends STATUS and starts again with HELLO.
+  4. A bootstrap opens its receive block again before it answers DISCOVER, as START can follow straight away.
+  5. A bootstrap on START: it closes its block, then does `*WORKER`, which goes through NFS and the library. The coordinator and launcher stations, and the nonce, are left for WORKER at &70 (coordinator), &71–&74 (nonce), &75 (launcher) and &76 = &57 ('W', present).
+  6. A worker that gets START (it's running already) answers START_ACK 1, takes the new coordinator, sends STATUS and starts again with HELLO.
 - **Render:**
   - Workers send HELLO to the coordinator every 1s until WELCOME.
   - The coordinator answers HELLO with WELCOME, and keeps it registered. A worker it knew that sends HELLO again has its tile, if any, put back in the queue.
@@ -111,5 +112,6 @@ return max
 - **Completion:** when all 320 tiles are accepted, the coordinator sends COMPLETE to every worker it knows.
   - It then answers READY or HELLO in that run with COMPLETE.
   - A worker that gets COMPLETE says so, and sends HELLO every 3s, so a new run of MANDEL can take it on.
+  - A worker still waiting for a RESULT's ACK ignores COMPLETE: the ACK was lost, so it resends the RESULT as usual. The ACK says whether the tile was its own to count, and its READY then gets COMPLETE.
   - The coordinator keeps its image until a key is pressed, then shows a MODE 7 summary and returns to BASIC.
 - **Stop** (`STOPWORK`): STOP to each running worker. It answers STATUS 3 and does `*WBOOT` (back to waiting).

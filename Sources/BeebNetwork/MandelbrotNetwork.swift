@@ -1,10 +1,10 @@
 import BeebCore
 import Foundation
 
-/// The Distributed Mandelbrot network: eight workers that boot from the
-/// file server into WBOOT, and a Guide machine whose screen says what to
-/// do. The programs (MandelbrotGuest) are in the server's library, so
-/// any station can *CLUSTER and *MANDEL.
+/// The Distributed Mandelbrot network: eight workers that boot from a
+/// Level 2 file server into WBOOT, and a Guide machine whose screen says
+/// what to do. The programs (MandelbrotGuest) are in the server's library,
+/// so any station that's logged on can *CLUSTER and *MANDEL.
 public enum MandelbrotNetwork {
     /// The stations the workers have.
     public static let workers = 2...9
@@ -16,7 +16,8 @@ public enum MandelbrotNetwork {
     }
 
     /// MODE 7 instructions: on the Guide machine's own disc (it boots it),
-    /// and on the file server (GUIDE and GUIDE2).
+    /// and on the file server (GUEST's GUIDE and GUIDE2). They select the
+    /// network and log on as GUEST, trying again until the server's up.
     public static func guide(for coordinator: Coordinator = .mode5) -> String {
         coordinator == .mode5 ? guide : guide
             .replacingOccurrences(of: #"130 PRINT G$;"*MANDEL";W$;"  hand out tiles and draw""#,
@@ -27,8 +28,8 @@ public enum MandelbrotNetwork {
                                   with: #"160 PRINT C$;"BBC's VideoNuLA gives them 16 colours.""#)
             .replacingOccurrences(of: #"210 PRINT C$;"A key ends MANDEL's picture. On another""#,
                                   with: #"210 PRINT C$;"Then the colours cycle; a key ends it.""#)
-            .replacingOccurrences(of: #"220 PRINT C$;"BBC, press Break and type *NET first.""#,
-                                  with: #"220 PRINT C$;"Elsewhere: press Break, then *NET.""#)
+            .replacingOccurrences(of: #"220 PRINT C$;"BBC, first type *NET and *I AM GUEST.""#,
+                                  with: #"220 PRINT C$;"Elsewhere: *NET, then *I AM GUEST.""#)
             .replacingOccurrences(of: "  DISTRIBUTED MANDELBROT", with: " MANDELBROT IN COLOUR")
     }
 
@@ -40,8 +41,8 @@ public enum MandelbrotNetwork {
     50 PRINT
     60 PRINT C$;"Eight BBC Micros on this network are"
     70 PRINT C$;"waiting to draw the Mandelbrot set:"
-    80 PRINT C$;"each has loaded WBOOT from the file"
-    90 PRINT C$;"server, and listens on Econet."
+    80 PRINT C$;"each logged on as BOOT, and the file"
+    90 PRINT C$;"server ran its !BOOT: WBOOT listens."
     100 PRINT
     110 PRINT Y$;"Here (or on any BBC), type:"
     120 PRINT G$;"*CLUSTER";W$;" start the workers"
@@ -54,31 +55,37 @@ public enum MandelbrotNetwork {
     190 PRINT G$;"*WORKERS";W$;" list them  ";G$;"*STOPWK";W$;" stop"
     200 PRINT Y$;"On the Mac:";W$;"Mandelbrot view, Traffic."
     210 PRINT C$;"A key ends MANDEL's picture. On another"
-    220 PRINT C$;"BBC, press Break and type *NET first."
+    220 PRINT C$;"BBC, first type *NET and *I AM GUEST."
     230 PRINT
     240 PRINT CHR$132;CHR$157;W$;"This is station 1. Workers: 2 to 9  ";CHR$156
     250 *NET
-    260 VDU 23,1,1;0;0;0;
+    260 ON ERROR IF ERR=17 VDU 23,1,1;0;0;0;:END ELSE T%=TIME+100:REPEAT UNTIL TIME>T%:GOTO 270
+    270 *I AM GUEST
+    280 ON ERROR OFF
+    290 VDU 23,1,1;0;0;0;
     """
 
-    /// What a worker's boot file says: load the bootstrap.
+    /// What the BOOT user's boot file says: load the bootstrap.
     public static let bootFile = "*WBOOT\r"
 
-    /// The file server's disc: Level 1, the programs in the library (&),
-    /// the workers' !BOOT and the guide in directory A.
-    public static func fileServerDisc() throws -> [UInt8] {
-        var volume = try DiscVolume(disc: Disc.fromImage(FileServerDisc.image(), format: .ssd))
+    /// The file server's disc, Level 2's:
+    /// - BOOT, whose !BOOT the server has a worker run when it logs on (boot option 3);
+    /// - GUEST, for the Guide and anyone else, with the guide programs;
+    /// - the programs in $.LIBRARY, the library everyone's given.
+    public static func fileServerDisc(date: Level2FileServerDisc.Date = .today) throws -> Level2FileServerDisc {
+        var disc = try Level2FileServerDisc(name: "MANDELBROT", users: ["BOOT", "GUEST"], date: date)
+        try disc.createDirectory("$.LIBRARY", date: date)
         for file in MandelbrotGuest.files {
-            try volume.save(at: .init(), name: "&.\(file.name)", loadAddress: 0xFFFF_0000 | file.loadAddress,
-                            executionAddress: 0xFFFF_0000 | file.executionAddress, contents: file.contents)
+            try disc.save("$.LIBRARY.\(file.name)", loadAddress: 0xFFFF_0000 | file.loadAddress,
+                          executionAddress: 0xFFFF_0000 | file.executionAddress, contents: file.contents, access: .shared, date: date)
         }
-        let shared = FileServerDisc.sharedDirectory
-        try volume.save(at: .init(), name: "\(shared).!BOOT", loadAddress: 0, executionAddress: 0, contents: Array(bootFile.utf8))
-        try volume.save(at: .init(), name: "\(shared).GUIDE", loadAddress: 0xFFFF_1900, executionAddress: 0xFFFF_8023,
-                        contents: BBCBasic.tokenise(guide(for: .mode5)))
-        try volume.save(at: .init(), name: "\(shared).GUIDE2", loadAddress: 0xFFFF_1900, executionAddress: 0xFFFF_8023,
-                        contents: BBCBasic.tokenise(guide(for: .mode2)))
-        return volume.image
+        try disc.setBootOption(.exec, for: "BOOT")
+        try disc.save("$.BOOT.!BOOT", contents: Array(bootFile.utf8), access: .shared, date: date)
+        try disc.save("$.GUEST.GUIDE", loadAddress: 0xFFFF_1900, executionAddress: 0xFFFF_8023,
+                      contents: BBCBasic.tokenise(guide(for: .mode5)), access: .shared, date: date)
+        try disc.save("$.GUEST.GUIDE2", loadAddress: 0xFFFF_1900, executionAddress: 0xFFFF_8023,
+                      contents: BBCBasic.tokenise(guide(for: .mode2)), access: .shared, date: date)
+        return disc
     }
 
     /// The Guide machine's disc: it boots into the instructions.

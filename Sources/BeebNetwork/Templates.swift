@@ -55,6 +55,14 @@ public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
             NetworkNode(kind: kind, name: kind.displayName, stationNumber: kind.conventionalStation, setup: modelB,
                         position: CanvasPoint(x: x, y: y))
         }
+        // Level 2: a Model B with a 6502 Second Processor. (Its station
+        // count comes from the network, when it starts.)
+        func level2Server(_ x: Double, _ y: Double) -> NetworkNode {
+            var node = NetworkNode(kind: .fileServer, name: "Level 2 File Server", stationNumber: 254,
+                                   setup: FileServerLevel.level2.setup, position: CanvasPoint(x: x, y: y))
+            node.fileServerLevel = .level2
+            return node
+        }
         let s = Self.spacing
         var project = NetworkProject(name: title)
         switch self {
@@ -74,7 +82,7 @@ public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
                 var worker = station("Worker \(number)", number, Double(number - 5) * s, 0)
                 worker.bootsNetwork = true
                 return worker
-            } + [server(.fileServer, -s / 2, 330), .clock(at: CanvasPoint(x: s / 2 + 40, y: 330))]
+            } + [level2Server(-s / 2, 330), .clock(at: CanvasPoint(x: s / 2 + 40, y: 330))]
         case .twoBBCs:
             project.nodes = [station("BBC 1", 1, -s / 2, 0), station("BBC 2", 2, s / 2, 0), .clock(at: CanvasPoint(x: 0, y: 200))]
         case .schoolClassroom:
@@ -93,14 +101,14 @@ public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
     /// The discs a template's machines start with, for `NetworkPackage`
     /// to put in the package: (node, drive, file name, image).
     public func discs(for project: NetworkProject) throws -> [(node: UUID, drive: Int, name: String, image: [UInt8])] {
-        let booted: (name: String, image: [UInt8]), server: [UInt8]
+        let booted: (name: String, image: [UInt8]), server: (name: String, image: [UInt8])
         switch self {
         case .econetDemo:
-            (booted, server) = (("Welcome.ssd", try DemoNetwork.welcomeDisc()), try DemoNetwork.fileServerDisc())
-        case .distributedMandelbrot:
-            (booted, server) = (("Guide.ssd", try MandelbrotNetwork.guideDisc()), try MandelbrotNetwork.fileServerDisc())
-        case .mandelbrotInColour:
-            (booted, server) = (("Guide.ssd", try MandelbrotNetwork.guideDisc(for: .mode2)), try MandelbrotNetwork.fileServerDisc())
+            (booted, server) = (("Welcome.ssd", try DemoNetwork.welcomeDisc()), ("File Server.ssd", try DemoNetwork.fileServerDisc()))
+        case .distributedMandelbrot, .mandelbrotInColour:
+            let coordinator: MandelbrotNetwork.Coordinator = self == .distributedMandelbrot ? .mode5 : .mode2
+            (booted, server) = (("Guide.ssd", try MandelbrotNetwork.guideDisc(for: coordinator)),
+                                ("Level 2 File Server.dsd", try MandelbrotNetwork.fileServerDisc().image))
         default:
             return []
         }
@@ -109,7 +117,7 @@ public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
             discs.append((node.id, 0, booted.name, booted.image))
         }
         if let node = project.nodes.first(where: { $0.kind == .fileServer }) {
-            discs.append((node.id, 0, "File Server.ssd", server))
+            discs.append((node.id, 0, server.name, server.image))
         }
         return discs
     }
