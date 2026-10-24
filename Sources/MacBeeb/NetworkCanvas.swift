@@ -42,7 +42,8 @@ struct NetworkCanvas: View {
                         .position(viewPoint(position(of: node)))
                 }
                 ForEach(remote, id: \.station.station) { item in
-                    RemoteStationCard(station: item.station, participant: session.participant(item.station.participantId))
+                    RemoteStationCard(station: item.station, participant: session.participant(item.station.participantId),
+                                      screen: item.station.online ? session.remoteScreens[item.station.station] : nil)
                         .scaleEffect(zoom)
                         .position(viewPoint(item.point))
                 }
@@ -611,12 +612,28 @@ struct BusDrawing: View {
 struct RemoteStationCard: View {
     let station: StationView
     let participant: ParticipantView?
+    /// Its screen, if its owner shares it.
+    var screen: CGImage?
 
     static let width = 236.0
-    static let height = 150.0
+    static var height: Double { 150.0 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let screen {
+                Image(decorative: screen, scale: 1)
+                    .resizable()
+                    .interpolation(.medium)
+                    .aspectRatio(Renderer.aspect, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(alignment: .topLeading) {
+                        Image(systemName: "globe")
+                            .font(.caption)
+                            .padding(4)
+                            .background(.ultraThinMaterial, in: Circle())
+                            .padding(5)
+                    }
+            }
             HStack {
                 Image(systemName: "globe")
                     .font(.title2)
@@ -648,7 +665,7 @@ struct RemoteStationCard: View {
             }
         }
         .padding(12)
-        .frame(width: Self.width, height: Self.height)
+        .frame(width: Self.width, height: screen == nil ? 150 : MachineCard.height)
         .background(.background.opacity(0.92), in: RoundedRectangle(cornerRadius: 14))
         .overlay {
             RoundedRectangle(cornerRadius: 14)

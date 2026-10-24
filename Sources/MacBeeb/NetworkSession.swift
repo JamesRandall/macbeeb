@@ -44,6 +44,12 @@ final class NetworkSession: StationOwner {
     /// What the room was told of the stations, to tell it changes.
     @ObservationIgnored var lastClaims: [StationClaim] = []
     @ObservationIgnored private var closed = false
+    /// The room's screens connection, while the room allows screen sharing.
+    @ObservationIgnored var screens: RoomScreens?
+    @ObservationIgnored var screenTimer: Timer?
+    @ObservationIgnored var sendingScreens: Set<UUID> = []
+    /// Other members' machines' screens, by station.
+    var remoteScreens: [Int: CGImage] = [:]
 
     /// The sessions open, by package (one each).
     private(set) static var open: [URL: NetworkSession] = [:]
@@ -120,6 +126,7 @@ final class NetworkSession: StationOwner {
         // Once (deleting a network closes it before its window goes).
         guard !closed else { return }
         closed = true
+        stopScreens()
         internet?.stop()
         internet = nil
         renameFileToMatch()

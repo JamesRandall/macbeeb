@@ -19,6 +19,7 @@ struct JoinRoomView: View {
     @State private var target = Target.newModelB
     @State private var displayName = NetworkSession.roomDisplayName
     @State private var makeDefault = false
+    @State private var showScreen = false
 
     enum Target: Hashable {
         case newModelB
@@ -168,6 +169,11 @@ struct JoinRoomView: View {
                 }
             }
             TextField("Your name", text: $displayName, prompt: Text("Shown to the others"))
+            if preview.room.allowsScreens {
+                Toggle("Show my machine's screen to the others", isOn: $showScreen)
+                    .toggleStyle(.checkbox)
+                    .help("This network lets people share their screens: yours appears, live, on their canvas. You can change your mind later.")
+            }
             if let otherService {
                 Toggle("Use \(otherService.host ?? "") for my own networks too", isOn: $makeDefault)
                     .toggleStyle(.checkbox)
@@ -224,7 +230,8 @@ struct JoinRoomView: View {
                     session = try makeNetwork(for: preview, model: target == .newMaster ? .master128 : .modelB)
                 }
                 try session.enterRoom(service: invitation.service, roomId: preview.roomId, roomName: preview.room.name,
-                                      joined: joined, shared: Set(session.project.stations.map(\.id)))
+                                      joined: joined, shared: Set(session.project.stations.map(\.id)),
+                                      showsScreens: showScreen && preview.room.allowsScreens)
                 if makeDefault { InternetEconetService.current = invitation.service }
                 NetworkStudioCommands.open(session.url, openWindow: openWindow)
                 dismissWindow(id: Self.windowID)

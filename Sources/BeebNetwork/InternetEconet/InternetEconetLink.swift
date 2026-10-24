@@ -14,6 +14,9 @@ public struct InternetRoomLink: Codable, Sendable, Equatable {
     /// The machines it shares, by node. Others keep their station numbers
     /// in the room (so nobody else takes them) but take no traffic.
     public var shared: [UUID]
+    /// This person shows their shared machines' screens to the room (when
+    /// its host allows screen sharing).
+    public var showsScreens: Bool?
 
     public init(service: URL, roomId: String, roomName: String, hosting: Bool, shared: [UUID]) {
         self.service = service

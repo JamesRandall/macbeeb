@@ -1,5 +1,7 @@
 import BeebNetwork
+import CoreGraphics
 import Foundation
+import ImageIO
 
 /// A network in an Internet Econet room: sharing it (as its host), joining
 /// one, and keeping the room told of its stations.
@@ -57,6 +59,7 @@ extension NetworkSession {
 
     private func roomChanged(_ snapshot: RoomConnection.Snapshot) {
         room = snapshot
+        updateScreens()
         // The room's name, as the host changes it.
         if let name = snapshot.room?.name, project.internetRoom?.roomName != name {
             update { $0.internetRoom?.roomName = name }
@@ -78,26 +81,32 @@ extension NetworkSession {
 
     // MARK: Hosting
 
-    /// Makes a private room on `service` and shares `shared` into it.
-    func share(on service: URL, name: String, shared: Set<UUID>) async throws {
+    /// Makes a private room on `service` and shares `shared` into it;
+    /// `screenSharing`: members may show their screens, `showsScreens`: this
+    /// network shows its.
+    func share(on service: URL, name: String, shared: Set<UUID>, screenSharing: Bool = false, showsScreens: Bool = false) async throws {
         let api = RoomAPI(service: service)
-        let created = try await api.createRoom(name: name, displayName: Self.roomDisplayName.isEmpty ? "Host" : Self.roomDisplayName)
+        let created = try await api.createRoom(name: name, displayName: Self.roomDisplayName.isEmpty ? "Host" : Self.roomDisplayName,
+                                               screenSharing: screenSharing)
         let credentials = RoomCredentials(participantId: created.participantId, memberToken: created.memberToken,
                                           ownerToken: created.ownerToken)
         try Self.credentialStore.save(credentials, service: service, roomId: created.roomId)
-        let link = InternetRoomLink(service: service, roomId: created.roomId, roomName: name, hosting: true,
+        var link = InternetRoomLink(service: service, roomId: created.roomId, roomName: name, hosting: true,
                                     shared: project.stations.map(\.id).filter { shared.contains($0) })
+        link.showsScreens = showsScreens
         update { $0.internetRoom = link }
         currentInvite = created.invite
         startRoomLink(link, credentials: credentials)
     }
 
     /// Joined a room (the join sheet has done the asking): into it.
-    func enterRoom(service: URL, roomId: String, roomName: String, joined: JoinedRoom, shared: Set<UUID>) throws {
+    func enterRoom(service: URL, roomId: String, roomName: String, joined: JoinedRoom, shared: Set<UUID>,
+                   showsScreens: Bool = false) throws {
         let credentials = RoomCredentials(participantId: joined.participantId, memberToken: joined.memberToken)
         try Self.credentialStore.save(credentials, service: service, roomId: roomId)
-        let link = InternetRoomLink(service: service, roomId: roomId, roomName: roomName, hosting: false,
+        var link = InternetRoomLink(service: service, roomId: roomId, roomName: roomName, hosting: false,
                                     shared: project.stations.map(\.id).filter { shared.contains($0) })
+        link.showsScreens = showsScreens
         update { $0.internetRoom = link }
         startRoomLink(link, credentials: credentials)
     }
@@ -143,6 +152,7 @@ extension NetworkSession {
         guard let link = project.internetRoom else { return }
         let api = RoomAPI(service: link.service)
         let credentials = Self.credentialStore.credentials(service: link.service, roomId: link.roomId)
+        stopScreens()
         internet?.stop()
         internet = nil
         if let credentials {
@@ -156,6 +166,87 @@ extension NetworkSession {
         update { $0.internetRoom = nil }
         room = nil
         currentInvite = nil
+    }
+
+    // MARK: Screens
+
+    /// Whether this network shows its shared machines' screens.
+    var showsScreens: Bool { project.internetRoom?.showsScreens == true }
+
+    func setShowsScreens(_ on: Bool) {
+        update { $0.internetRoom?.showsScreens = on }
+        updateScreens()
+    }
+
+    /// The host allows screen sharing, or doesn't.
+    func setScreenSharingAllowed(_ allowed: Bool) async throws {
+        guard let api = roomAPI, let link = project.internetRoom, let owner = ownerToken else { return }
+        _ = try await api.update(roomId: link.roomId, ownerToken: owner, screenSharing: allowed)
+    }
+
+    /// Screens on when the room allows them (to see others'), sending this
+    /// network's when it shows them; off otherwise.
+    func updateScreens() {
+        let allowed = room?.state == .connected && room?.room?.allowsScreens == true
+        guard allowed, let link = project.internetRoom,
+              let credentials = Self.credentialStore.credentials(service: link.service, roomId: link.roomId) else {
+            stopScreens()
+            return
+        }
+        if screens == nil {
+            let screens = RoomScreens(api: RoomAPI(service: link.service), roomId: link.roomId, memberToken: credentials.memberToken)
+            screens.onScreen = { [weak self] station, jpeg in
+                guard let source = CGImageSourceCreateWithData(jpeg as CFData, nil),
+                      let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return }
+                Task { @MainActor in self?.remoteScreens[Int(station)] = image }
+            }
+            self.screens = screens
+            screens.start()
+        }
+        if showsScreens {
+            if screenTimer == nil {
+                screenTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.sendScreens() }
+                }
+            }
+        } else {
+            screenTimer?.invalidate()
+            screenTimer = nil
+        }
+    }
+
+    func stopScreens() {
+        screenTimer?.invalidate()
+        screenTimer = nil
+        screens?.stop()
+        screens = nil
+        if !remoteScreens.isEmpty { remoteScreens = [:] }
+    }
+
+    /// Each shared machine's latest picture, half size, as JPEG: made off
+    /// the main thread (and nowhere near the network's), one at a time
+    /// per machine.
+    private func sendScreens() {
+        guard let screens, let link = project.internetRoom else { return }
+        for node in project.stations where link.shared.contains(node.id) {
+            guard let number = node.stationNumber, (1...254).contains(number), !sendingScreens.contains(node.id),
+                  let frame = controllers[node.id]?.host.frame else { continue }
+            sendingScreens.insert(node.id)
+            let id = node.id
+            DispatchQueue.global(qos: .utility).async {
+                if let image = ThumbnailCache.halfSize(frame.pixels), let jpeg = Self.jpeg(image) {
+                    screens.send(station: UInt8(number), jpeg: jpeg, width: image.width, height: image.height)
+                }
+                Task { @MainActor [weak self] in self?.sendingScreens.remove(id) }
+            }
+        }
+    }
+
+    nonisolated static func jpeg(_ image: CGImage) -> Data? {
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, "public.jpeg" as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.6] as CFDictionary)
+        return CGImageDestinationFinalize(destination) ? data as Data : nil
     }
 
     /// Stations of other members, for the canvas.

@@ -8,6 +8,11 @@ public struct RoomView: Codable, Sendable, Equatable {
     public var name: String
     public var description: String
     public var locked: Bool
+    /// Members may share their machines' screens (missing from older
+    /// services).
+    public var screenSharing: Bool?
+
+    public var allowsScreens: Bool { screenSharing == true }
 }
 
 public struct ParticipantView: Codable, Sendable, Equatable, Identifiable {
@@ -129,9 +134,9 @@ public struct RoomAPI: Sendable {
         try await request("GET", ".well-known/acorn-econet", as: ServiceInfo.self)
     }
 
-    public func createRoom(name: String, description: String = "", displayName: String) async throws -> CreatedRoom {
+    public func createRoom(name: String, description: String = "", displayName: String, screenSharing: Bool = false) async throws -> CreatedRoom {
         try await request("POST", "v1/rooms", body: ["name": name, "description": description, "displayName": displayName,
-                                                     "client": Self.client], as: CreatedRoom.self)
+                                                     "client": Self.client, "screenSharing": screenSharing], as: CreatedRoom.self)
     }
 
     /// A code (as typed) or a link's token: the room it's for, without
@@ -159,10 +164,12 @@ public struct RoomAPI: Sendable {
         try await request("GET", "v1/rooms/\(roomId)", token: memberToken, as: RoomInfo.self)
     }
 
-    public func update(roomId: String, ownerToken: String, name: String? = nil, locked: Bool? = nil) async throws -> RoomView {
+    public func update(roomId: String, ownerToken: String, name: String? = nil, locked: Bool? = nil,
+                       screenSharing: Bool? = nil) async throws -> RoomView {
         var body: [String: Any] = [:]
         if let name { body["name"] = name }
         if let locked { body["locked"] = locked }
+        if let screenSharing { body["screenSharing"] = screenSharing }
         return try await request("PATCH", "v1/rooms/\(roomId)", body: body, token: ownerToken, as: RoomView.self)
     }
 
@@ -185,6 +192,19 @@ public struct RoomAPI: Sendable {
 
     public func leave(roomId: String, memberToken: String) async throws {
         _ = try await request("POST", "v1/rooms/\(roomId)/leave", token: memberToken, as: Empty.self)
+    }
+
+    public func screenTicket(roomId: String, memberToken: String) async throws -> String {
+        struct Ticket: Decodable { var ticket: String }
+        return try await request("POST", "v1/rooms/\(roomId)/screen-tickets", token: memberToken, as: Ticket.self).ticket
+    }
+
+    /// The room's screens socket, for a ticket.
+    public func screensURL(roomId: String, ticket: String) -> URL {
+        var components = URLComponents(url: service.appendingPathComponent("v1/rooms/\(roomId)/screens"), resolvingAgainstBaseURL: false)!
+        components.scheme = service.scheme == "http" ? "ws" : "wss"
+        components.queryItems = [URLQueryItem(name: "ticket", value: ticket)]
+        return components.url!
     }
 
     /// The room's socket, for a ticket.

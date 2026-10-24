@@ -53,7 +53,8 @@ extension NetworkSelfTest {
                 }
                 report += "Server ready: \(await screen(session, server.id).contains("Ready"))\n"
                 do {
-                    try await session.share(on: service, name: "Self-test Classroom", shared: Set(session.project.stations.map(\.id)))
+                    try await session.share(on: service, name: "Self-test Classroom", shared: Set(session.project.stations.map(\.id)),
+                                            screenSharing: true, showsScreens: true)
                 } catch {
                     report += "Share failed: \(error)\n"
                     return finish()
@@ -63,12 +64,15 @@ extension NetworkSelfTest {
                 report += "Code: \(code)\n"
                 // Until the guest's been and gone (or two minutes).
                 var sawGuest = false
+                var sawScreens: Set<Int> = []
                 for _ in 0..<120 {
                     try? await Task.sleep(for: .seconds(1))
                     if !session.remoteStations.isEmpty { sawGuest = true }
+                    sawScreens.formUnion(session.remoteScreens.keys)
                     if sawGuest && FileManager.default.fileExists(atPath: codeFile + ".done") { break }
                 }
                 report += "Saw the guest's station: \(sawGuest)\n"
+                report += "Guest's screens seen: \(sawScreens.sorted())\n"
                 report += "Room: \(String(describing: session.room?.state)), participants \(session.room?.participants.map(\.name) ?? [])\n"
                 report += "Stations: \(session.room?.stations.map { "\($0.station) \($0.label) \($0.online ? "online" : "offline")" } ?? [])\n"
                 report += "Gateway: \(String(describing: session.internet?.gateway.counters))\n"
@@ -104,8 +108,9 @@ extension NetworkSelfTest {
                     ]
                     try NetworkPackage.save(project, to: url)
                     let session = try NetworkSession.session(for: url)
+                    report += "Room allows screens: \(preview.room.allowsScreens)\n"
                     try session.enterRoom(service: service, roomId: preview.roomId, roomName: preview.room.name, joined: joined,
-                                          shared: Set(session.project.stations.map(\.id)))
+                                          shared: Set(session.project.stations.map(\.id)), showsScreens: preview.room.allowsScreens)
                     for _ in 0..<30 where !(session.internet?.gateway.remoteStations.contains(254) ?? false) {
                         try? await Task.sleep(for: .seconds(1))
                     }
@@ -121,6 +126,8 @@ extension NetworkSelfTest {
                     }
                     try? await Task.sleep(for: .seconds(2))
                     report += "Gateway: \(String(describing: session.internet?.gateway.counters))\n"
+                    for _ in 0..<10 where session.remoteScreens.isEmpty { try? await Task.sleep(for: .seconds(1)) }
+                    report += "Host's screens seen: \(session.remoteScreens.keys.sorted())\n"
                     report += "\n== Visitor\n\(await screen(session, visitor.id))\n"
                     let canvas = offscreen(NetworkStudioView(session: session, mode: .canvas), width: 1300, height: 800)
                     try? await Task.sleep(for: .seconds(2))

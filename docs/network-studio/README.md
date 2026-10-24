@@ -268,8 +268,15 @@ closes the network for everyone. A guest can **Leave Network**. If the
 connection drops, MacBeeb reconnects by itself, and when you open the
 network again it goes back into its room.
 
-**What's shared**: only Econet. Nobody can see your screens, type into your
-machines, use their debuggers, or reach anything on your Mac. Station
+**Screens**: the host can **Let people share their machines' screens**, when
+sharing or later. Then each person chooses whether to **Show my machines'
+screens** (when joining, or from the globe button), and theirs appear live on
+everyone's canvas, about once a second. Screens travel apart from Econet, on
+a connection of their own, and never slow it down. Both are off unless
+turned on, and the host turning sharing off stops everyone's at once.
+
+**What's shared**: only Econet, and screens if you choose. Nobody can type
+into your machines, use their debuggers, or reach anything on your Mac. Station
 numbers must be different across the network: if someone else has one of
 yours, the globe button says which, so you can change it.
 

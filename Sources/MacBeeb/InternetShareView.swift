@@ -16,6 +16,8 @@ struct InternetShareView: View {
     @State private var error: String?
     @State private var confirmingStop = false
     @State private var copied: String?
+    @State private var allowScreens = false
+    @State private var showMine = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -73,7 +75,17 @@ struct InternetShareView: View {
             .scrollDisabled(true)
             .fixedSize(horizontal: false, vertical: true)
             machineList
-            Text("Only Econet is shared: people who join can't see your screens, type into your machines or reach anything else on your Mac.")
+            VStack(alignment: .leading, spacing: 6) {
+                Toggle("Let people share their machines' screens", isOn: $allowScreens)
+                    .help("People in the network can choose to show their machines' screens, live, on everyone's canvas")
+                Toggle("Show my machines' screens", isOn: $showMine)
+                    .disabled(!allowScreens)
+                    .padding(.leading, 20)
+            }
+            .onChange(of: allowScreens) { if !allowScreens { showMine = false } }
+            Text(allowScreens
+                 ? "Screens go apart from Econet, a picture a second, and never get in its way. Nobody can type into your machines or reach anything else on your Mac."
+                 : "Only Econet is shared: people who join can't see your screens, type into your machines or reach anything else on your Mac.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -132,7 +144,8 @@ struct InternetShareView: View {
         Task {
             defer { busy = false }
             do {
-                try await session.share(on: service, name: roomName.trimmingCharacters(in: .whitespaces), shared: shared)
+                try await session.share(on: service, name: roomName.trimmingCharacters(in: .whitespaces), shared: shared,
+                                        screenSharing: allowScreens, showsScreens: showMine)
             } catch {
                 self.error = "Couldn't create the network: \(error)"
             }
@@ -175,6 +188,7 @@ struct InternetShareView: View {
                         .foregroundStyle(.orange)
                 }
             }
+            screensControls
             DisclosureGroup("Machines shared") {
                 machineList
                     .padding(.top, 6)
@@ -201,6 +215,24 @@ struct InternetShareView: View {
             Text(link?.hosting == true
                  ? "The network closes for everyone in it: their machines disappear from yours, and yours from theirs. Its link and code stop working."
                  : "Your machines leave the network, and its machines disappear from yours.")
+        }
+    }
+
+    @ViewBuilder
+    private var screensControls: some View {
+        let allowed = session.room?.room?.allowsScreens == true
+        VStack(alignment: .leading, spacing: 6) {
+            if session.project.internetRoom?.hosting == true {
+                Toggle("Let people share their machines' screens", isOn: Binding(get: { allowed }, set: { on in
+                    Task {
+                        do { try await session.setScreenSharingAllowed(on) } catch { self.error = "\(error)" }
+                    }
+                }))
+            }
+            Toggle("Show my machines' screens", isOn: Binding(get: { session.showsScreens }, set: { session.setShowsScreens($0) }))
+                .disabled(!allowed)
+                .help(allowed ? "Everyone in the network sees your shared machines' screens, live, on their canvas"
+                      : "The network's host hasn't allowed screen sharing")
         }
     }
 
