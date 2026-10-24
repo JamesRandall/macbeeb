@@ -179,7 +179,13 @@ struct DemoTemplateTests {
         let guideDisc = try Disc.fromImage([UInt8](Data(contentsOf: NetworkPackage.url(of: #require(guide.discs[0]), in: url))), format: .ssd)
         #expect(Set(try DiscVolume(disc: guideDisc).items(at: .init()).map(\.name)) == ["GUIDE", "!BOOT"])
         let disc = try Level2FileServerDisc(image: [UInt8](Data(contentsOf: NetworkPackage.url(of: #require(server.discs[0]), in: url))))
-        #expect(Set(try disc.entries(in: "$.LIBRARY").map(\.name)) == Set(MandelbrotGuest.files.map(\.name)))
+        // Every program, with this network's own CLUSTER (Mandelbrot in
+        // Colour's, CLUSTC, isn't on it).
+        #expect(Set(try disc.entries(in: "$.LIBRARY").map(\.name)) == Set(MandelbrotGuest.files.map(\.name)).subtracting(["CLUSTC"]))
+        let colour = try MandelbrotNetwork.fileServerDisc(for: .mode2)
+        let cluster = try #require(MandelbrotGuest.files.first { $0.name == "CLUSTC" })
+        #expect(Set(try colour.entries(in: "$.LIBRARY").map(\.name)) == Set(MandelbrotGuest.files.map(\.name)).subtracting(["CLUSTC"]))
+        #expect(try colour.contents(of: "$.LIBRARY.CLUSTER") == cluster.contents)
         #expect(disc.users.map(\.name) == ["SYST", "GUEST"])
         #expect(try disc.entries(in: "$.GUEST").map(\.name) == ["GUIDE", "GUIDE2"])
     }

@@ -108,7 +108,7 @@ public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
         case .distributedMandelbrot, .mandelbrotInColour:
             let coordinator: MandelbrotNetwork.Coordinator = self == .distributedMandelbrot ? .mode5 : .mode2
             (booted, server) = (("Guide.ssd", try MandelbrotNetwork.guideDisc(for: coordinator)),
-                                ("Level 2 File Server.dsd", try MandelbrotNetwork.fileServerDisc().image))
+                                ("Level 2 File Server.dsd", try MandelbrotNetwork.fileServerDisc(for: coordinator).image))
         default:
             return []
         }

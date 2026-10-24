@@ -12,8 +12,8 @@ import BeebROMs
 
 extension EconetRig {
     /// Starts Level 2 on machine `index` with the Mandelbrot server disc.
-    func startMandelbrotServer(_ index: Int) throws {
-        try startLevel2FileServer(index, disc: MandelbrotNetwork.fileServerDisc(date: Self.level2Date))
+    func startMandelbrotServer(_ index: Int, for coordinator: MandelbrotNetwork.Coordinator = .mode5) throws {
+        try startLevel2FileServer(index, disc: MandelbrotNetwork.fileServerDisc(for: coordinator, date: Self.level2Date))
     }
 
     /// Logs machine `index` on as GUEST, as the guide says to.
@@ -71,6 +71,7 @@ struct MandelbrotNetworkTests {
         #expect(launched.contains("03   AT BASIC -> POKE+JSR  -> RUNNING"), "\(rig.screen(1))")
         #expect(launched.contains("No BBC at: 04 05"), "\(rig.screen(1))")
         #expect(launched.contains("2 workers started. 0 failed."), "\(rig.screen(1))")
+        #expect(launched.contains("Now *MANDEL to draw."), "\(rig.screen(1))")
         #expect(rig.screen(2).contains("MANDELBROT WORKER") && rig.screen(2).contains("registering"), "\(rig.screen(2))")
 
         rig.type(1, "*MANDEL\n")
@@ -137,10 +138,12 @@ struct MandelbrotInColourTests {
         rig.machines[1].insertDisc(try Disc.fromImage(MandelbrotNetwork.guideDisc(for: .mode2), format: .ssd), drive: 0)
         rig.machines[1].shiftBreak()
         rig.run(seconds: 3)
-        try rig.startMandelbrotServer(0)
+        try rig.startMandelbrotServer(0, for: .mode2)
         #expect(rig.screen(1).contains("MANDELBROT IN COLOUR") && rig.screen(1).contains("*MANDEL2"), "\(rig.screen(1))")
         rig.type(1, "*CLUSTER\n")
         #expect(rig.run(until: { rig.screen(1).contains("2 workers started.") }, seconds: 60), "\(rig.screen(1))")
+        // Its own CLUSTER: pointing at *MANDEL2.
+        #expect(rig.screen(1).contains("Now *MANDEL2 to draw."), "\(rig.screen(1))")
         rig.type(1, "*MANDEL2\n")
         #expect(rig.run(until: { [2, 3].allSatisfy { rig.screen($0).contains("run complete") } }, seconds: 150),
                 "\(rig.screen(2))")

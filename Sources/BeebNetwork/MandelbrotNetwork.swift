@@ -68,11 +68,19 @@ public enum MandelbrotNetwork {
 
     /// The file server's disc, Level 2's:
     /// - GUEST, for the Guide, the workers and anyone else, with the guide programs;
-    /// - the programs in $.LIBRARY, the library everyone's given.
-    public static func fileServerDisc(date: Level2FileServerDisc.Date = .today) throws -> Level2FileServerDisc {
+    /// - the programs in $.LIBRARY, the library everyone's given, with the
+    ///   coordinator's own CLUSTER (Mandelbrot in Colour's ends by pointing
+    ///   at *MANDEL2).
+    public static func fileServerDisc(for coordinator: Coordinator = .mode5,
+                                      date: Level2FileServerDisc.Date = .today) throws -> Level2FileServerDisc {
         var disc = try Level2FileServerDisc(name: "MANDELBROT", users: ["GUEST"], date: date)
         try disc.createDirectory("$.LIBRARY", date: date)
-        for file in MandelbrotGuest.files {
+        for var file in MandelbrotGuest.files {
+            switch (file.name, coordinator) {
+            case ("CLUSTER", .mode2), ("CLUSTC", .mode5): continue
+            case ("CLUSTC", .mode2): file.name = "CLUSTER"
+            default: break
+            }
             try disc.save("$.LIBRARY.\(file.name)", loadAddress: 0xFFFF_0000 | file.loadAddress,
                           executionAddress: 0xFFFF_0000 | file.executionAddress, contents: file.contents, access: .shared, date: date)
         }

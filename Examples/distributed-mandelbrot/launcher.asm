@@ -1,5 +1,7 @@
 \ The launcher: CLUSTER, WORKERS and STOPWK are this, assembled three ways
-\ (TOOL, which cluster.asm, workers.asm and stopwk.asm set).
+\ (TOOL, which cluster.asm, workers.asm and stopwk.asm set; COLOUR, set
+\ by cluster2.asm for Mandelbrot in Colour's CLUSTER, which ends by
+\ pointing at *MANDEL2).
 \ Each asks every candidate station (1-16, not this one or the servers)
 \ whether it's a worker (DISCOVER), over Econet, and if not, whether
 \ there's a BBC there at all (machine type, an immediate operation), then:
@@ -118,7 +120,11 @@ IF TOOL = 0
     JSR pstr : EQUS " already running.", 13, 0
 .summary3
     JSR colour2
-    JSR pstr : EQUS "Now *MANDEL (or *MANDEL2) to draw.", 13, 0
+IF COLOUR
+    JSR pstr : EQUS "Now *MANDEL2 to draw.", 13, 0
+ELSE
+    JSR pstr : EQUS "Now *MANDEL to draw.", 13, 0
+ENDIF
 ELIF TOOL = 1
     LDA started : JSR pdec8
     JSR pstr : EQUS " running, ", 0
@@ -355,7 +361,10 @@ ENDIF
 
 INCLUDE "lib.asm"
 INCLUDE "remote.asm"
-IF TOOL = 0
+IF TOOL = 0 AND COLOUR
+    \ (CLUSTC: the colour network's server has it as CLUSTER.)
+    SAVE "CLUSTC", TOOL_ORG, P%, TOOL_ORG
+ELIF TOOL = 0
     SAVE "CLUSTER", TOOL_ORG, P%, TOOL_ORG
 ELIF TOOL = 1
     SAVE "WORKERS", TOOL_ORG, P%, TOOL_ORG
