@@ -308,7 +308,13 @@ struct NetworkCanvas: View {
                     // At the end of its row, along the trunk.
                     add(item, at: session.project.nextPosition(for: item.kind))
                 } label: {
-                    Label(item.title, systemImage: item.symbol)
+                    // The symbols are different widths: a column for them,
+                    // so the titles line up.
+                    HStack(spacing: 8) {
+                        Image(systemName: item.symbol)
+                            .frame(width: 24)
+                        Text(item.title)
+                    }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
