@@ -54,6 +54,7 @@ struct NetworkStudioView: View {
     @State private var showsInspector = true
     @State private var confirmingReset = false
     @State private var confirmingPowerOff = false
+    @State private var sharing = false
     /// Follows the Distributed Mandelbrot demo once its view's been shown.
     @State private var mandelbrot = MandelbrotFeed()
     @Environment(\.openWindow) private var openWindow
@@ -94,6 +95,12 @@ struct NetworkStudioView: View {
         .navigationTitle(session.project.name)
         .navigationSubtitle(subtitle)
         .toolbar { toolbar }
+        .sheet(isPresented: $sharing) {
+            InternetShareView(session: session)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NetworkStudioCommands.shareRequest)) { note in
+            if (note.object as? URL) == session.url { sharing = true }
+        }
         .focusedSceneValue(commandTarget)
         .focusedSceneValue(session)
         .confirmationDialog("Reset every machine?", isPresented: $confirmingReset) {
@@ -129,6 +136,12 @@ struct NetworkStudioView: View {
         let on = session.controllers.count
         let machines = session.project.nodes.filter(\.isMachine).count
         var text = "\(on) of \(machines) on"
+        if let link = session.project.internetRoom {
+            let state = session.room?.state
+            text += state == .connected ? " · On the Internet (\(link.roomName))"
+                : (state.map { if case .ended = $0 { true } else { false } } ?? false) ? " · Internet room ended"
+                : " · Connecting to \(link.roomName)…"
+        }
         if session.paused {
             text += " · Paused"
         } else if !session.status.stoppedStations.isEmpty && session.runtime.network.pausesOnBreakpoint {
@@ -168,6 +181,12 @@ struct NetworkStudioView: View {
                 Label(session.paused ? "Resume Network" : "Pause Network", systemImage: session.paused ? "play.fill" : "pause.fill")
             }
             .help(session.paused ? "Carry on: every machine starts again together" : "Stop time on the whole network: nothing times out")
+        }
+        ToolbarItem {
+            Button { sharing = true } label: {
+                Label(session.isInRoom ? "Internet Network" : "Share Over Internet", systemImage: session.isInRoom ? "globe.badge.chevron.backward" : "globe")
+            }
+            .help(session.isInRoom ? "This network's Internet room: invitations, who's in it, and leaving" : "Share this network over the Internet, with a link or a code")
         }
         ToolbarItem {
             Button { withAnimation(.easeInOut(duration: 0.2)) { showsInspector.toggle() } } label: {

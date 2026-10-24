@@ -339,6 +339,12 @@ struct MacBeebApp: App {
         .defaultSize(width: 1040, height: 780)
         .defaultLaunchBehavior(LaunchScreen.atLaunch == .games ? .presented : .suppressed)
 
+        Window("Join Econet Network", id: JoinRoomView.windowID) {
+            JoinRoomView()
+        }
+        .windowResizability(.contentSize)
+        .handlesExternalEvents(matching: ["join"])
+
         Window("Welcome to MacBeeb", id: WelcomeView.windowID) {
             WelcomeView()
         }
@@ -523,6 +529,11 @@ struct MachineScreen: View {
     }
 
     private func open(_ url: URL) -> Bool {
+        if JoinRequests.isJoinLink(url) {
+            JoinRequests.shared.handle(url)
+            openWindow(id: JoinRoomView.windowID)
+            return true
+        }
         switch url.pathExtension.lowercased() {
         case NetworkPackage.fileExtension:
             NetworkStudioCommands.open(url, openWindow: openWindow)
@@ -591,6 +602,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// window brings it back (WelcomeReturn), and closing it quits.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         !WelcomeReturn.applies
+    }
+
+    /// An invitation link (macbeeb://join…) when no window took it.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls where JoinRequests.isJoinLink(url) {
+            JoinRequests.shared.handle(url)
+            WelcomeReturn.open(id: JoinRoomView.windowID)
+        }
     }
 
     /// The Dock icon clicked with no windows open: the welcome screen.

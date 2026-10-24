@@ -115,6 +115,9 @@ enum NetworkStudioCommands {
     /// Posted (with the package's URL) to have a network's window opened,
     /// by whichever window can.
     static let openRequest = Notification.Name("MacBeebOpenNetworkWindow")
+    /// Posted (with the package's URL) to show a network's Share Over
+    /// Internet sheet.
+    static let shareRequest = Notification.Name("MacBeebShareNetwork")
 
     static func open(_ url: URL, openWindow: OpenWindowAction) {
         openWindow(id: NetworkStudioWindow.windowID, value: url.standardizedFileURL)
@@ -152,6 +155,11 @@ struct NetworkMenuItems: View {
         Button("New Network…") { openWindow(id: NetworkStartView.windowID) }
             .keyboardShortcut("n", modifiers: [.command, .shift])
         Button("Open Network…") { NetworkStudioCommands.chooseAndOpen(openWindow: openWindow) }
+        JoinRoomMenuItem()
+        Button(session?.isInRoom == true ? "Internet Network…" : "Share Network Over Internet…") {
+            if let session { NotificationCenter.default.post(name: NetworkStudioCommands.shareRequest, object: session.url) }
+        }
+        .disabled(session == nil)
         Menu("Open Recent Network") {
             ForEach(RecentNetworks.shared.existing, id: \.self) { url in
                 Button(url.deletingPathExtension().lastPathComponent) { NetworkStudioCommands.open(url, openWindow: openWindow) }

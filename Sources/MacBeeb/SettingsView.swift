@@ -1,6 +1,7 @@
 import AppKit
 import BeebCore
 import BeebHost
+import BeebNetwork
 import SwiftUI
 
 struct SettingsView: View {
@@ -16,8 +17,106 @@ struct SettingsView: View {
                 .tabItem { Label("Debugging", systemImage: "ladybug") }
             ClassicsSettingsView()
                 .tabItem { Label("Games", systemImage: "books.vertical") }
+            NetworkingSettingsView()
+                .tabItem { Label("Networking", systemImage: "globe") }
         }
         .frame(width: 520, height: 460)
+    }
+}
+
+/// Which Internet Econet service rooms are made and codes looked up on.
+struct NetworkingSettingsView: View {
+    @State private var custom = !InternetEconetService.isOfficial
+    @State private var address = InternetEconetService.isOfficial ? "" : InternetEconetService.current.absoluteString
+    @State private var testing = false
+    @State private var result: (ok: Bool, text: String)?
+    @State private var problem: String?
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Internet Econet Service", selection: $custom) {
+                    Text("Official service (\(InternetEconetService.officialURL.host ?? ""))").tag(false)
+                    Text("Custom service").tag(true)
+                }
+                .pickerStyle(.radioGroup)
+                .onChange(of: custom) {
+                    result = nil
+                    if !custom { InternetEconetService.current = InternetEconetService.officialURL }
+                }
+                if custom {
+                    TextField("Address", text: $address, prompt: Text("https://econet.example.org"))
+                        .onSubmit { apply() }
+                    if let problem {
+                        Text(problem)
+                            .font(.callout)
+                            .foregroundStyle(.red)
+                    }
+                    if let url = try? InternetEconetService.validate(address).get(), InternetEconetService.isLocalDevelopment(url) {
+                        Label("Developer mode: an unencrypted service on this Mac.", systemImage: "hammer")
+                            .font(.callout)
+                            .foregroundStyle(.orange)
+                    }
+                }
+                HStack {
+                    Button("Test Connection", action: test)
+                        .disabled(testing || (custom && address.isEmpty))
+                    if testing { ProgressView().controlSize(.small) }
+                    if let result {
+                        Label(result.text, systemImage: result.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundStyle(result.ok ? .green : .red)
+                    }
+                    Spacer()
+                    Button("Reset to Default") {
+                        custom = false
+                        address = ""
+                        problem = nil
+                        InternetEconetService.current = InternetEconetService.officialURL
+                    }
+                    .disabled(!custom)
+                }
+                Text("Sharing a network over the Internet makes its room here, and join codes are looked up here. Anyone can run a compatible service of their own (acorn-internet-econet, on Cloudflare); invitation links name theirs. Each service keeps its own rooms and credentials.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    /// Takes the typed address, if it's a good one.
+    @discardableResult
+    private func apply() -> URL? {
+        guard custom else { return InternetEconetService.officialURL }
+        switch InternetEconetService.validate(address) {
+        case .success(let url):
+            problem = nil
+            address = url.absoluteString
+            InternetEconetService.current = url
+            return url
+        case .failure(let error):
+            problem = error.description
+            return nil
+        }
+    }
+
+    private func test() {
+        guard let url = apply() else { return }
+        testing = true
+        result = nil
+        Task {
+            defer { testing = false }
+            do {
+                let info = try await RoomAPI(service: url).serviceInfo()
+                if let incompatibility = info.incompatibility {
+                    result = (false, incompatibility)
+                } else {
+                    result = (true, "\(info.name): compatible, protocol \(ServiceInfo.protocolVersion)")
+                }
+            } catch {
+                result = (false, "No Internet Econet service answered at \(url.host ?? url.absoluteString)")
+            }
+        }
     }
 }
 

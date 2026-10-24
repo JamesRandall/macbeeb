@@ -39,6 +39,12 @@ struct WelcomeView: View {
         .background(WelcomeBackground())
         .preferredColorScheme(.dark)
         .onAppear(perform: arrived)
+        .onOpenURL { url in
+            if JoinRequests.isJoinLink(url) {
+                JoinRequests.shared.handle(url)
+                go { openWindow(id: JoinRoomView.windowID) }
+            }
+        }
         .alert("Can’t make the network", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK") {}
         } message: {
@@ -140,6 +146,13 @@ struct WelcomeView: View {
                            blurb: "A classroom of BBC Micros on Econet, each one running for real: file servers, printers, and messages and programs passed between them.") {
             EconetAnimation()
         } actions: {
+            Button { go { openWindow(id: JoinRoomView.windowID) } } label: {
+                Label("Join with a Code…", systemImage: "globe")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .help("Join someone's network over the Internet, with the code or link they gave you")
             if !recent.isEmpty {
                 WideMenu(title: "Open Recent", items: recent.prefix(8).map { url in
                     (url.deletingPathExtension().lastPathComponent, { go { NetworkStudioCommands.open(url, openWindow: openWindow) } })
@@ -594,6 +607,11 @@ enum WelcomeReturn {
 
     static func open() {
         openWindow?(id: WelcomeView.windowID)
+    }
+
+    /// Opens another window (when no view's at hand to).
+    static func open(id: String) {
+        openWindow?(id: id)
     }
 
     static func start() {

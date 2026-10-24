@@ -58,6 +58,11 @@ enum NetworkSelfTest {
     /// works whatever windows the app restores).
     static func runIfRequested() {
         guard let path else { return }
+        if let template = UserDefaults.standard.string(forKey: "MacBeebNetworkSelfTestTemplate"),
+           template == "internetHost" || template == "internetGuest" {
+            runInternet(path, host: template == "internetHost")
+            return
+        }
         if UserDefaults.standard.string(forKey: "MacBeebNetworkSelfTestTemplate") == "welcome" {
             // The welcome screen, captured.
             let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 1060, height: 800),

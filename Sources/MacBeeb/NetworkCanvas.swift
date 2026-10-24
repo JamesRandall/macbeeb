@@ -31,13 +31,20 @@ struct NetworkCanvas: View {
         GeometryReader { geometry in
             ZStack(alignment: .topLeading) {
                 background
+                let remote = remoteLayout
                 BusDrawing(nodes: session.project.nodes, position: { viewPoint(position(of: $0)) }, zoom: zoom,
-                           lit: Set(session.controllers.keys), transmitting: session.transmitting)
+                           lit: Set(session.controllers.keys), transmitting: session.transmitting,
+                           remote: remote.map { (viewPoint($0.point), $0.station.online) })
                     .allowsHitTesting(false)
                 ForEach(session.project.nodes) { node in
                     nodeView(node)
                         .scaleEffect(zoom)
                         .position(viewPoint(position(of: node)))
+                }
+                ForEach(remote, id: \.station.station) { item in
+                    RemoteStationCard(station: item.station, participant: session.participant(item.station.participantId))
+                        .scaleEffect(zoom)
+                        .position(viewPoint(item.point))
                 }
                 VStack(alignment: .leading, spacing: 10) {
                     palette
@@ -510,6 +517,19 @@ struct NetworkCanvas: View {
     // MARK: Geometry
 
     /// Where a node is drawn, in canvas points, allowing for a drag.
+    /// Where the room's other machines go: along the end of the stations'
+    /// row, after everything of this network's.
+    private var remoteLayout: [(station: StationView, point: CGPoint)] {
+        let remote = session.remoteStations
+        guard !remote.isEmpty else { return [] }
+        let stations = session.project.nodes.filter { $0.kind == .station }
+        let y = stations.isEmpty ? 0 : stations.map(\.position.y).sorted()[stations.count / 2]
+        let x = (session.project.nodes.map(\.position.x).max() ?? -NetworkProject.columnSpacing) + NetworkProject.columnSpacing
+        return remote.enumerated().map { index, station in
+            (station, CGPoint(x: x + Double(index) * NetworkProject.columnSpacing, y: y))
+        }
+    }
+
     private func position(of node: NetworkNode) -> CGPoint {
         var point = CGPoint(x: node.position.x, y: node.position.y)
         if let dragging, dragging.ids.contains(node.id) {
@@ -543,14 +563,17 @@ struct BusDrawing: View {
     let lit: Set<UUID>
     /// The nodes sending just now: their drops glow.
     let transmitting: Set<UUID>
+    /// Machines in the network's Internet room, on other Macs: where their
+    /// cards are, and whether they're online.
+    var remote: [(point: CGPoint, online: Bool)] = []
 
     var body: some View {
         Canvas { context, _ in
-            guard nodes.count > 1 else { return }
+            guard nodes.count + remote.count > 1 else { return }
             let points = nodes.map { (node: $0, point: position($0)) }
             let ys = points.map(\.point.y)
-            let busY = (ys.min()! + ys.max()!) / 2
-            let xs = points.map(\.point.x)
+            let busY = ys.isEmpty ? remote[0].point.y : (ys.min()! + ys.max()!) / 2
+            let xs = points.map(\.point.x) + remote.map(\.point.x)
             let lineWidth = max(1.5, 3 * zoom)
             var backbone = Path()
             backbone.move(to: CGPoint(x: xs.min()!, y: busY))
@@ -570,7 +593,73 @@ struct BusDrawing: View {
                 let tap = CGRect(x: point.x - lineWidth * 1.5, y: busY - lineWidth * 1.5, width: lineWidth * 3, height: lineWidth * 3)
                 context.fill(Path(ellipseIn: tap), with: .color(on ? Color.accentColor : .secondary.opacity(0.5)))
             }
+            // Remote machines: through the Internet gateway, drawn apart.
+            for (point, online) in remote {
+                var drop = Path()
+                drop.move(to: point)
+                drop.addLine(to: CGPoint(x: point.x, y: busY))
+                context.stroke(drop, with: .color(online ? .teal.opacity(0.7) : .secondary.opacity(0.3)),
+                               style: StrokeStyle(lineWidth: lineWidth * 0.8, lineCap: .round, dash: [6 * zoom, 3 * zoom]))
+                let tap = CGRect(x: point.x - lineWidth * 1.5, y: busY - lineWidth * 1.5, width: lineWidth * 3, height: lineWidth * 3)
+                context.fill(Path(ellipseIn: tap), with: .color(online ? .teal : .secondary.opacity(0.5)))
+            }
         }
+    }
+}
+
+/// A machine in the network's Internet room, on someone else's Mac: who
+/// it is and whose, whether it's online, and how far away.
+struct RemoteStationCard: View {
+    let station: StationView
+    let participant: ParticipantView?
+
+    static let width = 236.0
+    static let height = 150.0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "globe")
+                    .font(.title2)
+                    .foregroundStyle(station.online ? .teal : .secondary)
+                Spacer()
+                if let rtt = participant?.rttMs, station.online {
+                    Text("\(rtt) ms")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                Text(station.online ? "Online" : "Offline")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background((station.online ? Color.teal : Color.secondary).opacity(0.18), in: Capsule())
+            }
+            Spacer(minLength: 0)
+            HStack(spacing: 8) {
+                StationBadge(number: station.station)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(station.label)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text("\(station.kind) · \(participant?.name ?? "someone else")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: Self.width, height: Self.height)
+        .background(.background.opacity(0.92), in: RoundedRectangle(cornerRadius: 14))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(station.online ? Color.teal.opacity(0.8) : Color.secondary.opacity(0.4),
+                              style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
+        }
+        .opacity(station.online ? 1 : 0.6)
+        .help("Station \(station.station), \(station.label): a \(station.kind) on \(participant?.name ?? "another")'s Mac, in this network's Internet room")
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Remote station \(station.station), \(station.label), \(station.kind), \(participant?.name ?? ""), \(station.online ? "online" : "offline")")
     }
 }
 

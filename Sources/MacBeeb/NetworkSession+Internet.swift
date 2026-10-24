@@ -1,0 +1,170 @@
+import BeebNetwork
+import Foundation
+
+/// A network in an Internet Econet room: sharing it (as its host), joining
+/// one, and keeping the room told of its stations.
+extension NetworkSession {
+    /// Where room credentials are kept: the Keychain, except in self-tests.
+    static let credentialStore: RoomCredentialStore = LaunchScreen.isSelfTest ? MemoryCredentialStore() : KeychainCredentialStore()
+
+    /// The name others in a room see for this person.
+    static var roomDisplayName: String {
+        get { UserDefaults.standard.string(forKey: "MacBeebEconetDisplayName") ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: "MacBeebEconetDisplayName") }
+    }
+
+    var isInRoom: Bool { project.internetRoom != nil }
+
+    /// What each machine is, for the room: shared machines as they are,
+    /// others keeping their numbers but marked.
+    func roomClaims(shared: Set<UUID>) -> (claims: [StationClaim], sharedStations: Set<UInt8>) {
+        var claims: [StationClaim] = []
+        var sharedStations: Set<UInt8> = []
+        for node in project.stations {
+            guard let number = node.stationNumber, (1...254).contains(number) else { continue }
+            let role = switch node.kind {
+            case .fileServer: "fileServer"
+            case .printServer: "printServer"
+            default: "station"
+            }
+            let isShared = shared.contains(node.id)
+            if isShared { sharedStations.insert(UInt8(number)) }
+            claims.append(StationClaim(station: number, kind: node.setup?.model.displayName ?? "BBC Micro",
+                                       label: isShared ? node.name : "\(node.name) (not shared)", role: role))
+        }
+        return (claims, sharedStations)
+    }
+
+    /// Opened with a room: back into it.
+    func connectToRoomIfLinked() {
+        guard let link = project.internetRoom,
+              let credentials = Self.credentialStore.credentials(service: link.service, roomId: link.roomId) else { return }
+        startRoomLink(link, credentials: credentials)
+    }
+
+    private func startRoomLink(_ link: InternetRoomLink, credentials: RoomCredentials) {
+        internet?.stop()
+        let (claims, shared) = roomClaims(shared: Set(link.shared))
+        lastClaims = claims
+        let internet = InternetEconetLink(api: RoomAPI(service: link.service), roomId: link.roomId, credentials: credentials,
+                                          claims: claims, shared: shared)
+        internet.onChange = { [weak self] snapshot in
+            Task { @MainActor in self?.roomChanged(snapshot) }
+        }
+        self.internet = internet
+        internet.start(on: runtime.network)
+    }
+
+    private func roomChanged(_ snapshot: RoomConnection.Snapshot) {
+        room = snapshot
+        // The room's name, as the host changes it.
+        if let name = snapshot.room?.name, project.internetRoom?.roomName != name {
+            update { $0.internetRoom?.roomName = name }
+        }
+        if case .ended = snapshot.state, let link = project.internetRoom, !link.hosting {
+            // Removed, or the room's gone: it's no longer in one.
+            Self.credentialStore.remove(service: link.service, roomId: link.roomId)
+        }
+    }
+
+    /// The machines changed: tell the room.
+    func roomClaimsMayHaveChanged() {
+        guard let internet, let link = project.internetRoom else { return }
+        let (claims, shared) = roomClaims(shared: Set(link.shared))
+        guard claims != lastClaims || shared != internet.gateway.sharedStations else { return }
+        lastClaims = claims
+        internet.update(claims: claims, shared: shared)
+    }
+
+    // MARK: Hosting
+
+    /// Makes a private room on `service` and shares `shared` into it.
+    func share(on service: URL, name: String, shared: Set<UUID>) async throws {
+        let api = RoomAPI(service: service)
+        let created = try await api.createRoom(name: name, displayName: Self.roomDisplayName.isEmpty ? "Host" : Self.roomDisplayName)
+        let credentials = RoomCredentials(participantId: created.participantId, memberToken: created.memberToken,
+                                          ownerToken: created.ownerToken)
+        try Self.credentialStore.save(credentials, service: service, roomId: created.roomId)
+        let link = InternetRoomLink(service: service, roomId: created.roomId, roomName: name, hosting: true,
+                                    shared: project.stations.map(\.id).filter { shared.contains($0) })
+        update { $0.internetRoom = link }
+        currentInvite = created.invite
+        startRoomLink(link, credentials: credentials)
+    }
+
+    /// Joined a room (the join sheet has done the asking): into it.
+    func enterRoom(service: URL, roomId: String, roomName: String, joined: JoinedRoom, shared: Set<UUID>) throws {
+        let credentials = RoomCredentials(participantId: joined.participantId, memberToken: joined.memberToken)
+        try Self.credentialStore.save(credentials, service: service, roomId: roomId)
+        let link = InternetRoomLink(service: service, roomId: roomId, roomName: roomName, hosting: false,
+                                    shared: project.stations.map(\.id).filter { shared.contains($0) })
+        update { $0.internetRoom = link }
+        startRoomLink(link, credentials: credentials)
+    }
+
+    /// Which machines are shared.
+    func setShared(_ shared: Set<UUID>) {
+        let ordered = project.stations.map(\.id).filter { shared.contains($0) }
+        update { $0.internetRoom?.shared = ordered }
+    }
+
+    private var ownerToken: String? {
+        guard let link = project.internetRoom else { return nil }
+        return Self.credentialStore.credentials(service: link.service, roomId: link.roomId)?.ownerToken
+    }
+
+    private var roomAPI: RoomAPI? { project.internetRoom.map { RoomAPI(service: $0.service) } }
+
+    func newInvitation() async throws {
+        guard let api = roomAPI, let link = project.internetRoom, let owner = ownerToken else { return }
+        currentInvite = try await api.newInvite(roomId: link.roomId, ownerToken: owner)
+    }
+
+    /// Withdraws the invitation shown: its link and code stop working.
+    func withdrawInvitation() async throws {
+        guard let api = roomAPI, let link = project.internetRoom, let owner = ownerToken, let invite = currentInvite else { return }
+        try await api.revokeInvite(roomId: link.roomId, ownerToken: owner, inviteId: invite.id)
+        currentInvite = nil
+    }
+
+    func setRoomLocked(_ locked: Bool) async throws {
+        guard let api = roomAPI, let link = project.internetRoom, let owner = ownerToken else { return }
+        _ = try await api.update(roomId: link.roomId, ownerToken: owner, locked: locked)
+    }
+
+    func removeFromRoom(_ participantId: String) async throws {
+        guard let api = roomAPI, let link = project.internetRoom, let owner = ownerToken else { return }
+        try await api.remove(roomId: link.roomId, ownerToken: owner, participantId: participantId)
+    }
+
+    /// The host closes the room for everyone; a guest leaves it. Either way
+    /// the network's local again.
+    func leaveRoom() async {
+        guard let link = project.internetRoom else { return }
+        let api = RoomAPI(service: link.service)
+        let credentials = Self.credentialStore.credentials(service: link.service, roomId: link.roomId)
+        internet?.stop()
+        internet = nil
+        if let credentials {
+            if let owner = credentials.ownerToken {
+                try? await api.close(roomId: link.roomId, ownerToken: owner)
+            } else {
+                try? await api.leave(roomId: link.roomId, memberToken: credentials.memberToken)
+            }
+        }
+        Self.credentialStore.remove(service: link.service, roomId: link.roomId)
+        update { $0.internetRoom = nil }
+        room = nil
+        currentInvite = nil
+    }
+
+    /// Stations of other members, for the canvas.
+    var remoteStations: [StationView] {
+        guard let room, let me = room.participantId else { return [] }
+        return room.stations.filter { $0.participantId != me }
+    }
+
+    func participant(_ id: String) -> ParticipantView? {
+        room?.participants.first { $0.id == id }
+    }
+}

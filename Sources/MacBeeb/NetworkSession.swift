@@ -34,6 +34,15 @@ final class NetworkSession: StationOwner {
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var statusTimer: Timer?
     @ObservationIgnored let thumbnails = ThumbnailCache()
+    /// Its Internet Econet room, while it's in one (NetworkSession+Internet).
+    @ObservationIgnored var internet: InternetEconetLink?
+    /// The room as last heard.
+    var room: RoomConnection.Snapshot?
+    /// The invitation made this session, to show the host (its code isn't
+    /// kept anywhere).
+    var currentInvite: Invite?
+    /// What the room was told of the stations, to tell it changes.
+    @ObservationIgnored var lastClaims: [StationClaim] = []
 
     /// The sessions open, by package.
     private(set) static var open: [URL: NetworkSession] = [:]
@@ -79,6 +88,7 @@ final class NetworkSession: StationOwner {
         }
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
         RecentNetworks.shared.add(url)
+        connectToRoomIfLinked()
         // Agents can reach the network's machines even with no standalone
         // window open.
         MachineController.startAgentServerIfNeeded()
@@ -86,6 +96,8 @@ final class NetworkSession: StationOwner {
 
     /// Closes the network: its machines stop, and it's saved.
     func close() {
+        internet?.stop()
+        internet = nil
         saveNow()
         statusTimer?.invalidate()
         for controller in controllers.values {
@@ -115,6 +127,7 @@ final class NetworkSession: StationOwner {
         }
         self.project = project
         scheduleSave()
+        roomClaimsMayHaveChanged()
     }
 
     private func scheduleSave() {
