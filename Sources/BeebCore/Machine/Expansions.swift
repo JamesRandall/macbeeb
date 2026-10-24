@@ -383,6 +383,14 @@ extension BBCMicro {
                 owner = configuration.fittedExpansions.owner(of: bank).name
             } else if model == .modelA {
                 owner = (12...15).contains(bank) ? "Motherboard socket" : "Not fitted"
+            } else if model == .master128 && bank < 8 {
+                switch bank {
+                case 0, 1: owner = kind == .empty ? "Front cartridge slot" : ram ? "Front cartridge (sideways RAM)" : "Front cartridge"
+                case 2, 3: owner = kind == .empty ? "Rear cartridge slot" : ram ? "Rear cartridge (sideways RAM)" : "Rear cartridge"
+                default: owner = ram ? "Built-in sideways RAM" : bank < 6 ? "IC37 (LK19 East)" : "IC41 (LK18 East)"
+                }
+            } else if model == .bPlus && (2...11).contains(bank) {
+                owner = ["IC35", "IC44", "IC57", "IC62", "IC68"][bank / 2 - 1]
             } else {
                 owner = kind == .empty ? "Not fitted" : ram ? "Built-in sideways RAM" : "Built-in ROM"
             }

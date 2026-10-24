@@ -43,7 +43,7 @@ public final class NetworkRuntime: @unchecked Sendable {
                         printer: (name: String, jobs: @Sendable (PrintJob) -> Void)? = nil) -> EmulatorHost? {
         guard node.isMachine, let setup = node.setup else { return nil }
         if let running = stations[node.id] { return running }
-        let configuration = setup.configuration(econetStation: node.stationNumber)
+        let configuration = setup.configuration(econetStation: node.stationNumber, roms: NetworkPackage.romSource(for: packageURL))
         let host = network.addStation(id: node.id, discDriveSounds: discDriveSounds, discDriveSoundsOn: discDriveSoundsOn,
                                       printer: printer) {
             BBCMicro(configuration: configuration)

@@ -104,6 +104,11 @@ final class NetworkSession: StationOwner {
         var project = self.project
         change(&project)
         guard project != self.project else { return }
+        let roms = { (p: NetworkProject) in Set(p.nodes.compactMap(\.setup).flatMap(\.pluggedROMs).map(\.id)) }
+        if roms(project) != roms(self.project) {
+            // The package's own copies of the ROMs its machines use.
+            try? NetworkPackage.syncROMs(of: project, into: url)
+        }
         let clock = NetworkRuntime.clockRate(of: project)
         if clock != NetworkRuntime.clockRate(of: self.project) {
             runtime.network.setClock(clock)
@@ -670,6 +675,8 @@ final class NetworkSession: StationOwner {
         update { $0[id]?.discs[drive] = nil }
         removeUnusedMedia()
     }
+
+    var romSource: ROMSource { NetworkPackage.romSource(for: url) }
 
     func stationNumber(_ controller: MachineController) -> Int? {
         controller.stationID.flatMap { project[$0]?.stationNumber }

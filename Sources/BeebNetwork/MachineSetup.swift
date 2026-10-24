@@ -18,11 +18,14 @@ public struct MachineSetup: Codable, Sendable, Hashable {
     /// Controller ROMs chosen in place of the bundled ones, by board.
     public var controllerROMPaths: [BBCMicro.MemoryBoard: String]
     public var videoNuLA: Bool
+    /// The user's ROMs in the sockets, and the Master's cartridges and links.
+    public var sockets: SocketSetup
 
     public init(model: BBCMicro.Model = .modelB, secondProcessor: Bool = false, coprocessor: BBCMicro.Coprocessor = .mos6502,
                 discInterface: BBCMicro.DiscInterface = .intel8271, expansions: BBCMicro.Expansions = .none,
                 powerOnImagePaths: [Int: String] = [:], controllerROMPaths: [BBCMicro.MemoryBoard: String] = [:],
-                videoNuLA: Bool = false) {
+                videoNuLA: Bool = false, sockets: SocketSetup = .standard) {
+        self.sockets = sockets
         self.model = model
         self.secondProcessor = secondProcessor
         self.coprocessor = coprocessor
@@ -36,12 +39,18 @@ public struct MachineSetup: Codable, Sendable, Hashable {
     /// The machine's configuration, ROMs and all, with an Econet module
     /// at `econetStation` if there is one. Images that have gone are left
     /// out.
-    public func configuration(econetStation: Int? = nil) -> BBCMicro.Configuration {
+    /// The user's ROMs come from `roms` (missing ones leave their socket
+    /// empty).
+    public func configuration(econetStation: Int? = nil, roms: ROMSource = .library) -> BBCMicro.Configuration {
+        let master = model == .master128
         var built = BeebROMs.configuration(for: model, secondProcessor: secondProcessor, coprocessor: coprocessor,
                                            discInterface: discInterface, expansions: expansions,
                                            sidewaysImages: Self.images(at: powerOnImagePaths),
                                            controllerROM: Self.controllerROM(for: expansions.board, paths: controllerROMPaths),
-                                           econetStation: econetStation)
+                                           econetStation: econetStation,
+                                           socketImages: socketImages(econet: econetStation != nil, source: roms).images,
+                                           addedRAMBanks: master ? sockets.cartridgeRAMBanks : [],
+                                           removedRAMBanks: master ? sockets.linkedROMBanks : [])
         built.videoNuLA = videoNuLA
         return built
     }
@@ -65,6 +74,30 @@ public struct MachineSetup: Codable, Sendable, Hashable {
         case .unknown: return bytes
         case .wrongSize, .anotherBoard: return nil
         }
+    }
+
+    /// The ROMs it needs, by id: to copy into a network with it.
+    public var pluggedROMs: [PluggedROM] {
+        sockets.roms.values.compactMap(\.rom)
+    }
+
+    enum CodingKeys: CodingKey {
+        case model, secondProcessor, coprocessor, discInterface, expansions, powerOnImagePaths, controllerROMPaths, videoNuLA
+        case sockets
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        model = try c.decode(BBCMicro.Model.self, forKey: .model)
+        secondProcessor = try c.decode(Bool.self, forKey: .secondProcessor)
+        coprocessor = try c.decode(BBCMicro.Coprocessor.self, forKey: .coprocessor)
+        discInterface = try c.decode(BBCMicro.DiscInterface.self, forKey: .discInterface)
+        expansions = try c.decode(BBCMicro.Expansions.self, forKey: .expansions)
+        powerOnImagePaths = try c.decode([Int: String].self, forKey: .powerOnImagePaths)
+        controllerROMPaths = try c.decode([BBCMicro.MemoryBoard: String].self, forKey: .controllerROMPaths)
+        videoNuLA = try c.decode(Bool.self, forKey: .videoNuLA)
+        // Older networks have none.
+        sockets = try c.decodeIfPresent(SocketSetup.self, forKey: .sockets) ?? .standard
     }
 
     /// A short description: "BBC Model B", "Master 128 + 6502 Second Processor".

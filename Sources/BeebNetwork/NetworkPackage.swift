@@ -1,12 +1,14 @@
 import Foundation
 
 /// A network on disc: a `.macbeebnet` package (a folder Finder shows as one
-/// file) with `manifest.json`, the project, and `Media`, the copies of its
-/// discs.
+/// file) with `manifest.json`, the project, `Media`, the copies of its
+/// discs, and `ROMs`, copies of the user's ROMs its machines have in their
+/// sockets (so the network works on another Mac).
 public enum NetworkPackage {
     public static let fileExtension = "macbeebnet"
     static let manifestName = "manifest.json"
     static let mediaFolder = "Media"
+    static let romsFolder = "ROMs"
 
     public enum LoadError: Error, CustomStringConvertible {
         case notANetwork
@@ -69,6 +71,36 @@ public enum NetworkPackage {
 
     public static func url(of media: MediaReference, in package: URL) -> URL {
         mediaURL(in: package).appendingPathComponent(media.storedName)
+    }
+
+    public static func romsURL(in package: URL) -> URL {
+        package.appendingPathComponent(romsFolder, isDirectory: true)
+    }
+
+    /// Where the network's machines find their ROMs: its own copies, then
+    /// the library.
+    public static func romSource(for package: URL) -> ROMSource {
+        ROMSource(folders: [romsURL(in: package), ROMLibrary.defaultFolder])
+    }
+
+    /// Copies the ROMs the network's machines use, from `library`, into the
+    /// package where it hasn't them already; and removes the copies none
+    /// of them use now. ROMs the library hasn't either are left missing.
+    public static func syncROMs(of project: NetworkProject, into package: URL, library: ROMSource = .library) throws {
+        let folder = romsURL(in: package)
+        let used = Set(project.nodes.compactMap(\.setup).flatMap(\.pluggedROMs).map(\.id))
+        if !used.isEmpty {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        }
+        for id in used {
+            let target = folder.appendingPathComponent(ROMSource.fileName(for: id))
+            guard !FileManager.default.fileExists(atPath: target.path), let data = library.data(for: id) else { continue }
+            try Data(data).write(to: target, options: .atomic)
+        }
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        for file in files where file.pathExtension == "rom" && !used.contains(file.deletingPathExtension().lastPathComponent) {
+            try? FileManager.default.removeItem(at: file)
+        }
     }
 
     /// Media the manifest no longer mentions.

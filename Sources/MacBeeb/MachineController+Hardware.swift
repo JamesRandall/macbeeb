@@ -1,6 +1,7 @@
 import AppKit
 import BeebCore
 import BeebHost
+import BeebNetwork
 import BeebROMs
 
 /// The Model B's expansions: choosing the board (a power cycle), and
@@ -63,6 +64,12 @@ extension MachineController {
         return Dictionary(uniqueKeysWithValues: saved.compactMap { key, path in Int(key).map { ($0, path) } })
     }
 
+    static var savedSockets: SocketSetup {
+        guard let data = UserDefaults.standard.data(forKey: socketsKey),
+              let saved = try? JSONDecoder().decode(SocketSetup.self, from: data) else { return .standard }
+        return saved
+    }
+
     static var savedVideoNuLA: Bool {
         UserDefaults.standard.bool(forKey: videoNuLAKey)
     }
@@ -76,6 +83,7 @@ extension MachineController {
     private static let controllerROMsKey = "MacBeebControllerROMs"
     private static let videoNuLAKey = "MacBeebVideoNuLA"
     private static let powerOnImagesKey = "MacBeebSidewaysPowerOnImages"
+    private static let socketsKey = "MacBeebROMSockets"
 
     /// Fits a different board (or changes its wiring or controller ROM),
     /// which power cycles a Model B. On other models it's remembered for

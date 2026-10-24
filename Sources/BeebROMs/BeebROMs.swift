@@ -134,6 +134,12 @@ public enum BeebROMs {
 
 import BeebCore
 
+/// What's in a ROM socket, in place of its standard ROM.
+public enum SocketImage: Sendable, Equatable {
+    case empty
+    case rom([UInt8], BBCMicro.ROMMapper)
+}
+
 extension BeebROMs {
     /// A standard machine with the bundled ROMs:
     ///
@@ -158,6 +164,13 @@ extension BeebROMs {
     /// On the Model B, `discInterface` picks the disc controller and its
     /// filing system (in bank 14), and `expansions` the memory board.
     /// `sidewaysImages` are put in sideways RAM banks at power on.
+    ///
+    /// `socketImages` are what the user has put in the sockets, by the
+    /// socket's standard bank number (an Aries board renumbers them as it
+    /// does the rest), in place of the standard ROMs; the Econet's ROM and
+    /// a board's controller ROM still take their sockets. `addedRAMBanks`
+    /// are sideways RAM (a Master's RAM cartridge), and `removedRAMBanks`
+    /// aren't (the Master's links making banks 4-7 ROM sockets).
     public static func configuration(for model: BBCMicro.Model, secondProcessor: Bool = false,
                                      coprocessor: BBCMicro.Coprocessor = .mos6502,
                                      discInterface: BBCMicro.DiscInterface = .intel8271,
@@ -165,9 +178,14 @@ extension BeebROMs {
                                      expansions: BBCMicro.Expansions = .none,
                                      sidewaysImages: [Int: [UInt8]] = [:],
                                      controllerROM: [UInt8]? = nil,
-                                     econetStation: Int? = nil) -> BBCMicro.Configuration {
+                                     econetStation: Int? = nil,
+                                     socketImages: [Int: SocketImage] = [:],
+                                     addedRAMBanks: Set<Int> = [],
+                                     removedRAMBanks: Set<Int> = []) -> BBCMicro.Configuration {
         var configuration = standardConfiguration(for: model)
         configuration.coprocessor = coprocessor
+        configuration.sidewaysRAMBanks.formUnion(addedRAMBanks)
+        configuration.sidewaysRAMBanks.subtract(removedRAMBanks)
         if model == .modelB {
             configuration.expansions = expansions
             configuration.discInterface = discInterface
@@ -179,6 +197,16 @@ extension BeebROMs {
             case .opus: data(.opusDDOS345)
             }
         }
+        for (bank, image) in socketImages where (0..<16).contains(bank) {
+            switch image {
+            case .empty:
+                configuration.sidewaysROMs[bank] = nil
+                configuration.romMappers[bank] = nil
+            case .rom(let data, let mapper):
+                configuration.sidewaysROMs[bank] = data
+                configuration.romMappers[bank] = mapper == .standard ? nil : mapper
+            }
+        }
         // Econet: the network filing system's ROM. The B's DNFS has DFS
         // 1.20 in it, so it takes the 8271 DFS's place; with another disc
         // interface it goes in bank 13. The Masters' ANFS goes in bank 8.
@@ -186,9 +214,12 @@ extension BeebROMs {
             configuration.econetStation = econetStation
             switch model {
             case .modelB:
-                configuration.sidewaysROMs[discInterface == .intel8271 ? 14 : 13] = data(.dnfs)
+                let bank = discInterface == .intel8271 ? 14 : 13
+                configuration.sidewaysROMs[bank] = data(.dnfs)
+                configuration.romMappers[bank] = nil
             case .master128, .masterCompact:
                 configuration.sidewaysROMs[8] = data(.anfs425)
+                configuration.romMappers[8] = nil
             case .modelA, .bPlus:
                 break
             }
@@ -219,16 +250,23 @@ extension BeebROMs {
                 renumbered[mapping[bank] ?? bank] = image
             }
             configuration.sidewaysROMs = renumbered
+            configuration.romMappers = Dictionary(uniqueKeysWithValues: configuration.romMappers.map { (mapping[$0.key] ?? $0.key, $0.value) })
         }
         // A board's controller ROM: the bundled one, or the user's own.
         if let bank = configuration.fittedExpansions.controllerROMBank,
            let firmware = Firmware.standard(for: configuration.fittedExpansions.board) {
             configuration.sidewaysROMs[bank] = controllerROM ?? firmware.bundledData
+            configuration.romMappers[bank] = nil
         }
         // Only into RAM, and never over a ROM.
         let ramBanks = configuration.sidewaysRAMBanks.union(configuration.fittedExpansions.sidewaysRAMBanks)
         for (bank, image) in sidewaysImages where ramBanks.contains(bank) && image.count <= 0x4000 {
             configuration.sidewaysROMs[bank] = image
+        }
+        // RAM is RAM: no ROM, or mapper, under it.
+        for bank in ramBanks {
+            configuration.romMappers[bank] = nil
+            if sidewaysImages[bank] == nil { configuration.sidewaysROMs[bank] = nil }
         }
         return configuration
     }

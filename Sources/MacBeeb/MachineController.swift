@@ -26,6 +26,8 @@ protocol StationOwner: AnyObject {
     func stationTitle(_ controller: MachineController) -> String
     /// Its Econet station number, which its machine is built with.
     func stationNumber(_ controller: MachineController) -> Int?
+    /// Where its ROMs are: the network's copies, then the library.
+    var romSource: ROMSource { get }
 }
 
 /// One emulated machine and its window's actions.
@@ -95,6 +97,9 @@ final class MachineController {
     /// VideoNuLA fitted in place of the Video ULA (any model). Remembered
     /// like the model.
     private(set) var videoNuLA: Bool
+    /// The user's ROMs in the sockets, and a Master's cartridges and
+    /// links. Remembered like the model.
+    private(set) var sockets: SocketSetup
     private static let powerOnImagesDefaultsKey = "MacBeebSidewaysPowerOnImages"
     /// Counts changes to the hardware (a power cycle with new hardware, or
     /// sideways RAM loaded or cleared), for the Hardware Expansions window.
@@ -148,7 +153,8 @@ final class MachineController {
             discInterface: defaults.string(forKey: Self.discInterfaceDefaultsKey)
                 .flatMap(BBCMicro.DiscInterface.init(rawValue:)) ?? .intel8271,
             expansions: Self.savedExpansions, powerOnImagePaths: Self.savedPowerOnImagePaths,
-            controllerROMPaths: Self.savedControllerROMPaths, videoNuLA: Self.savedVideoNuLA)
+            controllerROMPaths: Self.savedControllerROMPaths, videoNuLA: Self.savedVideoNuLA,
+            sockets: Self.savedSockets)
         let discDriveSounds = defaults.object(forKey: Self.discDriveSoundsDefaultsKey) as? Bool ?? true
         let configuration = setup.configuration()
         let host = EmulatorHost(discDriveSounds: Self.discDriveSounds(for:), discDriveSoundsOn: discDriveSounds) {
@@ -175,6 +181,7 @@ final class MachineController {
         powerOnImagePaths = setup.powerOnImagePaths
         controllerROMPaths = setup.controllerROMPaths
         videoNuLA = setup.videoNuLA
+        sockets = setup.sockets
         self.discDriveSounds = discDriveSounds
         self.host = host
         stationID = station?.0
@@ -244,8 +251,11 @@ final class MachineController {
     var setup: MachineSetup {
         MachineSetup(model: model, secondProcessor: secondProcessor, coprocessor: coprocessor, discInterface: discInterface,
                      expansions: expansions, powerOnImagePaths: powerOnImagePaths, controllerROMPaths: controllerROMPaths,
-                     videoNuLA: videoNuLA)
+                     videoNuLA: videoNuLA, sockets: sockets)
     }
+
+    /// Where the machine's ROMs come from.
+    var romSource: ROMSource { station?.romSource ?? .library }
 
     /// Remembers a hardware choice: in the app's defaults for a standalone
     /// machine (new windows start with it), or in a station's network.
@@ -686,12 +696,13 @@ final class MachineController {
     func setPowerOnImagePathsValue(_ new: [Int: String]) { powerOnImagePaths = new }
     func setControllerROMPathsValue(_ new: [BBCMicro.MemoryBoard: String]) { controllerROMPaths = new }
     func setVideoNuLAValue(_ new: Bool) { videoNuLA = new }
+    func setSocketsValue(_ new: SocketSetup) { sockets = new }
     func noteHardwareChanged() { hardwareChanges += 1 }
     /// Power cycles into the hardware as now set.
     func restartWithHardware() { changeMachine() }
 
     private func changeMachine() {
-        let configuration = setup.configuration(econetStation: station?.stationNumber(self))
+        let configuration = setup.configuration(econetStation: station?.stationNumber(self), roms: romSource)
         hardwareChanges += 1
         // As BBCMicro.insertDiscs: an empty drive 0, or one with the old
         // machine's system disc, gets the new machine's.
