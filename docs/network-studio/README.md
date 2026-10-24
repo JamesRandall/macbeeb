@@ -238,6 +238,53 @@ isn't included. It speaks the printer server protocol Acorn's network
 filing systems use: status enquiries on port &9F, answered on &9E, and the
 job's data on port &D1.
 
+## Over the Internet
+
+Share a network with someone on another Mac, and your BBC Micros and theirs
+are on one Econet: their machines appear on your canvas, yours on theirs,
+and they talk with Acorn's own network software. `*I AM` on their BBC logs
+on to your file server; `*FX5,4` and `VDU 2` print on your printer server.
+
+**To share**: click **Share Over Internet** (the globe) in the toolbar, or
+**File ▸ Share Network Over Internet…**. Name the network, choose which
+machines to share, and click **Create Private Network**. File and printer
+servers start unshared: share one and whoever joins can log on to it and
+read and write whatever its accounts allow, or print on it. Then send the
+**invitation link**, or read out the **join code** (`ACRN-…`). Both work for
+24 hours, for up to 20 people; **New Invitation** makes another and
+**Withdraw** stops one working.
+
+**To join**: **File ▸ Join Econet Network…** (⇧⌘J), or **Join with a Code**
+on the welcome screen, or open the invitation link. Type or paste the code
+or link: you see the network's name and machines before anything happens.
+Join with a new network (a Model B or a Master 128, at a free station
+number), or one you have open.
+
+**In the network**: other people's machines are on your canvas as dashed
+teal cards, joined to your cable: whose they are, whether they're online,
+and the round trip to them. The globe button shows who's there; the host
+can stop new people joining, remove someone, or **Stop Sharing**, which
+closes the network for everyone. A guest can **Leave Network**. If the
+connection drops, MacBeeb reconnects by itself, and when you open the
+network again it goes back into its room.
+
+**What's shared**: only Econet. Nobody can see your screens, type into your
+machines, use their debuggers, or reach anything on your Mac. Station
+numbers must be different across the network: if someone else has one of
+yours, the globe button says which, so you can change it.
+
+**Speed**: each frame of Econet's handshake crosses the Internet and back,
+so a file server command takes a few tenths of a second, depending on the
+distance. While a frame's crossing, your network's line is held, and your
+other machines wait, as they would for a slow station.
+
+**Your own service**: rooms live on a service on Cloudflare: by default
+econet.acornplayground.org. Anyone can run their own (acorn-internet-econet,
+open source); choose it in **Settings ▸ Networking**. An invitation link
+from another service says so before you join, and doesn't change your
+setting. A code is looked up on your service, so a code from someone on
+another service needs that service set.
+
 ## Tiles
 
 Click **Tiles** in the toolbar to see the machines that are on side by

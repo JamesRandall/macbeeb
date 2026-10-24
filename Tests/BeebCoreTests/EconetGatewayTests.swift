@@ -14,6 +14,14 @@ final class GatewayRig {
     let gateways: [EconetGateway]
     /// One-way delay, in cycles.
     var latency: Int
+    /// Up to this much more, at random (each direction stays in order, as
+    /// one WebSocket over TCP does).
+    var jitter = 0
+    /// Messages to lose (by their count from the start), as a dropped
+    /// connection loses what was in flight.
+    var drop: Set<Int> = []
+    private var generator = SeededGenerator(seed: 6502)
+    private var lastArrival = [0, 0]
     /// Messages in flight: when they arrive, and where.
     private var inFlight: [(at: Int, side: Int, message: EconetGatewayMessage)] = []
     private var now = 0
@@ -31,7 +39,11 @@ final class GatewayRig {
             gateway.remoteStations = Set(sides[1 - index].machines.compactMap { $0.econet?.station })
             gateway.send = { [unowned self] message in
                 sent.append((index, message))
-                inFlight.append((now + self.latency, 1 - index, message))
+                if drop.contains(sent.count) { return }
+                let extra = jitter > 0 ? Int.random(in: 0...jitter, using: &generator) : 0
+                let at = max(lastArrival[index], now + self.latency + extra)
+                lastArrival[index] = at
+                inFlight.append((at, 1 - index, message))
             }
             sides[index].bus.attach(device: gateway)
         }
@@ -195,6 +207,69 @@ struct EconetGatewayServiceTests {
         #expect(rig.screen(0, 1).contains("HELLO ACROSS THE INTERNET"), "\(rig.screen(0, 1))")
         rig.command(0, 1, "SAVE \"$.ALICE.NOPE\"")
         #expect(rig.screen(0, 1).contains("Insufficient access"), "\(rig.screen(0, 1))")
+    }
+}
+
+/// A random number generator that repeats: so do the tests.
+struct SeededGenerator: RandomNumberGenerator {
+    var state: UInt64
+    init(seed: UInt64) { state = seed }
+    mutating func next() -> UInt64 {
+        state = state &* 6364136223846793005 &+ 1442695040888963407
+        return state ^ (state >> 33)
+    }
+}
+
+/// Printing, and the file server when the Internet's less kind.
+struct EconetGatewayConditionsTests {
+    /// MacBeeb's printer server on one network, a station on the other
+    /// printing with its own NFS (*FX5,4, VDU 2 ... VDU 3).
+    @Test func printsAcross() throws {
+        let rig = GatewayRig([(.modelB, 1)], [(.modelB, 235)], latency: 80)
+        let printed = try rig.sides[1].startPrinterServer(0)
+        rig.run(seconds: 1.5)
+        rig.type(0, 0, "*FX5,4\n")
+        rig.type(0, 0, "VDU 2:PRINT \"PRINTED ACROSS THE INTERNET\":PRINT \"SECOND LINE\":VDU 3\n")
+        #expect(rig.run(until: { rig.screen(1, 0).contains("Printed") }, seconds: 90), "\(rig.screen(1, 0))")
+        #expect(printed.text == "PRINTED ACROSS THE INTERNET\rSECOND LINE\r", "\(printed.text.debugDescription)")
+        #expect(rig.screen(1, 0).contains("Job from station 1"))
+    }
+
+    /// 20 to 150ms each way, varying: log on, save, load.
+    @Test func level2WithJitter() throws {
+        let rig = GatewayRig([(.modelB, 1)], [(.modelB, 254)], latency: 20)
+        rig.jitter = 130 * 2000
+        let disc = try Level2FileServerDisc(name: "JITTER", users: ["ALICE"], date: EconetRig.level2Date)
+        try rig.sides[1].startLevel2FileServer(0, disc: disc)
+        rig.run(seconds: 1.5)
+        rig.command(0, 0, "*NET")
+        rig.command(0, 0, "*I AM ALICE")
+        rig.command(0, 0, "FOR I%=0 TO 1023:I%?&3000=(I%*7+3) AND 255:NEXT")
+        rig.command(0, 0, "*SAVE DATA 3000+400")
+        rig.command(0, 0, "FOR I%=0 TO 1023:I%?&3000=0:NEXT")
+        rig.command(0, 0, "*LOAD DATA")
+        let machine = rig.sides[0].machines[0]
+        let loaded: [UInt8] = (0..<1024).map { machine.peek(UInt16(0x3000 + $0)) }
+        let pattern: [UInt8] = (0..<1024).map { UInt8(($0 * 7 + 3) & 255) }
+        #expect(loaded == pattern, "\(rig.screen(0, 0))")
+    }
+
+    /// A message lost on the way (a connection dropping mid-transaction):
+    /// that transaction fails as on a real network (the line goes quiet
+    /// after the hold), NFS reports or retries it, and the next works.
+    @Test func recoversFromALostMessage() throws {
+        let rig = GatewayRig([(.modelB, 1)], [(.modelB, 254)], latency: 40)
+        let disc = try Level2FileServerDisc(name: "LOSSY", users: ["ALICE"], date: EconetRig.level2Date)
+        try rig.sides[1].startLevel2FileServer(0, disc: disc)
+        rig.run(seconds: 1.5)
+        rig.command(0, 0, "*NET")
+        rig.command(0, 0, "*I AM ALICE")
+        // Lose the next message but one.
+        rig.drop = [rig.sent.count + 2]
+        rig.command(0, 0, "*CAT", seconds: 30)
+        rig.command(0, 0, "*CAT", seconds: 30)
+        #expect(rig.screen(0, 0).contains("ALICE"), "\(rig.screen(0, 0))")
+        #expect(rig.gateways.allSatisfy { $0.activity == .idle })
     }
 }
 
