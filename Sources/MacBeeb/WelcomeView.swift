@@ -93,14 +93,6 @@ struct WelcomeView: View {
                            blurb: "A Model B, B+, Master 128 or Compact. Add a second processor, plug ROMs and cartridges into its sockets, and step through its 6502 in the debugger.") {
             ModelChips()
         } actions: {
-            Button { go { openWindow(id: MachineWindow.windowID) } } label: {
-                Label("Switch On", systemImage: "power")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
-            .controlSize(.large)
-            .help("Open a BBC Micro, set up as the last one was")
             if !saved.isEmpty {
                 Menu {
                     ForEach(saved) { machine in
@@ -113,6 +105,14 @@ struct WelcomeView: View {
                 .controlSize(.large)
                 .help("A machine configuration you've saved")
             }
+            Button { go { openWindow(id: MachineWindow.windowID) } } label: {
+                Label("Switch On", systemImage: "power")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+            .controlSize(.large)
+            .help("Open a BBC Micro, set up as the last one was")
         }
     }
 
@@ -142,13 +142,6 @@ struct WelcomeView: View {
                            blurb: "A classroom of BBC Micros on Econet, each one running for real: file servers, printers, and messages and programs passed between them.") {
             EconetAnimation()
         } actions: {
-            Button { go { openWindow(id: NetworkStartView.windowID) } } label: {
-                Label("New Network", systemImage: "plus")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(.teal)
-            .controlSize(.large)
             if !recent.isEmpty {
                 Menu {
                     ForEach(recent.prefix(8), id: \.self) { url in
@@ -162,6 +155,13 @@ struct WelcomeView: View {
                 .menuStyle(.button)
                 .controlSize(.large)
             }
+            Button { go { openWindow(id: NetworkStartView.windowID) } } label: {
+                Label("New Network", systemImage: "plus")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.teal)
+            .controlSize(.large)
         }
     }
 
