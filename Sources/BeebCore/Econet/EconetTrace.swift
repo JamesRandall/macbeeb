@@ -70,11 +70,28 @@ public struct EconetFrame: Sendable, Equatable, Codable, Identifiable {
         }
     }
 
+    /// An immediate operation (port 0), by its control byte: what NFS
+    /// does for another station, whatever the BBC's running.
+    public static func immediateOperation(_ control: UInt8) -> String? {
+        switch control & 0x7F {
+        case 0x01: "PEEK"
+        case 0x02: "POKE"
+        case 0x03: "JSR"
+        case 0x04: "user procedure call"
+        case 0x05: "OS procedure call"
+        case 0x06: "HALT"
+        case 0x07: "CONTINUE"
+        case 0x08: "machine type"
+        default: nil
+        }
+    }
+
     /// A one-line description, as the inspector lists it.
     public var summary: String {
         switch kind {
         case .scout, .broadcast:
-            let portText = port.map { p in Self.portName(p).map { "port &\(hex(p)) (\($0))" } ?? "port &\(hex(p))" } ?? ""
+            let operation = port == 0 ? control.flatMap(Self.immediateOperation) : nil
+            let portText = port.map { p in (operation.map { "immediate \($0)" } ?? Self.portName(p)).map { "port &\(hex(p)) (\($0))" } ?? "port &\(hex(p))" } ?? ""
             return (kind == .broadcast ? "Broadcast" : "Scout") + " · control &\(control.map(hex) ?? "?") · " + portText
         case .acknowledgement:
             return "Acknowledgement"

@@ -170,6 +170,25 @@ the hardware and no software yet.
   be open at once; reading a block that's received frees it. (Found by
   the Distributed Mandelbrot demo, Examples/distributed-mandelbrot.)
 
+## Immediate operations and the VIA's shift register
+
+NFS answers immediate operations (port 0) itself: PEEK, POKE, JSR, user
+and OS procedure calls, HALT, CONTINUE and machine type. A protection mask
+(&0D63 in DNFS, one bit an operation, 0 = allowed) can refuse them.
+
+DNFS doesn't make a remote JSR in the NMI handler that receives it. At
+&9B00 it saves the control byte, enables the system VIA's shift register
+interrupt (IER = &84), sets ACR bits 2–4 to 010 (shift in under φ2) and
+reads SR. The interrupt that comes after the eight shifts is one the MOS
+doesn't know, so it's offered to the ROMs, and NFS calls the routine
+(`JMP (&0D58)`) from there. So the 6522's shift register has to work for a
+remote JSR to happen at all: `VIA6522` emulates the φ2 modes (2, in; 6,
+out), and `EconetTests.remotePokeAndJSR` checks the whole thing. The modes
+clocked by T2 or CB1 aren't emulated.
+
+The Distributed Mandelbrot's CLUSTER uses machine type, POKE and JSR to
+start its workers (Examples/distributed-mandelbrot/remote.asm).
+
 ## Not done (yet)
 
 - Loop mode, address extension, logical control fields, NRZI, CRC values,

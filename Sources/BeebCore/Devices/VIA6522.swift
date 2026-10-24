@@ -79,6 +79,9 @@ public struct VIA6522: Codable, Sendable {
     var t1PB7: UInt8 = 0
     /// Old port B value, for counting PB6 pulses.
     var oldPB: UInt8 = 0
+    /// Shifts left before the shift register's interrupt, while it's
+    /// shifting. (Optional so save states from before it was emulated load.)
+    var srShifts: UInt8?
 
     public init() {}
 
@@ -89,6 +92,9 @@ public struct VIA6522: Codable, Sendable {
     private var t2CountPB6: Bool { acr & 0x20 != 0 }
     private var t1Continuous: Bool { acr & 0x40 != 0 }
     private var t1OutputPB7: Bool { acr & 0x80 != 0 }
+    /// ACR bits 2-4. Only the modes clocked by phi2 (2, in; 6, out) shift:
+    /// those under T2 or CB1 aren't emulated.
+    private var srMode: UInt8 { acr >> 2 & 7 }
     private var ca2Mode: UInt8 { pcr >> 1 & 7 }
     private var cb2Mode: UInt8 { pcr >> 5 & 7 }
 
@@ -125,7 +131,9 @@ public struct VIA6522: Codable, Sendable {
             }
             return UInt8(truncatingIfNeeded: t2)
         case 0x9: return UInt8(truncatingIfNeeded: t2 >> 8)
-        case 0xA: return sr
+        case 0xA:
+            startShifting()
+            return sr
         case 0xB: return acr
         case 0xC: return pcr
         case 0xD: // IFR
@@ -189,9 +197,14 @@ public struct VIA6522: Codable, Sendable {
             t2lh = value
             t2Pending = true
             t2Reload = true
-        case 0xA: sr = value
+        case 0xA:
+            sr = value
+            startShifting()
         case 0xB:
             acr = value
+            if srMode == 0 {
+                srShifts = nil
+            }
             if t1Timeout && !t1Continuous {
                 t1Pending = false
             }
@@ -212,6 +225,16 @@ public struct VIA6522: Codable, Sendable {
             }
         default: // 0xF: ORA, no handshake
             a.or = value
+        }
+    }
+
+    /// Reading or writing SR clears its interrupt and starts eight shifts.
+    /// (NFS uses this as a software interrupt: mode 2, then a read, to run
+    /// a remote JSR from the IRQ handler.)
+    private mutating func startShifting() {
+        ifr &= ~IRQ.sr
+        if srMode != 0 {
+            srShifts = 8
         }
     }
 
@@ -286,6 +309,18 @@ public struct VIA6522: Codable, Sendable {
             t1 &-= 1
             t1Reload = t1 == 0xFFFF
             t1Timeout = t1Pending && t1Reload
+        }
+
+        if let shifts = srShifts, srMode & 3 == 2 {
+            // A bit a cycle: in from CB2, or out (round, as CB2's not
+            // driven here).
+            sr = srMode & 4 == 0 ? sr << 1 | (b.c2 != 0 ? 1 : 0) : sr << 1 | sr >> 7
+            if shifts == 1 {
+                srShifts = nil
+                ifr |= IRQ.sr
+            } else {
+                srShifts = shifts - 1
+            }
         }
 
         t2Timeout = false

@@ -156,6 +156,29 @@ struct EconetTests {
         // &42: not listening.
         #expect(rig.screen(0).contains("RESULT 66"), "\(rig.screen(0))")
     }
+
+    /// Immediate operations, which NFS answers itself on a BBC at BASIC
+    /// (DFS selected, no *NET): a POKE puts code in station 2, and a JSR
+    /// runs it, typing "A" there. DNFS makes the call from an interrupt it
+    /// raises with the system VIA's shift register (mode 2, then a read).
+    @Test func remotePokeAndJSR() {
+        let rig = EconetRig([(.modelB, 1), (.modelB, 2)])
+        rig.run(seconds: 1.5)
+        rig.runProgram(0, """
+        10 S%=&3000:FOR I%=0 TO 9:READ D%:S%?I%=D%:NEXT
+        20 DATA &A9,&8A,&A2,0,&A0,&41,&20,&F4,&FF,&60
+        30 C%=&3100:C%?1=0:C%?2=2:C%?3=0:C%!12=&A00
+        40 ?C%=&82:C%!4=&FFFF3000:C%!8=&FFFF300A:PROCgo
+        50 ?C%=&83:C%!4=&FFFF3000:C%!8=&FFFF3001:PROCgo
+        60 END
+        70 DEF PROCgo:X%=C%:Y%=C%DIV256:A%=&10:CALL &FFF1
+        80 REPEAT A%=&32:U%=USR&FFF4:UNTIL (U%AND&8000)=0
+        90 PRINT "RESULT ";(U% DIV 256) AND 255:ENDPROC
+        """)
+        #expect(rig.run(until: { rig.screen(0).components(separatedBy: "RESULT 0").count == 3 }), "\(rig.screen(0))")
+        #expect((0..<10).map { rig.machines[1].peek(UInt16(0xA00 + $0)) } == [0xA9, 0x8A, 0xA2, 0, 0xA0, 0x41, 0x20, 0xF4, 0xFF, 0x60])
+        #expect(rig.run(until: { rig.lastLines(1, 1) == ">A" }, seconds: 2), "\(rig.screen(1))")
+    }
 }
 
 struct EconetDebug {
@@ -346,6 +369,16 @@ struct EconetFileServerTests {
 /// The trace: frames put back together from the line, and read as the
 /// four-way handshake.
 struct EconetTraceTests {
+    /// Port 0's scouts say which immediate operation they are.
+    @Test func immediateOperationsAreNamed() {
+        let poke = EconetFrame(id: 0, start: 0, end: 0, transmitter: 1, bytes: [2, 0, 1, 0, 0x82, 0, 0, 0x0A, 0, 0],
+                               status: .valid, kind: .scout)
+        #expect(poke.summary == "Scout · control &82 · port &00 (immediate POKE)")
+        let jsr = EconetFrame(id: 0, start: 0, end: 0, transmitter: 1, bytes: [2, 0, 1, 0, 0x83, 0], status: .valid, kind: .scout)
+        #expect(jsr.summary.hasSuffix("(immediate JSR)"))
+        #expect(EconetFrame.immediateOperation(0x88) == "machine type")
+    }
+
     @Test func oneTransmissionIsOneTransaction() {
         let rig = EconetRig([(.modelB, 1), (.modelB, 2)])
         let trace = EconetTrace()
