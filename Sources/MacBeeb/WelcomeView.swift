@@ -99,15 +99,8 @@ struct WelcomeView: View {
             ModelChips()
         } actions: {
             if !saved.isEmpty {
-                Menu {
-                    ForEach(saved) { machine in
-                        Button(machine.name) { go { open(machine) } }
-                    }
-                } label: {
-                    Text("Start One of Your Machines")
-                }
-                .menuStyle(.button)
-                .controlSize(.large)
+                WideMenu(title: "Start One of Your Machines",
+                         items: saved.map { machine in (machine.name, { go { open(machine) } }) })
                 .help("A machine configuration you've saved")
             }
             Button { go { openWindow(id: MachineWindow.windowID) } } label: {
@@ -148,17 +141,9 @@ struct WelcomeView: View {
             EconetAnimation()
         } actions: {
             if !recent.isEmpty {
-                Menu {
-                    ForEach(recent.prefix(8), id: \.self) { url in
-                        Button(url.deletingPathExtension().lastPathComponent) {
-                            go { NetworkStudioCommands.open(url, openWindow: openWindow) }
-                        }
-                    }
-                } label: {
-                    Text("Open Recent")
-                }
-                .menuStyle(.button)
-                .controlSize(.large)
+                WideMenu(title: "Open Recent", items: recent.prefix(8).map { url in
+                    (url.deletingPathExtension().lastPathComponent, { go { NetworkStudioCommands.open(url, openWindow: openWindow) } })
+                })
             }
             Button { go { openWindow(id: NetworkStartView.windowID) } } label: {
                 Label("New Network", systemImage: "plus")
@@ -535,5 +520,57 @@ struct WelcomeMenuItem: View {
     var body: some View {
         Button("Welcome to MacBeeb") { openWindow(id: WelcomeView.windowID) }
             .keyboardShortcut("1", modifiers: [.command, .shift])
+    }
+}
+
+/// A menu that looks like the card's other buttons, as wide as they are
+/// (SwiftUI's menu button keeps to the width of its title): a button that
+/// opens its menu where it was clicked.
+private struct WideMenu: View {
+    let title: String
+    let items: [(String, () -> Void)]
+
+    var body: some View {
+        Button(action: show) {
+            Text(title)
+                .frame(maxWidth: .infinity)
+                .overlay(alignment: .trailing) {
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                }
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.large)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("Shows a menu")
+    }
+
+    @MainActor
+    private func show() {
+        let menu = NSMenu()
+        let target = MenuTarget(items.map(\.1))
+        for (index, item) in items.enumerated() {
+            let entry = NSMenuItem(title: item.0, action: #selector(MenuTarget.choose(_:)), keyEquivalent: "")
+            entry.target = target
+            entry.tag = index
+            menu.addItem(entry)
+        }
+        // (Held by the menu's items while it's open.)
+        withExtendedLifetime(target) {
+            menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+        }
+    }
+
+    @MainActor
+    private final class MenuTarget: NSObject {
+        let actions: [() -> Void]
+
+        init(_ actions: [() -> Void]) {
+            self.actions = actions
+        }
+
+        @objc func choose(_ item: NSMenuItem) {
+            if actions.indices.contains(item.tag) { actions[item.tag]() }
+        }
     }
 }

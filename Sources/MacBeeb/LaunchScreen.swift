@@ -11,8 +11,6 @@ enum LaunchScreen: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     static let defaultsKey = "MacBeebLaunchScreen"
-    /// Before there was a welcome screen: true opened only the Game Library.
-    private static let legacyBookshelfKey = "MacBeebStartWithClassics"
 
     var title: String {
         switch self {
@@ -23,12 +21,12 @@ enum LaunchScreen: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The setting (an earlier "open with the Game Library" carries over).
+    /// The setting. It's new in 1.5, so everyone starts with the welcome
+    /// screen, whatever they opened with before (the old setting, opening
+    /// with only the Game Library, isn't carried over).
     static var preference: LaunchScreen {
         get {
-            let defaults = UserDefaults.standard
-            if let saved = defaults.string(forKey: defaultsKey).flatMap(LaunchScreen.init(rawValue:)) { return saved }
-            return defaults.bool(forKey: legacyBookshelfKey) ? .games : .welcome
+            UserDefaults.standard.string(forKey: defaultsKey).flatMap(LaunchScreen.init(rawValue:)) ?? .welcome
         }
         set { UserDefaults.standard.set(newValue.rawValue, forKey: defaultsKey) }
     }
