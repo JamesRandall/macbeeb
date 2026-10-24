@@ -298,6 +298,11 @@ struct MacBeebApp: App {
         Window("Machine Configurations", id: MachineConfigurationsWindow.windowID) {
             MachineConfigurationsWindow()
         }
+        WindowGroup("Hardware", id: HardwareExpansionsWindow.refWindowID, for: HardwareRef.self) { $ref in
+            if let target = ref?.target {
+                HardwareExpansionsWindow(target: target)
+            }
+        }
         WindowGroup("Hardware", id: HardwareExpansionsWindow.windowID, for: UUID.self) { $id in
             if let id, let machine = MachineController.all[id] {
                 HardwareExpansionsWindow(machine: machine)

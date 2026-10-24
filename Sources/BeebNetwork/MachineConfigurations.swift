@@ -69,6 +69,13 @@ public final class MachineConfigurations: @unchecked Sendable {
         return saved
     }
 
+    /// Changes a saved machine's set-up.
+    public func update(_ id: UUID, setup: MachineSetup) throws {
+        guard let index = machines.firstIndex(where: { $0.id == id }) else { return }
+        machines[index].setup = setup
+        try write()
+    }
+
     public func rename(_ id: UUID, to name: String) throws {
         guard let index = machines.firstIndex(where: { $0.id == id }) else { return }
         machines[index].name = name

@@ -14,19 +14,28 @@ import UniformTypeIdentifiers
 /// and clearing sideways RAM works on the running BBC straight away.
 struct HardwareExpansionsWindow: View {
     static let windowID = "hardware-expansions"
-    let machine: MachineController
+    /// For a `HardwareRef`: a station, on or off, or a saved configuration.
+    static let refWindowID = "hardware"
+    let target: any HardwareTarget
     @State private var draft: MachineController.HardwareDraft
     @State private var snapshot: MachineController.HardwareSnapshot?
     @State private var error: String?
     @State private var clearing: Int?
     @Environment(\.openWindow) private var openWindow
 
-    init(machine: MachineController) {
-        self.machine = machine
-        _draft = State(initialValue: machine.hardwareDraft)
+    init(target: any HardwareTarget) {
+        self.target = target
+        _draft = State(initialValue: target.hardwareDraft)
     }
 
-    private var pending: Bool { draft != machine.hardwareDraft }
+    init(machine: MachineController) {
+        self.init(target: machine)
+    }
+
+    /// The running machine, for what's in its memory now.
+    private var running: MachineController? { target.running }
+
+    private var pending: Bool { draft != target.hardwareDraft }
 
     var body: some View {
         Group {
@@ -40,7 +49,7 @@ struct HardwareExpansionsWindow: View {
         .navigationTitle("Hardware")
         .toolbar {
             ToolbarItem {
-                Button("Save Configuration…", systemImage: "square.and.arrow.down") { saveConfiguration(machine.setup) }
+                Button("Save Configuration…", systemImage: "square.and.arrow.down") { saveConfiguration(target.setup) }
                     .disabled(pending)
                     .help(pending ? "Restart the BBC with these changes first, then save it as a machine configuration"
                           : "Save this machine's set-up under a name, to use in other windows and networks")
@@ -52,17 +61,19 @@ struct HardwareExpansionsWindow: View {
                 .help("Open the Hardware Expansion Guide")
             }
         }
-        .task(id: machine.hardwareChanges) {
+        .navigationSubtitle(target.hardwareTitle ?? "")
+        .task(id: target.hardwareChanges) {
             // The running machine, refreshed while the window's open (the
             // selected bank changes as the BBC runs).
             while !Task.isCancelled {
-                if let new = await machine.hardwareSnapshot(), new != snapshot {
+                let new = await running?.hardwareSnapshot()
+                if new != snapshot {
                     snapshot = new
                 }
                 try? await Task.sleep(for: .milliseconds(250))
             }
         }
-        .onChange(of: machine.hardwareDraft) { draft = machine.hardwareDraft }
+        .onChange(of: target.hardwareDraft) { draft = target.hardwareDraft }
         .alert("Sideways RAM", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK") { error = nil }
         } message: {
@@ -71,7 +82,7 @@ struct HardwareExpansionsWindow: View {
         .confirmationDialog("Clear bank \(clearing ?? 0)?", isPresented: Binding(get: { clearing != nil },
                                                                               set: { if !$0 { clearing = nil } })) {
             Button("Clear Bank", role: .destructive) {
-                if let bank = clearing { run { try await machine.clearSidewaysBank(bank) } }
+                if let bank = clearing { run { try await running?.clearSidewaysBank(bank) } }
             }
         } message: {
             Text("Everything in it is lost: a ROM image there disappears at the next Break.")
@@ -113,7 +124,7 @@ struct HardwareExpansionsWindow: View {
 
     /// The machine as the draft would make it.
     private var draftSetup: MachineSetup {
-        var setup = machine.setup
+        var setup = target.setup
         setup.model = draft.model
         setup.expansions = draft.expansions
         setup.controllerROMPaths = draft.controllerROMPaths
@@ -123,7 +134,7 @@ struct HardwareExpansionsWindow: View {
     }
 
     private var socketsSection: some View {
-        ROMSocketsSection(sockets: $draft.sockets, setup: draftSetup, econet: machine.isStation, source: machine.romSource)
+        ROMSocketsSection(sockets: $draft.sockets, setup: draftSetup, econet: target.isStation, source: target.romSource)
     }
 
     // MARK: Video
@@ -240,7 +251,7 @@ struct HardwareExpansionsWindow: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 12)], spacing: 12) {
                 ForEach(BBCMicro.MemoryBoard.allCases, id: \.self) { board in
                     BoardCard(symbol: board.symbolName, name: board.displayName, blurb: board.blurb, extraRAM: board.extraRAM,
-                              selected: expansions.board == board, fitted: machine.expansions.board == board) {
+                              selected: expansions.board == board, fitted: target.setup.expansions.board == board) {
                         draft.expansions.board = board
                         // The B12 takes the module's socket.
                         if !board.takesSidewaysModule { draft.expansions.sidewaysRAM = .none }
@@ -263,7 +274,7 @@ struct HardwareExpansionsWindow: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 12)], spacing: 12) {
                 ForEach(BBCMicro.SidewaysModule.allCases, id: \.self) { module in
                     BoardCard(symbol: module.symbolName, name: module.displayName, blurb: module.blurb, extraRAM: module.extraRAM,
-                              selected: expansions.sidewaysRAM == module, fitted: machine.expansions.sidewaysRAM == module,
+                              selected: expansions.sidewaysRAM == module, fitted: target.setup.expansions.sidewaysRAM == module,
                               disabledReason: !expansions.board.takesSidewaysModule && module != .none
                                   ? "The B12’s cable plugs into all four ROM sockets" : nil) {
                         draft.expansions.sidewaysRAM = module
@@ -509,9 +520,9 @@ struct HardwareExpansionsWindow: View {
     private static var planCache: [PlanKey: [BBCMicro.SidewaysSlot]] = [:]
 
     private func planSlots() -> [BBCMicro.SidewaysSlot] {
-        let key = PlanKey(setup: draftSetup, station: machine.isStation)
+        let key = PlanKey(setup: draftSetup, station: target.isStation)
         if let cached = Self.planCache[key] { return cached }
-        let configuration = key.setup.configuration(econetStation: key.station ? 1 : nil, roms: machine.romSource)
+        let configuration = key.setup.configuration(econetStation: key.station ? 1 : nil, roms: target.romSource)
         let slots = BBCMicro(configuration: configuration).sidewaysSlots
         if Self.planCache.count > 50 { Self.planCache.removeAll() }
         Self.planCache[key] = slots
@@ -543,7 +554,8 @@ struct HardwareExpansionsWindow: View {
                          detail: "Sixteen bank numbers, chosen by ROMSEL (&FE30); the highest-numbered language starts at power on.",
                          guide: "developer-reference")
             BankStrip(slots: plannedSlots, selected: pending ? nil : snapshot.map { Int($0.romsel & 0x0F) })
-            if !expansions.sidewaysRAMBanks.isEmpty || !(snapshot?.slots.filter { $0.kind == .ram }.isEmpty ?? true) {
+            if !expansions.sidewaysRAMBanks.isEmpty || !(snapshot?.slots.filter { $0.kind == .ram }.isEmpty ?? true)
+                || (running == nil && plannedSlots.contains { $0.kind == .ram }) {
                 ramBanks
             }
         }
@@ -553,26 +565,38 @@ struct HardwareExpansionsWindow: View {
     private var ramBanks: some View {
         let banks = (snapshot?.slots ?? []).filter { $0.kind == .ram }
         VStack(alignment: .leading, spacing: 0) {
-            if pending {
+            if running == nil {
+                Label("Its sideways RAM starts empty. Load ROM images into it while it's running.", systemImage: "power")
+                    .foregroundStyle(.secondary)
+                    .padding(12)
+            } else if pending {
                 Label("Restart to fit the new board, then load its RAM.", systemImage: "arrow.clockwise")
                     .foregroundStyle(.secondary)
                     .padding(12)
             } else {
                 ForEach(Array(banks.enumerated()), id: \.element.bank) { index, slot in
                     if index > 0 { Divider() }
-                    RAMBankRow(slot: slot, note: ariesNote(slot.bank), powerOnImage: machine.powerOnImagePaths[slot.bank],
-                               load: { url in run { try await machine.loadSidewaysImage(url, bank: slot.bank) } },
-                               save: { url in run { try await machine.saveSidewaysBank(slot.bank, to: url) } },
+                    RAMBankRow(slot: slot, note: ariesNote(slot.bank), powerOnImage: target.setup.powerOnImagePaths[slot.bank],
+                               load: { url in run { try await running?.loadSidewaysImage(url, bank: slot.bank) } },
+                               save: { url in run { try await running?.saveSidewaysBank(slot.bank, to: url) } },
                                clear: { clearing = slot.bank },
-                               setPowerOnImage: { machine.setPowerOnImage($0, bank: slot.bank) })
+                               setPowerOnImage: { running?.setPowerOnImage($0, bank: slot.bank) })
                 }
             }
         }
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
     }
 
+    /// What applying the changes does.
+    private var restartDetail: String {
+        if running != nil { return "As switching off and on: what’s in memory is lost. Discs stay in their drives." }
+        if target is ConfigurationHardwareTarget { return "Saved in the configuration. Machines already set up from it stay as they are." }
+        return "It’s switched off: it starts like this when you switch it on."
+    }
+
     private var restartTitle: String {
-        let current = machine.hardwareDraft
+        guard running != nil else { return "Save the changes" }
+        let current = target.hardwareDraft
         if draft.model != current.model {
             return "Switching to the \(draft.model.displayName) restarts the BBC"
         }
@@ -611,14 +635,14 @@ struct HardwareExpansionsWindow: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(restartTitle)
                             .font(.headline)
-                        Text("As switching off and on: what’s in memory is lost. Discs stay in their drives.")
+                        Text(restartDetail)
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button("Revert") { draft = machine.hardwareDraft }
+                    Button("Revert") { draft = target.hardwareDraft }
                         .keyboardShortcut(.cancelAction)
-                    Button("Restart BBC") { machine.apply(draft) }
+                    Button(running == nil ? "Save" : "Restart BBC") { target.apply(draft) }
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.defaultAction)
                 }

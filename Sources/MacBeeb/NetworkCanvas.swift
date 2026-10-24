@@ -235,7 +235,6 @@ struct NetworkCanvas: View {
             Button("Show Debugger") { openDebugger(node.id) }
                 .disabled(!on)
             Button("Hardware…") { openHardware(node.id) }
-                .disabled(!on)
             Button("Insert Disc in Drive 0…") { session.chooseDisc(for: node.id, drive: 0) }
             Button("Eject Drive 0") { session.eject(node.id, drive: 0) }
                 .disabled(node.discs[0] == nil)

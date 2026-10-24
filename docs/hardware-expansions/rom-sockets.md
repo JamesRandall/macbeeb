@@ -90,11 +90,14 @@ ROMs, cartridges and VideoNuLA), save it under a name:
   Configuration** in the Hardware window's toolbar.
 - To set a window's machine up as a saved one, choose it from **Machine ▸
   Machine Configurations**. The BBC restarts as that machine.
-- **Manage Configurations…** lists them, to rename or remove.
+- **Manage Configurations…** lists them, to rename or remove. Double-click
+  one (or click **Edit Hardware**) to change its hardware without a machine
+  running, or click **+** to make a new one from scratch.
 
 In the **Network Studio**, saved configurations are under **My Machines**
 in the palette: click one, or drag it onto the network, to add a station
-set up that way. A station's inspector has a **Configuration** menu to set
+set up that way. A station's **Hardware…** works whether it's on or off: while it's off, the
+changes are saved for when it's switched on. Its inspector has a **Configuration** menu to set
 it up as a saved one, or save it as one. A network keeps its own copies of
 the ROMs its machines use, so it still works if you remove them from the
 library, or open the network on another Mac.

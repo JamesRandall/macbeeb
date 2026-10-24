@@ -54,9 +54,13 @@ struct MachineConfigurationsMenu: View {
                 if let machine { saveConfiguration(machine.setup) }
             }
             .disabled(machine == nil)
+            Button("New Configuration…") {
+                if let id = try? MachineConfigurations.shared.save(MachineSetup(), as: MachineConfigurations.shared.freeName("New Machine")).id {
+                    openWindow(id: HardwareExpansionsWindow.refWindowID, value: HardwareRef.configuration(id))
+                }
+            }
             Button("Manage Configurations…") { openWindow(id: MachineConfigurationsWindow.windowID) }
         }
-        .disabled(machine == nil)
     }
 }
 
@@ -65,8 +69,21 @@ struct MachineConfigurationsWindow: View {
     static let windowID = "machine-configurations"
     @State private var selection: Set<UUID> = []
     @State private var removing: [SavedMachine] = []
+    @Environment(\.openWindow) private var openWindow
 
     private var configurations: MachineConfigurations { MachineConfigurations.shared }
+
+    private func edit(_ id: UUID) {
+        openWindow(id: HardwareExpansionsWindow.refWindowID, value: HardwareRef.configuration(id))
+    }
+
+    /// A new one, a stock Model B to start with, set up in its Hardware
+    /// window.
+    private func newConfiguration() {
+        guard let saved = try? configurations.save(MachineSetup(), as: configurations.freeName("New Machine")) else { return }
+        selection = [saved.id]
+        edit(saved.id)
+    }
 
     var body: some View {
         Group {
@@ -74,7 +91,9 @@ struct MachineConfigurationsWindow: View {
                 ContentUnavailableView {
                     Label("No Machine Configurations", systemImage: "desktopcomputer")
                 } description: {
-                    Text("Set a machine up in its Hardware window, then choose Machine > Machine Configurations > Save Configuration. Saved machines can start a window, or be added to a network.")
+                    Text("Set a machine up in its Hardware window, then choose Machine > Machine Configurations > Save Configuration, or make one here. Saved machines can set up a window, or be added to a network.")
+                } actions: {
+                    Button("New Configuration", action: newConfiguration)
                 }
             } else {
                 table
@@ -83,7 +102,14 @@ struct MachineConfigurationsWindow: View {
         .frame(minWidth: 640, idealWidth: 760, minHeight: 300, idealHeight: 420)
         .navigationTitle("Machine Configurations")
         .toolbar {
-            ToolbarItem {
+            ToolbarItemGroup {
+                Button("New Configuration", systemImage: "plus", action: newConfiguration)
+                    .help("Make a new machine configuration and set up its hardware")
+                Button("Edit Hardware", systemImage: "slider.horizontal.3") {
+                    if let id = selection.first { edit(id) }
+                }
+                .disabled(selection.count != 1)
+                .help("Set up the selected configuration's model, ROMs, cartridges and boards")
                 Button("Remove", systemImage: "minus") {
                     removing = configurations.machines.filter { selection.contains($0.id) }
                 }
@@ -130,6 +156,15 @@ struct MachineConfigurationsWindow: View {
                 }
             }
             .width(min: 200, ideal: 360)
+        }
+        .contextMenu(forSelectionType: UUID.self) { ids in
+            Button("Edit Hardware…") { ids.first.map(edit) }
+                .disabled(ids.count != 1)
+            Button("Remove…", role: .destructive) {
+                removing = configurations.machines.filter { ids.contains($0.id) }
+            }
+        } primaryAction: { ids in
+            if let id = ids.first { edit(id) }
         }
     }
 

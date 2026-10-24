@@ -245,10 +245,9 @@ struct MachineInspector: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 HStack {
-                    if controller != nil {
-                        Button("Hardware…") { openHardware(node.id) }
-                            .help("ROMs, cartridges, boards, sideways RAM and VideoNuLA")
-                    }
+                    Button("Hardware…") { openHardware(node.id) }
+                        .help(controller == nil ? "ROMs, cartridges, boards, sideways RAM and VideoNuLA, for when it's switched on"
+                              : "ROMs, cartridges, boards, sideways RAM and VideoNuLA")
                     configurationMenu
                 }
             }

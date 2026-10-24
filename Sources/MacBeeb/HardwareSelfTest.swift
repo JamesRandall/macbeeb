@@ -111,6 +111,25 @@ extension NetworkSelfTest {
                 controller.apply(draft)
                 try? await Task.sleep(for: .seconds(3))
             }
+            // The BBC switched off: its Hardware window sets up the network's
+            // copy (VideoNuLA fitted), which it starts with when it's on.
+            if let bbc = stations.first(where: { $0.setup?.model == .modelB }),
+               UserDefaults.standard.bool(forKey: "MacBeebHardwareSelfTestClicks"),
+               let target = HardwareRef.station(network: session.url, node: bbc.id).target {
+                session.powerOff(bbc.id)
+                try? await Task.sleep(for: .seconds(1))
+                var draft = target.hardwareDraft
+                draft.videoNuLA = true
+                let window = offscreen(HardwareExpansionsWindow(target: target), width: 760, height: 1300)
+                target.apply(draft)
+                try? await Task.sleep(for: .seconds(2))
+                capture(window, to: path.replacingOccurrences(of: ".png", with: "-off.png"))
+                report += "Off station: running \(target.running != nil), network NuLA \(session.project[bbc.id]?.setup?.videoNuLA == true)\n"
+                session.powerOn(bbc.id)
+                try? await Task.sleep(for: .seconds(2))
+                let nula = (try? await session.controllers[bbc.id]?.host.performAsync { $0.machine.nula != nil }) ?? nil
+                report += "Switched on with VideoNuLA: \(nula == true)\n"
+            }
             // The Master saved as a configuration, and added to the network
             // from the palette.
             if let master = stations.first(where: { $0.setup?.model == .master128 }), let setup = master.setup,
@@ -125,6 +144,12 @@ extension NetworkSelfTest {
                 let canvas = offscreen(NetworkStudioView(session: session, mode: .canvas), width: 1300, height: 800)
                 try? await Task.sleep(for: .seconds(2))
                 capture(canvas, to: path.replacingOccurrences(of: ".png", with: "-canvas.png"))
+            }
+            if let saved = MachineConfigurations.shared.machines.first,
+               let target = HardwareRef.configuration(saved.id).target {
+                let window = offscreen(HardwareExpansionsWindow(target: target), width: 760, height: 1300)
+                try? await Task.sleep(for: .seconds(2))
+                capture(window, to: path.replacingOccurrences(of: ".png", with: "-configuration.png"))
             }
             let configurations = offscreen(MachineConfigurationsWindow(), width: 820, height: 300)
             try? await Task.sleep(for: .seconds(1))

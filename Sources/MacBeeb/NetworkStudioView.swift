@@ -186,9 +186,9 @@ struct NetworkStudioView: View {
         openWindow(id: "debugger", value: controller.id)
     }
 
+    /// On or off: while it's off, the window sets up the network's copy.
     private func openHardware(_ id: UUID) {
-        guard let controller = session.controllers[id] else { return }
-        openWindow(id: HardwareExpansionsWindow.windowID, value: controller.id)
+        openWindow(id: HardwareExpansionsWindow.refWindowID, value: HardwareRef.station(network: session.url, node: id))
     }
 }
 
