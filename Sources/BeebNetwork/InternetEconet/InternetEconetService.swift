@@ -1,7 +1,7 @@
 import Foundation
 
 // Which Internet Econet service MacBeeb uses: the official one, built in,
-// or one the user runs (any compatible deployment of acorn-internet-econet).
+// or one the user runs (any compatible deployment of cloudflare-econet).
 
 public enum InternetEconetService {
     /// The official service. (Release configuration: change it here.)

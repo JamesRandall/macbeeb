@@ -1,6 +1,6 @@
 // Internet Econet's client: the binary protocol against the service's
 // published test vectors, service addresses, and (with a service running:
-// MACBEEB_ECONET_SERVICE=http://localhost:8787, from acorn-internet-econet's
+// MACBEEB_ECONET_SERVICE=http://localhost:8787, from cloudflare-econet's
 // `npm run dev`) two networks in a real room, over real WebSockets.
 
 import Foundation

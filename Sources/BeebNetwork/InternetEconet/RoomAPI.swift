@@ -1,6 +1,6 @@
 import Foundation
 
-// The service's HTTP API (acorn-internet-econet docs/protocol.md): making,
+// The service's HTTP API (cloudflare-econet's econet/docs/protocol.md): making,
 // joining and managing rooms. Credentials only in Authorization headers.
 
 public struct RoomView: Codable, Sendable, Equatable {

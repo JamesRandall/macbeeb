@@ -2,7 +2,7 @@ import BeebCore
 import Foundation
 
 // Econet traffic as the room protocol carries it (binary WebSocket
-// messages, version 1): see acorn-internet-econet's docs/protocol.md. The
+// messages, version 1): see cloudflare-econet's econet/docs/protocol.md. The
 // test vectors there (protocol/fixtures/traffic.json) are checked against
 // this in EconetTrafficTests.
 

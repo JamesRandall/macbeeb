@@ -5,7 +5,7 @@ import SwiftUI
 extension NetworkSelfTest {
     /// Two MacBeeb processes in one Internet Econet room, on the service
     /// set by `-MacBeebInternetEconetService URL` (a local one from
-    /// acorn-internet-econet's `npm run dev` will do):
+    /// cloudflare-econet's `npm run dev` will do):
     ///
     /// - `-MacBeebNetworkSelfTestTemplate internetHost`: a network with a
     ///   Level 2 file server and the Guide BBC, shared into a new room; the

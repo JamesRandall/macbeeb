@@ -75,10 +75,12 @@ struct NetworkingSettingsView: View {
                     }
                     .disabled(!custom)
                 }
-                Text("Sharing a network over the Internet makes its room here, and join codes are looked up here. Anyone can run a compatible service of their own (acorn-internet-econet, on Cloudflare); invitation links name theirs. Each service keeps its own rooms and credentials.")
+                Text("Sharing a network over the Internet makes its room here, and join codes are looked up here. Anyone can run a compatible service of their own (cloudflare-econet, on Cloudflare); invitation links name theirs. Each service keeps its own rooms and credentials.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                Link("cloudflare-econet on GitHub", destination: URL(string: "https://github.com/JamesRandall/cloudflare-econet")!)
+                    .font(.callout)
             }
         }
         .formStyle(.grouped)
