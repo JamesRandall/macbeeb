@@ -244,11 +244,10 @@ or previous machine. **Show** chooses which machines have tiles, and
 
 ## Focus
 
-Click **Focus** in the toolbar to use one machine large, with the others
-that are on in a strip down the side, live. The large one has the keyboard
-and is the one you hear.
-- **Click** a machine in the strip to select it: the inspector shows it, so you can change it, suspend it or switch it off without leaving the one you're using.
-- **Double-click** it to bring it into the large view.
+Click **Focus** in the toolbar to use one machine large, with every machine
+that's on in a strip down the left, live. The large one is outlined in the
+strip, has the keyboard and is the one you hear.
+- **Click** a machine in the strip to bring it into the large view. It's selected too, so the inspector shows it.
 - ⌥⌘] and ⌥⌘[ step through the machines.
 
 The network remembers which machine was large.
