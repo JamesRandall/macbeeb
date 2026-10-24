@@ -1,0 +1,121 @@
+{
+  "protocolVersion": 1,
+  "valid": [
+    {
+      "name": "scout",
+      "description": "A scout from station 1 to station 2, port &77, control &80 (OSWORD &10's)",
+      "type": "frame",
+      "final": false,
+      "stage": 0,
+      "transaction": 1,
+      "from": 1,
+      "to": 2,
+      "frame": "020001008077",
+      "encoded": "010100000000000101020006020001008077"
+    },
+    {
+      "name": "acknowledgement",
+      "description": "Station 2's acknowledgement of it",
+      "type": "frame",
+      "final": false,
+      "stage": 1,
+      "transaction": 1,
+      "from": 2,
+      "to": 1,
+      "frame": "01000200",
+      "encoded": "01010001000000010201000401000200"
+    },
+    {
+      "name": "data",
+      "description": "The data: HELLO ECONET and a carriage return",
+      "type": "frame",
+      "final": false,
+      "stage": 2,
+      "transaction": 1,
+      "from": 1,
+      "to": 2,
+      "frame": "0200010048454c4c4f2045434f4e45540d",
+      "encoded": "0101000200000001010200110200010048454c4c4f2045434f4e45540d"
+    },
+    {
+      "name": "finalAcknowledgement",
+      "description": "The last acknowledgement: final",
+      "type": "frame",
+      "final": true,
+      "stage": 3,
+      "transaction": 1,
+      "from": 2,
+      "to": 1,
+      "frame": "01000200",
+      "encoded": "01010103000000010201000401000200"
+    },
+    {
+      "name": "peek",
+      "description": "An immediate PEEK scout (port 0, control &81) with its addresses",
+      "type": "frame",
+      "final": false,
+      "stage": 0,
+      "transaction": 16909060,
+      "from": 1,
+      "to": 2,
+      "frame": "020001008100000affff100affff",
+      "encoded": "01010000010203040102000e020001008100000affff100affff"
+    },
+    {
+      "name": "noReply",
+      "description": "Station 2 didn't answer transaction 1's last frame",
+      "type": "noReply",
+      "final": false,
+      "stage": 0,
+      "transaction": 1,
+      "from": 2,
+      "to": 1,
+      "frame": "",
+      "encoded": "010200000000000102010000"
+    },
+    {
+      "name": "broadcast",
+      "description": "A broadcast from station 5",
+      "type": "broadcast",
+      "final": false,
+      "stage": 0,
+      "transaction": 0,
+      "from": 5,
+      "to": 255,
+      "frame": "ff00050080990102030405060708",
+      "encoded": "010300000000000005ff000eff00050080990102030405060708"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "tooShort",
+      "encoded": "010100",
+      "error": "malformed"
+    },
+    {
+      "name": "wrongVersion",
+      "encoded": "020100000000000101020006020001008077",
+      "error": "unsupportedVersion"
+    },
+    {
+      "name": "addressesDisagree",
+      "encoded": "010100000000000101030006020001008077",
+      "error": "badAddress"
+    },
+    {
+      "name": "lengthWrong",
+      "encoded": "01010000000000010102000602000100807700",
+      "error": "malformed"
+    },
+    {
+      "name": "broadcastNotTo255",
+      "encoded": "010300000000000005040006040005008099",
+      "error": "badAddress"
+    },
+    {
+      "name": "station0",
+      "encoded": "010100000000000100020006020000008077",
+      "error": "badAddress"
+    }
+  ]
+}

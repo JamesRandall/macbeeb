@@ -17,6 +17,9 @@ public struct NetworkProject: Codable, Sendable, Equatable {
     public var nodes: [NetworkNode] = []
     public var canvas = CanvasLayout()
     public var workspace = Workspace()
+    /// The Internet Econet room it's in, if it's shared or joined one
+    /// (nothing secret: the room's credentials are in the Keychain).
+    public var internetRoom: InternetRoomLink?
 
     public init(name: String, nodes: [NetworkNode] = []) {
         self.name = name

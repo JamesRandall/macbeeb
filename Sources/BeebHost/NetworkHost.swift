@@ -15,6 +15,9 @@ public final class NetworkHost: @unchecked Sendable {
         case remove(UUID)
         /// The Econet's clock rate (bits a second), or nil for none.
         case setClock(Int?)
+        /// A device on the line (an Internet gateway), or off it.
+        case attachDevice(EconetLineDevice)
+        case detachDevice(EconetLineDevice)
     }
 
     /// The network's state as of its last quantum.
@@ -119,6 +122,16 @@ public final class NetworkHost: @unchecked Sendable {
     /// Changes the Econet's clock (nil takes it away).
     public func setClock(_ rate: Int?) {
         commands.withLock { $0.append(.setClock(rate)) }
+    }
+
+    /// Puts a device (an Internet gateway) on the network's line, from its
+    /// next quantum. Nothing happens without an Econet.
+    public func attach(device: EconetLineDevice) {
+        commands.withLock { $0.append(.attachDevice(device)) }
+    }
+
+    public func detach(device: EconetLineDevice) {
+        commands.withLock { $0.append(.detachDevice(device)) }
     }
 
     deinit {
@@ -226,6 +239,10 @@ public final class NetworkHost: @unchecked Sendable {
                 stationsChanged = true
             case .setClock(let rate):
                 bus?.clockRate = rate
+            case .attachDevice(let device):
+                bus?.attach(device: device)
+            case .detachDevice(let device):
+                bus?.detach(device: device)
             }
         }
     }

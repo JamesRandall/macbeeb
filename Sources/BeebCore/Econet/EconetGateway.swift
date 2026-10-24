@@ -56,11 +56,19 @@ public enum EconetGatewayMessage: Sendable, Equatable {
     }
 }
 
-public final class EconetGateway: EconetLineDevice {
+/// (Sendable: what's shared with other threads is under its lock; the rest
+/// is only used on the network's thread.)
+public final class EconetGateway: EconetLineDevice, @unchecked Sendable {
     /// Stations on other Macs, which this gateway answers for.
     public var remoteStations: Set<UInt8> {
         get { lock.withLock { _remoteStations } }
         set { lock.withLock { _remoteStations = newValue } }
+    }
+    /// The local stations shared into the room, or nil for all. Frames from
+    /// the room for others are refused, and theirs aren't sent.
+    public var sharedStations: Set<UInt8>? {
+        get { lock.withLock { _sharedStations } }
+        set { lock.withLock { _sharedStations = newValue } }
     }
     /// What the gateway sends to the room (called on the network's thread).
     public var send: (EconetGatewayMessage) -> Void
@@ -105,6 +113,7 @@ public final class EconetGateway: EconetLineDevice {
 
     private let lock = NSLock()
     private var _remoteStations: Set<UInt8> = []
+    private var _sharedStations: Set<UInt8>?
     private var inbox: [EconetGatewayMessage] = []
     private var publishedActivity = Activity.idle
     private var publishedCounters = Counters()
@@ -138,6 +147,8 @@ public final class EconetGateway: EconetLineDevice {
     }
 
     private var state = State.idle
+    /// `sharedStations`, as of this quantum.
+    private var shared: Set<UInt8>?
     private var nextTransaction: UInt32 = 1
     /// Heard symbols still to come, in time order.
     private var heard: [(time: UInt64, symbol: EconetSymbol)] = []
@@ -171,6 +182,7 @@ public final class EconetGateway: EconetLineDevice {
             return inbox
         }
         let remotes = remoteStations
+        shared = sharedStations
 
         // What's been heard up to the end of this quantum, in order.
         var index = 0
@@ -274,7 +286,7 @@ public final class EconetGateway: EconetLineDevice {
     /// A whole frame from a local station.
     private func heardFrame(_ bytes: [UInt8], at time: UInt64, remotes: Set<UInt8>) {
         let to = bytes[0], from = bytes[2]
-        guard !remotes.contains(from) else { return }
+        guard !remotes.contains(from), shared?.contains(from) ?? true else { return }
         if to == 0xFF {
             counters_.broadcastsOut += 1
             send(.broadcast(bytes: bytes))
@@ -334,6 +346,9 @@ public final class EconetGateway: EconetLineDevice {
                 transaction.id = id
                 queueFrame(bytes, as: from)
                 state = final ? .idle : .awaitingLocal(transaction, since: .max)
+            } else if stage == 0, let shared, !shared.contains(to) {
+                // For a station that isn't shared: as if it weren't there.
+                refuse(message)
             } else if stage == 0 {
                 // A scout from a remote station.
                 if case .idle = state, waiting.allSatisfy({ if case .frame = $0.message { false } else { true } }) {

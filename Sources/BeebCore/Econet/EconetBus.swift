@@ -18,7 +18,7 @@ public struct EconetLineEvent: Sendable, Equatable {
 /// Something on the line that isn't a BBC Micro's Econet module (an
 /// Internet gateway). It works in the network's time, and hears and
 /// drives the line as a station does.
-public protocol EconetLineDevice: AnyObject {
+public protocol EconetLineDevice: AnyObject, Sendable {
     /// Runs to `end` (network cycles): takes in what it's heard up to then,
     /// and returns what it puts on the line in [`start`, `end`), each symbol
     /// at its start time and as the station it's transmitting for.
