@@ -43,13 +43,14 @@ extension MachineController {
         var expansions: BBCMicro.Expansions
         var controllerROMPaths: [BBCMicro.MemoryBoard: String]
         var videoNuLA: Bool
+        var sockets: SocketSetup
 
         /// The controller ROM the board would use.
         var controllerROMPath: String? { controllerROMPaths[expansions.board] }
     }
 
     var hardwareDraft: HardwareDraft {
-        HardwareDraft(expansions: expansions, controllerROMPaths: controllerROMPaths, videoNuLA: videoNuLA)
+        HardwareDraft(expansions: expansions, controllerROMPaths: controllerROMPaths, videoNuLA: videoNuLA, sockets: sockets)
     }
 
     static var savedExpansions: BBCMicro.Expansions {
@@ -100,8 +101,13 @@ extension MachineController {
         let nulaChanged = draft.videoNuLA != videoNuLA
         setVideoNuLAValue(draft.videoNuLA)
         remember(draft.videoNuLA, forKey: Self.videoNuLAKey)
-        // The board matters only on a Model B; NuLA on any model.
-        if model == .modelB || nulaChanged {
+        let socketsChanged = draft.sockets != sockets
+        setSocketsValue(draft.sockets)
+        if let data = try? JSONEncoder().encode(draft.sockets) {
+            remember(data, forKey: Self.socketsKey)
+        }
+        // The board matters only on a Model B; NuLA and ROMs on any model.
+        if model == .modelB || nulaChanged || socketsChanged {
             restartWithHardware()
         }
     }

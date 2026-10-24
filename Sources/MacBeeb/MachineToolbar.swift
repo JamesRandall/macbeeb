@@ -28,7 +28,7 @@ struct MachineToolbar: CustomizableToolbarContent {
                 .pickerStyle(.inline)
                 .disabled(!machine.model.hasTube)
                 Divider()
-                Button("Hardware Expansions…") { machine.hardwareRequested = true }
+                Button("Hardware…") { machine.hardwareRequested = true }
             } label: {
                 Label("Model", systemImage: "desktopcomputer")
             }

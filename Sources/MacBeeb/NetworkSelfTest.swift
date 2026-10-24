@@ -58,6 +58,10 @@ enum NetworkSelfTest {
     /// works whatever windows the app restores).
     static func runIfRequested() {
         guard let path else { return }
+        if UserDefaults.standard.string(forKey: "MacBeebNetworkSelfTestTemplate") == "hardware" {
+            runHardware(path)
+            return
+        }
         if let name = UserDefaults.standard.string(forKey: "MacBeebNetworkSelfTestTemplate"),
            let template = NetworkTemplate(rawValue: name), template == .distributedMandelbrot || template == .mandelbrotInColour {
             runMandelbrot(path, template: template)
@@ -194,7 +198,7 @@ enum NetworkSelfTest {
         }
     }
 
-    private static func capture(_ window: NSWindow, to path: String) {
+    static func capture(_ window: NSWindow, to path: String) {
         guard let view = window.contentView?.superview,
               let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
             NSLog("MacBeeb: network self-test: no window")

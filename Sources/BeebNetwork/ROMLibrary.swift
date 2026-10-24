@@ -115,8 +115,13 @@ public struct ROMSource: Sendable {
 public final class ROMLibrary: @unchecked Sendable {
     public static let shared = ROMLibrary(folder: defaultFolder)
 
+    /// Application Support/MacBeeb/ROMs, unless the MacBeebROMLibraryFolder
+    /// default says otherwise (self-tests use their own).
     public static var defaultFolder: URL {
-        URL.applicationSupportDirectory.appendingPathComponent("MacBeeb/ROMs", isDirectory: true)
+        if let folder = UserDefaults.standard.string(forKey: "MacBeebROMLibraryFolder") {
+            return URL(fileURLWithPath: folder, isDirectory: true)
+        }
+        return URL.applicationSupportDirectory.appendingPathComponent("MacBeeb/ROMs", isDirectory: true)
     }
 
     public let folder: URL

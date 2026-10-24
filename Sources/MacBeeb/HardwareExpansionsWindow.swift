@@ -1,11 +1,13 @@
 import AppKit
 import BeebCore
+import BeebNetwork
 import BeebROMs
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Machine > Hardware Expansions: the Model B's memory board, its physical
-/// memory, the sixteen sideways banks, and loading sideways RAM.
+/// Machine > Hardware: the ROMs in the machine's sockets (and the Master's
+/// cartridges), the Model B's memory board and its physical memory, the
+/// sixteen sideways banks, loading sideways RAM, and VideoNuLA.
 ///
 /// The board is chosen as a draft: fitting it restarts the BBC (as
 /// switching off and on would), so nothing changes until Restart. Loading
@@ -35,7 +37,7 @@ struct HardwareExpansionsWindow: View {
             }
         }
         .frame(minWidth: 620, idealWidth: 700, minHeight: 520, idealHeight: 760)
-        .navigationTitle("Hardware Expansions")
+        .navigationTitle("Hardware")
         .toolbar {
             ToolbarItem {
                 Button("Guide", systemImage: "questionmark.circle") {
@@ -78,16 +80,20 @@ struct HardwareExpansionsWindow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(machine.model.displayName)
                         .font(.largeTitle.weight(.semibold))
-                    Text(machine.model == .modelA ? "Memory boards are for the Model B."
-                         : "Its shadow and sideways RAM are built in; memory boards are for the Model B.")
+                    Text(machine.model == .modelA ? "16K of RAM and four ROM sockets."
+                         : "Its shadow and sideways RAM are built in.")
                         .font(.title3)
                         .foregroundStyle(.secondary)
                 }
+                if draftSetup.hasROMSockets {
+                    socketsSection
+                }
+                banksSection
                 HStack(spacing: 14) {
                     Image(systemName: "memorychip")
                         .font(.system(size: 26))
                         .foregroundStyle(.secondary)
-                    Text("Sideways RAM, Watford and Aries boards fit the BBC Model B.")
+                    Text("Sideways RAM modules, and Watford and Aries memory boards, fit the BBC Model B.")
                     Spacer()
                     Button("Switch to a Model B") {
                         machine.apply(draft)
@@ -104,6 +110,22 @@ struct HardwareExpansionsWindow: View {
             restartBar
         }
         .animation(.snappy(duration: 0.25), value: draft)
+    }
+
+    // MARK: ROM sockets
+
+    /// The machine as the draft would make it.
+    private var draftSetup: MachineSetup {
+        var setup = machine.setup
+        setup.expansions = draft.expansions
+        setup.controllerROMPaths = draft.controllerROMPaths
+        setup.videoNuLA = draft.videoNuLA
+        setup.sockets = draft.sockets
+        return setup
+    }
+
+    private var socketsSection: some View {
+        ROMSocketsSection(sockets: $draft.sockets, setup: draftSetup, econet: machine.isStation, source: machine.romSource)
     }
 
     // MARK: Video
@@ -152,6 +174,7 @@ struct HardwareExpansionsWindow: View {
                 if draft.expansions.controllerROMBank != nil {
                     firmwareSection
                 }
+                socketsSection
                 memorySection
                 if draft.expansions.board == .watford32K || draft.expansions.board.isAries {
                     shadowSection
@@ -464,40 +487,41 @@ struct HardwareExpansionsWindow: View {
 
     // MARK: Banks
 
-    /// The configuration the draft would build, for the bank strip (cached:
-    /// it reads the ROMs).
-    private static var planCache: [BBCMicro.Expansions: BBCMicro.Configuration] = [:]
+    private struct PlanKey: Hashable {
+        var setup: MachineSetup
+        var station: Bool
+    }
 
-    private static func plan(_ e: BBCMicro.Expansions) -> BBCMicro.Configuration {
-        if let cached = planCache[e] { return cached }
-        let configuration = BeebROMs.configuration(for: .modelB, expansions: e)
-        planCache[e] = configuration
-        return configuration
+    /// The banks of the machine the draft would build, for the bank strip
+    /// (cached: it reads the ROMs).
+    private static var planCache: [PlanKey: [BBCMicro.SidewaysSlot]] = [:]
+
+    private func planSlots() -> [BBCMicro.SidewaysSlot] {
+        let key = PlanKey(setup: draftSetup, station: machine.isStation)
+        if let cached = Self.planCache[key] { return cached }
+        let configuration = key.setup.configuration(econetStation: key.station ? 1 : nil, roms: machine.romSource)
+        let slots = BBCMicro(configuration: configuration).sidewaysSlots
+        if Self.planCache.count > 50 { Self.planCache.removeAll() }
+        Self.planCache[key] = slots
+        return slots
     }
 
     private var plannedSlots: [PlannedSlot] {
-        let plan = Self.plan(expansions)
-        let ramBanks = plan.sidewaysRAMBanks.union(expansions.sidewaysRAMBanks).union(expansions.board.isAries ? [13, 14] : [])
-        return (0..<16).map { bank in
-            let owner = expansions.owner(of: bank)
-            let running = pending ? nil : snapshot?.slots[bank]
-            if ramBanks.contains(bank) {
+        planSlots().map { slot in
+            let running = pending ? nil : snapshot?.slots[slot.bank]
+            switch slot.kind {
+            case .ram:
                 // Its contents only carry over if it's RAM now too.
-                let header = running?.kind == .ram ? running?.header : nil
-                return PlannedSlot(bank: bank, kind: .ram, title: header?.name ?? "Sideways RAM", detail: owner.name,
+                let header = running?.kind == .ram ? running?.header : slot.header
+                return PlannedSlot(bank: slot.bank, kind: .ram, title: header?.name ?? "Sideways RAM", detail: slot.owner,
                                    hasImage: header != nil)
+            case .rom:
+                return PlannedSlot(bank: slot.bank, kind: .rom, title: slot.header?.name ?? "ROM", detail: slot.owner, hasImage: true)
+            case .empty:
+                return slot.owner == "Not fitted"
+                    ? PlannedSlot(bank: slot.bank, kind: .notFitted, title: "Not fitted", detail: "", hasImage: false)
+                    : PlannedSlot(bank: slot.bank, kind: .emptySocket, title: "Empty socket", detail: slot.owner, hasImage: false)
             }
-            if expansions.controllerROMBank == bank {
-                return PlannedSlot(bank: bank, kind: .rom, title: firmwareTitle, detail: "The board’s ROM", hasImage: true)
-            }
-            if let rom = plan.sidewaysROMs[bank] {
-                let header = BBCMicro.ROMHeader(Array(rom.prefix(0x100)))
-                return PlannedSlot(bank: bank, kind: .rom, title: header?.name ?? "ROM", detail: owner.name, hasImage: true)
-            }
-            if owner.isSocket {
-                return PlannedSlot(bank: bank, kind: .emptySocket, title: "Empty socket", detail: owner.name, hasImage: false)
-            }
-            return PlannedSlot(bank: bank, kind: .notFitted, title: "Not fitted", detail: "", hasImage: false)
         }
     }
 
@@ -542,6 +566,10 @@ struct HardwareExpansionsWindow: View {
         }
         if draft.videoNuLA != current.videoNuLA {
             return draft.videoNuLA ? "Fitting VideoNuLA restarts the BBC" : "Taking VideoNuLA out restarts the BBC"
+        }
+        if draft.sockets != current.sockets {
+            return draft.sockets.cartridges != current.sockets.cartridges || draft.sockets.romLinks != current.sockets.romLinks
+                ? "Changing the cartridges or links restarts the BBC" : "Changing the ROMs restarts the BBC"
         }
         return "Changing the board’s ROM restarts the BBC"
     }
@@ -602,7 +630,7 @@ struct HardwareExpansionsWindow: View {
 
 // MARK: - Pieces
 
-private struct SectionTitle: View {
+struct SectionTitle: View {
     let title: String
     let detail: String
     /// The guide page that explains it, for a Learn More link.

@@ -239,7 +239,7 @@ struct MachineInspector: View {
                     .labelsHidden()
                 }
                 if let controller {
-                    Button("Hardware Expansions…") { openHardware(node.id) }
+                    Button("Hardware…") { openHardware(node.id) }
                         .disabled(controller.model != .modelB && !controller.videoNuLA)
                         .help("Boards, sideways RAM and VideoNuLA")
                 }

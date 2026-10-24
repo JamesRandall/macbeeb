@@ -255,10 +255,11 @@ struct MacBeebApp: App {
                 }
                 .disabled(machine?.model != .modelB)
                 .help("The Model B's disc interface; the B+ and Masters have a 1770 built in")
-                Button("Hardware Expansions…") { machine?.hardwareRequested = true }
+                Button("Hardware…") { machine?.hardwareRequested = true }
                     .keyboardShortcut("e", modifiers: [.command, .option])
                     .disabled(machine == nil)
-                    .help("The Model B's memory board and sideways ROM and RAM banks")
+                    .help("The ROMs in the machine's sockets, a Master's cartridges, the Model B's memory boards, and VideoNuLA")
+                ROMLibraryMenuItem()
             }
         }
 
@@ -290,7 +291,10 @@ struct MacBeebApp: App {
         }
         .defaultSize(width: 1100, height: 760)
 
-        WindowGroup("Hardware Expansions", id: HardwareExpansionsWindow.windowID, for: UUID.self) { $id in
+        Window("ROM Library", id: ROMLibraryWindow.windowID) {
+            ROMLibraryWindow()
+        }
+        WindowGroup("Hardware", id: HardwareExpansionsWindow.windowID, for: UUID.self) { $id in
             if let id, let machine = MachineController.all[id] {
                 HardwareExpansionsWindow(machine: machine)
             }
@@ -565,5 +569,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
+    }
+}
+
+/// Machine > ROM Library…
+struct ROMLibraryMenuItem: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("ROM Library…") { openWindow(id: ROMLibraryWindow.windowID) }
+            .help("The sideways ROM images you've added, to plug into machines")
     }
 }
