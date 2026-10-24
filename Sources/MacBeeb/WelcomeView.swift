@@ -16,6 +16,9 @@ struct WelcomeView: View {
     /// Whether the launch has been dealt with (the Network Studio setting
     /// passes straight through).
     @MainActor private static var launched = false
+    /// What's New has notes the user hasn't seen (until they look).
+    @MainActor private static var unseenNotes = false
+    @State private var hasUnseenNotes = WelcomeView.unseenNotes
 
     var body: some View {
         VStack(alignment: .leading, spacing: 26) {
@@ -49,8 +52,10 @@ struct WelcomeView: View {
         if LaunchScreen.atLaunch == .network {
             NetworkStudioCommands.showStudio(openWindow: openWindow)
             dismissWindow(id: Self.windowID)
-        } else if WhatsNew.shouldShowOnLaunch() {
-            openWindow(id: WhatsNewView.windowID)
+        } else {
+            // Its tile says so, rather than opening the notes.
+            Self.unseenNotes = WhatsNew.shouldShowOnLaunch()
+            hasUnseenNotes = Self.unseenNotes
         }
     }
 
@@ -186,7 +191,9 @@ struct WelcomeView: View {
                     go { openWindow(id: MCPSetupView.windowID) }
                 }
                 ExploreTile(symbol: "gift", colour: .blue, title: "What’s new in \(WhatsNew.releases.first?.version ?? WhatsNew.currentVersion)",
-                            detail: "Everything in this version") {
+                            detail: "Everything in this version", badge: hasUnseenNotes ? "New" : nil) {
+                    Self.unseenNotes = false
+                    hasUnseenNotes = false
                     openWindow(id: WhatsNewView.windowID)
                 }
             }
@@ -281,6 +288,7 @@ private struct ExploreTile: View {
     let colour: Color
     let title: String
     let detail: String
+    var badge: String?
     let action: () -> Void
     @State private var hovering = false
 
@@ -301,6 +309,14 @@ private struct ExploreTile: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
+                if let badge {
+                    Text(badge)
+                        .font(.caption.weight(.bold))
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(colour, in: Capsule())
+                        .foregroundStyle(.white)
+                }
             }
             .padding(12)
             .frame(maxWidth: .infinity)
