@@ -165,11 +165,17 @@ final class NetworkSession: StationOwner {
 
     func node(_ id: UUID) -> NetworkNode? { project[id] }
 
+    /// Adds a station set up as a saved machine, named after it.
+    @discardableResult
+    func add(_ saved: SavedMachine, at point: CanvasPoint) -> UUID? {
+        add(.station, model: saved.setup.model, setup: saved.setup, name: saved.name, at: point)
+    }
+
     /// Adds a machine (or the clock) at a canvas point, switched on. A
     /// Level 2 file server is a Model B with a 6502 Second Processor.
     @discardableResult
     func add(_ kind: NetworkNode.Kind, model: BBCMicro.Model = .modelB, level: FileServerLevel = .level1,
-             at point: CanvasPoint) -> UUID? {
+             setup: MachineSetup? = nil, name baseName: String? = nil, at point: CanvasPoint) -> UUID? {
         var node: NetworkNode
         if kind == .clock {
             guard !project.hasClock else { return nil }
@@ -180,8 +186,10 @@ final class NetworkSession: StationOwner {
             let preferred = conventional.first { project.stationNumberProblem($0, for: UUID()) == nil }
             guard let number = preferred ?? project.freeStationNumber() else { return nil }
             let base = kind == .station ? (model == .modelB ? "BBC" : model.displayName) : level2 ? "Level 2 File Server" : kind.displayName
-            let name = kind == .station ? project.freeName("\(base) \(number)") : project.freeName(base)
-            node = NetworkNode(kind: kind, name: name, stationNumber: number, setup: level2 ? level.setup : MachineSetup(model: model),
+            let name = baseName.map { project.freeName($0) }
+                ?? (kind == .station ? project.freeName("\(base) \(number)") : project.freeName(base))
+            node = NetworkNode(kind: kind, name: name, stationNumber: number,
+                               setup: level2 ? level.setup : setup ?? MachineSetup(model: model),
                                position: point)
             if level2 { node.fileServerLevel = .level2 }
         }

@@ -112,6 +112,21 @@ extension MachineController {
         }
     }
 
+    /// Takes on hardware choices and remembers them, without restarting.
+    func rememberHardware(expansions: BBCMicro.Expansions, powerOnImagePaths: [Int: String],
+                          controllerROMPaths: [BBCMicro.MemoryBoard: String], videoNuLA: Bool, sockets: SocketSetup) {
+        setExpansionsValue(expansions)
+        if let data = try? JSONEncoder().encode(expansions) { remember(data, forKey: Self.expansionsKey) }
+        setPowerOnImagePathsValue(powerOnImagePaths)
+        remember(Dictionary(uniqueKeysWithValues: powerOnImagePaths.map { (String($0.key), $0.value) }), forKey: Self.powerOnImagesKey)
+        setControllerROMPathsValue(controllerROMPaths)
+        remember(Dictionary(uniqueKeysWithValues: controllerROMPaths.map { ($0.key.rawValue, $0.value) }), forKey: Self.controllerROMsKey)
+        setVideoNuLAValue(videoNuLA)
+        remember(videoNuLA, forKey: Self.videoNuLAKey)
+        setSocketsValue(sockets)
+        if let data = try? JSONEncoder().encode(sockets) { remember(data, forKey: Self.socketsKey) }
+    }
+
     func setExpansions(_ new: BBCMicro.Expansions) {
         var draft = hardwareDraft
         draft.expansions = new

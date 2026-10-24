@@ -260,6 +260,7 @@ struct MacBeebApp: App {
                     .disabled(machine == nil)
                     .help("The ROMs in the machine's sockets, a Master's cartridges, the Model B's memory boards, and VideoNuLA")
                 ROMLibraryMenuItem()
+                MachineConfigurationsMenu(machine: machine)
             }
         }
 
@@ -293,6 +294,9 @@ struct MacBeebApp: App {
 
         Window("ROM Library", id: ROMLibraryWindow.windowID) {
             ROMLibraryWindow()
+        }
+        Window("Machine Configurations", id: MachineConfigurationsWindow.windowID) {
+            MachineConfigurationsWindow()
         }
         WindowGroup("Hardware", id: HardwareExpansionsWindow.windowID, for: UUID.self) { $id in
             if let id, let machine = MachineController.all[id] {

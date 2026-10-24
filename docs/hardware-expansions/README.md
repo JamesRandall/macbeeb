@@ -7,13 +7,17 @@ graphics modes. MacBeeb can fit some of these to its Model B.
 
 ## Quick start
 
+**ROMs:** plug your own ROM images into each model's real sockets, and the
+Master's cartridges, from the same window. See [ROMs, Cartridges and Saved
+Machines](rom-sockets.md).
+
 **Video:** turn on **VideoNuLA fitted** under **Video** in the same window,
 on any model, and **Restart BBC**. See [VideoNuLA](videonula.md).
 
 **Memory:**
 
-1. Choose **Machine ▸ Hardware Expansions…** (⌥⌘E), or **Hardware
-   Expansions…** in the toolbar's Model menu.
+1. Choose **Machine ▸ Hardware…** (⌥⌘E), or **Hardware…** in the
+   toolbar's Model menu.
 2. Click a board under **In the 6502's Socket**, such as **Watford
    Electronics 32K Shadow RAM**, a module under **In a ROM Socket**, such as
    **Sideways RAM 32K**, or one of each.
@@ -77,7 +81,7 @@ BBC's. Its ROM switches between them as the OS draws.
 
 Fitting or removing a board changes where the BBC's memory is, so MacBeeb
 restarts the BBC, as switching it off and on would. You choose the board in
-the Hardware Expansions window first; nothing changes until you click
+the Hardware window first; nothing changes until you click
 **Restart BBC** (or **Revert** to leave it as it was).
 
 Loading or clearing a sideways RAM bank doesn't need a restart. The BBC finds

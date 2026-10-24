@@ -8,7 +8,7 @@ once and 160×256 pixels; they're just far better colours.
 
 ## Quick start
 
-1. **Machine ▸ Hardware Expansions…** (⌥⌘E). Under **Video**, turn on
+1. **Machine ▸ Hardware…** (⌥⌘E). Under **Video**, turn on
    **VideoNuLA fitted**, then click **Restart BBC**.
 2. Paste `Examples/videonula/ramp.bas` (**Edit ▸ Paste Text**, ⌘V) and
    type `RUN`.
@@ -38,7 +38,7 @@ memory board.
 
 ## Enable it in MacBeeb
 
-1. Choose **Machine ▸ Hardware Expansions…**.
+1. Choose **Machine ▸ Hardware…**.
 2. Under **Video**, turn on **VideoNuLA fitted**. It's off by default.
 3. Click **Restart BBC**. The window's title bar then ends "+ VideoNuLA".
 
@@ -46,7 +46,7 @@ While the BBC runs, the window shows NuLA's sixteen colours as the program
 sets them, with their RGB444 values, which colours flash, and the palette
 mode.
 
-![The Hardware Expansions window's Video section: VideoNuLA fitted, with the sixteen colours of the ramp](images/hardware-window-videonula.png)
+![The Hardware window's Video section: VideoNuLA fitted, with the sixteen colours of the ramp](images/hardware-window-videonula.png)
 
 ## First example: a colour ramp
 

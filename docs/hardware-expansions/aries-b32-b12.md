@@ -15,7 +15,7 @@ ROM sockets and 16K more sideways RAM. Together they fill all sixteen banks.
 
 ## Quick start
 
-1. **Machine ▸ Hardware Expansions…** (⌥⌘E), click **Aries B32** (or
+1. **Machine ▸ Hardware…** (⌥⌘E), click **Aries B32** (or
    **Aries B32 + B12**), then **Restart BBC**.
 2. The BBC says "BBC Computer 64K". Type `*XSTATUS X S` to see the board.
 
@@ -30,9 +30,9 @@ shadow RAM in and out as the OS draws on the screen.
 
 Its 32K is sideways banks 13 and 14. Shadow RAM is taken from them: first all
 of bank 13 (for &4000–&7FFF), then, for 20K, the top 4K of bank 14 (for
-&3000–&3FFF). The Hardware Expansions window shows the split as the BBC runs:
+&3000–&3FFF). The Hardware window shows the split as the BBC runs:
 
-![The Hardware Expansions window with the Aries B32: the board, the start-up link, the ROM, the B32's 32K split into shadow and sideways RAM, and the CPU's and the screen's views of memory](images/hardware-window-aries.png)
+![The Hardware window with the Aries B32: the board, the start-up link, the ROM, the B32's 32K split into shadow and sideways RAM, and the CPU's and the screen's views of memory](images/hardware-window-aries.png)
 
 **The banks are renumbered.** Without the B12, the B32 makes the BBC's four
 ROM sockets banks 12, 9, 10 and 11 (left to right), so BASIC is in bank 11
@@ -50,7 +50,7 @@ order: BASIC in 12 and the DFS in 11. Bank 0 is the B12's RAM.
 
 ## Enable it in MacBeeb
 
-1. Choose **Machine ▸ Hardware Expansions…**. If the BBC isn't a Model B,
+1. Choose **Machine ▸ Hardware…**. If the BBC isn't a Model B,
    click **Switch to a Model B**.
 2. Click **Aries B32**, or **Aries B32 + B12**.
 3. **Start-up link fitted** is on, as the board comes: shadow RAM is on at
@@ -141,7 +141,7 @@ writes while its bank is selected. See
 [Sideways RAM](sideways-ram.md#with-a-shadow-ram-board). Ctrl-Break, `*XON` and
 `*XOFF` set it back to OFF.
 
-You can also use the Hardware Expansions window to load an image into bank
+You can also use the Hardware window to load an image into bank
 13, 14 or (with the B12) 0 from the Mac: **Load ROM Image…** beside the bank.
 The window shows how much of banks 13 and 14 shadow RAM is using. Loading over
 it while shadow RAM is on corrupts the program in shadow RAM.
@@ -167,7 +167,7 @@ Press Break afterwards, as it asks.
 
 ## How to undo it
 
-Choose **None (stock Model B)** in the Hardware Expansions window and click
+Choose **None (stock Model B)** in the Hardware window and click
 **Restart BBC**. To run a game that won't work with shadow RAM, `*XOFF` and
 Break is enough.
 

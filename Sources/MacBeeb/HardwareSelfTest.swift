@@ -4,7 +4,8 @@ import SwiftUI
 
 extension NetworkSelfTest {
     /// With `-MacBeebNetworkSelfTestTemplate hardware`, `-MacBeebROMLibraryFolder
-    /// DIR` (a library of its own) and `-MacBeebHardwareSelfTestROMs DIR` (the
+    /// DIR` and `-MacBeebMachinesFile FILE` (a library and configurations of
+    /// its own) and `-MacBeebHardwareSelfTestROMs DIR` (the
     /// ROM files to add): a BBC and a Master with the user's ROMs in their
     /// sockets and the Master's cartridges, as a network's stations; writes
     /// their screens after *HELP and *ROMS (path.txt), and pictures of their
@@ -67,6 +68,24 @@ extension NetworkSelfTest {
                 try? await Task.sleep(for: .seconds(2))
                 capture(window, to: path.replacingOccurrences(of: ".png", with: "-\(node.name).png"))
             }
+            // The Master saved as a configuration, and added to the network
+            // from the palette.
+            if let master = stations.first(where: { $0.setup?.model == .master128 }), let setup = master.setup,
+               let saved = try? MachineConfigurations.shared.save(setup, as: "Inter Suite"),
+               let id = session.add(saved, at: session.project.nextPosition(for: .station)) {
+                session.selection = [id]
+                try? await Task.sleep(for: .seconds(4))
+                session.controllers[id]?.host.send(.type("*ROMS\n"))
+                try? await Task.sleep(for: .seconds(3))
+                let text = (try? await session.controllers[id]?.host.performAsync { $0.machine.screenText().joined(separator: "\n") }) ?? nil
+                report += "\n== \(session.project[id]?.name ?? "?") (added from the saved configuration)\n\(text ?? "(off)")\n"
+                let canvas = offscreen(NetworkStudioView(session: session, mode: .canvas), width: 1300, height: 800)
+                try? await Task.sleep(for: .seconds(2))
+                capture(canvas, to: path.replacingOccurrences(of: ".png", with: "-canvas.png"))
+            }
+            let configurations = offscreen(MachineConfigurationsWindow(), width: 820, height: 300)
+            try? await Task.sleep(for: .seconds(1))
+            capture(configurations, to: path.replacingOccurrences(of: ".png", with: "-configurations.png"))
             let libraryWindow = offscreen(ROMLibraryWindow(), width: 820, height: 420)
             try? await Task.sleep(for: .seconds(1))
             capture(libraryWindow, to: path.replacingOccurrences(of: ".png", with: "-library.png"))

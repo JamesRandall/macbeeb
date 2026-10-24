@@ -7,7 +7,7 @@ different RAM at the same addresses.
 
 ## Quick start
 
-1. **Machine ▸ Hardware Expansions…** (⌥⌘E), click **Watford Electronics 32K
+1. **Machine ▸ Hardware…** (⌥⌘E), click **Watford Electronics 32K
    Shadow RAM**, then **Restart BBC**.
 2. Type `MODE 1`, then `PRINT ~HIMEM`. It says `8000`. On a stock Model B
    it's `3000`.
@@ -38,12 +38,12 @@ addresses of memory:
 | &FFFE | BBC RAM (the screen) |
 | &FFFC | The board's RAM throughout |
 
-The Hardware Expansions window shows the latch as the BBC runs. While the
+The Hardware window shows the latch as the BBC runs. While the
 BBC waits at the prompt, the ROM leaves it on BBC RAM.
 
 ## Enable it in MacBeeb
 
-1. Choose **Machine ▸ Hardware Expansions…**. If the BBC isn't a Model B,
+1. Choose **Machine ▸ Hardware…**. If the BBC isn't a Model B,
    click **Switch to a Model B**.
 2. Click **Watford Electronics 32K Shadow RAM**.
 3. Under **Controller ROM**, MacBeeb shows the ROM it will use: Shadow RAM OS
@@ -115,7 +115,7 @@ real ROM's, as the board's manual describes them.
 
 ## How to undo it
 
-Choose **None (stock Model B)** in the Hardware Expansions window and click
+Choose **None (stock Model B)** in the Hardware window and click
 **Restart BBC**. For one game, Ctrl-Break turns the board off without
 taking it out.
 

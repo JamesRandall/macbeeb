@@ -238,10 +238,18 @@ struct MachineInspector: View {
                     }
                     .labelsHidden()
                 }
-                if let controller {
-                    Button("Hardware…") { openHardware(node.id) }
-                        .disabled(controller.model != .modelB && !controller.videoNuLA)
-                        .help("Boards, sideways RAM and VideoNuLA")
+                if let summary = node.setup?.fittedSummary, !summary.isEmpty {
+                    Text(summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack {
+                    if controller != nil {
+                        Button("Hardware…") { openHardware(node.id) }
+                            .help("ROMs, cartridges, boards, sideways RAM and VideoNuLA")
+                    }
+                    configurationMenu
                 }
             }
 
@@ -305,6 +313,32 @@ struct MachineInspector: View {
         numberProblem = session.setStationNumber(node.id, to: value)
         if numberProblem != nil {
             number = node.stationNumber.map(String.init) ?? ""
+        }
+    }
+
+    /// Sets the machine up as a saved configuration, or saves it as one.
+    private var configurationMenu: some View {
+        Menu("Configuration") {
+            let saved = MachineConfigurations.shared.machines
+            ForEach(saved) { configuration in
+                Toggle(configuration.name, isOn: Binding(get: { node.setup == configuration.setup },
+                                                         set: { _ in use(configuration.setup) }))
+            }
+            if !saved.isEmpty { Divider() }
+            Button("Save as Configuration…") {
+                if let setup = node.setup { saveConfiguration(setup) }
+            }
+        }
+        .fixedSize()
+        .help("Set this machine up as one of your saved machine configurations, or save it as one")
+    }
+
+    private func use(_ setup: MachineSetup) {
+        if let controller = session.controllers[node.id] {
+            // A power cycle, which tells the network.
+            controller.use(setup)
+        } else {
+            session.update { $0[node.id]?.setup = setup }
         }
     }
 

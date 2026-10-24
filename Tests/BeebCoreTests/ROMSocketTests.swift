@@ -181,3 +181,29 @@ struct ROMSocketTests {
         #expect(!source.has(roms["Lisp"]!.id))
     }
 }
+
+struct MachineConfigurationsTests {
+    @Test func savedMachinesKeepTheirSetUp() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("machines-\(UUID().uuidString).json")
+        let store = MachineConfigurations(url: url)
+        var master = MachineSetup(model: .master128, secondProcessor: true)
+        master.sockets = SocketSetup(roms: [0: .rom(PluggedROM(id: "abc", name: "InterWord", layout: .mapped(.interWord)))],
+                                     cartridges: [0: .roms, 1: .ram32], romLinks: [6])
+        let saved = try store.save(master, as: "Word Processor")
+        try store.save(MachineSetup(model: .modelB, videoNuLA: true), as: "Colour B")
+        #expect(store.machines.map(\.name) == ["Colour B", "Word Processor"])
+        #expect(store.matching(master)?.id == saved.id)
+        #expect(master.fittedSummary == "6502 Second Processor · 32K Sideways RAM Cartridge · InterWord")
+        // Saving under a name that's there replaces it.
+        master.videoNuLA = true
+        try store.save(master, as: "word processor")
+        #expect(store.machines.count == 2 && store[saved.id]?.setup.videoNuLA == true)
+        try store.rename(saved.id, to: "Inter Suite")
+        #expect(store.freeName("Inter Suite") == "Inter Suite 2")
+        // Next time.
+        let reloaded = MachineConfigurations(url: url)
+        #expect(reloaded.machines.map(\.name) == ["Colour B", "Inter Suite"] && reloaded[saved.id]?.setup == master)
+        try reloaded.remove(saved.id)
+        #expect(MachineConfigurations(url: url).machines.map(\.name) == ["Colour B"])
+    }
+}

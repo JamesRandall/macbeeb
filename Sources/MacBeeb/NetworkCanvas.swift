@@ -39,8 +39,11 @@ struct NetworkCanvas: View {
                         .scaleEffect(zoom)
                         .position(viewPoint(position(of: node)))
                 }
-                palette
-                    .padding(12)
+                VStack(alignment: .leading, spacing: 10) {
+                    palette
+                    savedMachinesPalette
+                }
+                .padding(12)
                 if !session.project.problems.isEmpty {
                     problems
                         .frame(maxWidth: .infinity, alignment: .top)
@@ -76,9 +79,14 @@ struct NetworkCanvas: View {
                     rememberView()
                 })
             .dropDestination(for: String.self) { items, location in
-                guard let item = items.first.flatMap(PaletteItem.init(rawValue:)) else { return false }
                 // Where it's dropped, unless that's on another card.
-                add(item, at: session.project.freePosition(near: snapped(canvasPoint(location))))
+                let point = session.project.freePosition(near: snapped(canvasPoint(location)))
+                if let id = items.first.flatMap(Self.savedMachineID(fromDrag:)), let saved = MachineConfigurations.shared[id] {
+                    add(saved, at: point)
+                    return true
+                }
+                guard let item = items.first.flatMap(PaletteItem.init(rawValue:)) else { return false }
+                add(item, at: point)
                 return true
             }
         }
@@ -226,7 +234,7 @@ struct NetworkCanvas: View {
             }
             Button("Show Debugger") { openDebugger(node.id) }
                 .disabled(!on)
-            Button("Hardware Expansions…") { openHardware(node.id) }
+            Button("Hardware…") { openHardware(node.id) }
                 .disabled(!on)
             Button("Insert Disc in Drive 0…") { session.chooseDisc(for: node.id, drive: 0) }
             Button("Eject Drive 0") { session.eject(node.id, drive: 0) }
@@ -334,6 +342,61 @@ struct NetworkCanvas: View {
         .padding(6)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+    }
+
+    /// "saved:UUID", a saved machine dragged from the palette.
+    static func savedMachineID(fromDrag item: String) -> UUID? {
+        item.hasPrefix("saved:") ? UUID(uuidString: String(item.dropFirst(6))) : nil
+    }
+
+    /// The user's saved machine configurations, under the palette.
+    @ViewBuilder
+    private var savedMachinesPalette: some View {
+        let saved = MachineConfigurations.shared.machines
+        if !saved.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("My Machines")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 4)
+                ForEach(saved) { machine in
+                    Button {
+                        add(machine, at: session.project.nextPosition(for: .station))
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: machine.setup.model.isMaster ? "desktopcomputer.and.macbook" : "desktopcomputer")
+                                .frame(width: 24)
+                            Text(machine.name)
+                                .lineLimit(1)
+                        }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .draggable("saved:\(machine.id.uuidString)") {
+                        Label(machine.name, systemImage: "desktopcomputer")
+                            .padding(8)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    .help([machine.setup.model.displayName, machine.setup.fittedSummary].filter { !$0.isEmpty }.joined(separator: " · ")
+                          + ". Drag onto the network, or click to add")
+                }
+            }
+            .frame(width: 168)
+            .padding(6)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+        }
+    }
+
+    private func add(_ saved: SavedMachine, at point: CanvasPoint) {
+        if let id = session.add(saved, at: point) {
+            session.selection = [id]
+            reveal(point)
+        }
     }
 
     private func add(_ item: PaletteItem, at point: CanvasPoint) {

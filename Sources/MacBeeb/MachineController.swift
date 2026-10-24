@@ -653,6 +653,22 @@ final class MachineController {
         changeMachine()
     }
 
+    /// Sets the machine up as `new` (a saved machine), in one power cycle.
+    func use(_ new: MachineSetup) {
+        guard new != setup else { return }
+        model = new.model
+        secondProcessor = new.secondProcessor
+        coprocessor = new.coprocessor
+        discInterface = new.discInterface
+        remember(model.rawValue, forKey: Self.modelDefaultsKey)
+        remember(secondProcessor, forKey: Self.secondProcessorDefaultsKey)
+        remember(coprocessor.rawValue, forKey: Self.coprocessorDefaultsKey)
+        remember(discInterface.rawValue, forKey: Self.discInterfaceDefaultsKey)
+        rememberHardware(expansions: new.expansions, powerOnImagePaths: new.powerOnImagePaths,
+                         controllerROMPaths: new.controllerROMPaths, videoNuLA: new.videoNuLA, sockets: new.sockets)
+        changeMachine()
+    }
+
     /// Switches model and second processor at once (one power cycle).
     func setHardware(model newModel: BBCMicro.Model, secondProcessor fitted: Bool) {
         guard newModel != model || fitted != secondProcessor else { return }

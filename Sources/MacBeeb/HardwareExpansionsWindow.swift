@@ -40,6 +40,12 @@ struct HardwareExpansionsWindow: View {
         .navigationTitle("Hardware")
         .toolbar {
             ToolbarItem {
+                Button("Save Configuration…", systemImage: "square.and.arrow.down") { saveConfiguration(machine.setup) }
+                    .disabled(pending)
+                    .help(pending ? "Restart the BBC with these changes first, then save it as a machine configuration"
+                          : "Save this machine's set-up under a name, to use in other windows and networks")
+            }
+            ToolbarItem {
                 Button("Guide", systemImage: "questionmark.circle") {
                     openWindow(id: GuideWindow.windowID, value: draft.expansions.guidePage)
                 }

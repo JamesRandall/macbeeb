@@ -120,16 +120,20 @@ Click **Mandelbrot** in the toolbar to follow a render from the traffic:
 - **Add a machine**: drag one from the **Add** palette onto the canvas, or
   click it to add it in the middle. New machines take the next free station
   number and are switched on.
+- **Add one of your machines**: machine configurations you've saved (see
+  Help ▸ Hardware Expansion Guide ▸ ROMs, Cartridges and Saved Machines)
+  are under **My Machines**, below the palette. A station's inspector has a
+  **Configuration** menu to set it up as one, or save it as one.
 - **Arrange**: drag machines around. Hold ⌘ or ⇧ and click to select more
   than one, and drag them together. **Snap to grid** is in the inspector.
 - **Move round**: drag the background, or scroll. Pinch, or ⌘-scroll, to
   zoom. The buttons at the bottom right zoom, and the last shows the whole
   network.
 - **Open a machine**: double-click it. Its window has all of MacBeeb's menus,
-  the debugger and Hardware Expansions. Closing the window doesn't stop the
+  the debugger and the Hardware window. Closing the window doesn't stop the
   machine: it carries on, on the canvas.
 - **Right-click a machine** for Power On/Off, Cold Boot, Break, Suspend,
-  Open Window, the debugger, Hardware Expansions, discs, Duplicate and
+  Open Window, the debugger, Hardware, discs, Duplicate and
   Remove.
 - The line along the middle is the network's shared cable. A machine that's
   on joins it with a solid line; one that's off, with a dashed line.

@@ -7,7 +7,7 @@ game's levels.
 
 ## Quick start
 
-1. **Machine ▸ Hardware Expansions…** (⌥⌘E). Under **In a ROM Socket**, click
+1. **Machine ▸ Hardware…** (⌥⌘E). Under **In a ROM Socket**, click
    **Sideways RAM 32K**, then **Restart BBC**.
 2. Under **Sideways Banks**, click **Load ROM Image…** beside bank 13 and
    choose a ROM image (a `.rom` file, up to 16K).
@@ -28,7 +28,7 @@ module plugs into a free socket:
   holds ROMSEL) makes a second bank, four below the first (lead on pin 12) or
   eight below (pin 11).
 
-![The Hardware Expansions window with the 32K module in bank 13, its second bank 9, and a ROM image in bank 13](images/hardware-window-sideways-ram.png)
+![The Hardware window with the 32K module in bank 13, its second bank 9, and a ROM image in bank 13](images/hardware-window-sideways-ram.png)
 
 The bank strip shows all sixteen banks. Green banks are RAM, blue ones are
 ROM, and dashed ones are empty sockets or nothing at all. The dot under a
@@ -37,7 +37,7 @@ bank shows the one ROMSEL has selected as the BBC runs. It's mostly BASIC's,
 
 ## Enable it in MacBeeb
 
-1. Choose **Machine ▸ Hardware Expansions…**. If the BBC isn't a Model B,
+1. Choose **Machine ▸ Hardware…**. If the BBC isn't a Model B,
    click **Switch to a Model B**.
 2. Under **In a ROM Socket**, click **Sideways RAM 16K** or **Sideways RAM
    32K**.
@@ -76,7 +76,7 @@ of each.
 source, `hello-rom.asm`, is beside it.
 
 1. With a sideways RAM board fitted, click **Load ROM Image…** beside bank 13
-   in the Hardware Expansions window, and choose `hello.rom`.
+   in the Hardware window, and choose `hello.rom`.
 2. Press **Break** (⌘B).
 3. Type:
 
@@ -128,7 +128,7 @@ a bank to disc, `*SRWRITE` and `*SRREAD` to copy memory in and out, and
 
 ## Save, clear and replace
 
-Each RAM bank in the Hardware Expansions window has a **⋯** menu:
+Each RAM bank in the Hardware window has a **⋯** menu:
 
 - **Save Contents…** saves the bank's 16K to a file on the Mac.
 - **Clear…** empties it (all zeros, as at power on). It asks first. A ROM
@@ -144,7 +144,7 @@ loaded afresh each time. Save states keep the RAM exactly as it was.
 
 ## How to undo it
 
-Choose **No Sideways RAM** in the Hardware Expansions window and click
+Choose **No Sideways RAM** in the Hardware window and click
 **Restart BBC**. The Model B is then exactly as before, with its ROMs in banks
 14 and 15.
 
@@ -153,7 +153,7 @@ Choose **No Sideways RAM** in the Hardware Expansions window and click
 The BBC sees one bank at a time at &8000 to &BFFF: the CPU's **logical**
 view. MacBeeb can also look at any bank **physically**, without paging it in:
 
-- The Hardware Expansions window shows each bank's ROM title.
+- The Hardware window shows each bank's ROM title.
 - The debugger's memory view has a space for each bank.
 - AI agents use `peek` with `space: "bank13"` for the bank itself, or
   `space: "host"` for what the CPU sees now (usually BASIC).

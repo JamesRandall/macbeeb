@@ -245,7 +245,7 @@ decode as no board and that module.
   constant at each of the three places video touches it. That's within the
   benchmark's run-to-run spread (17.3–17.4× against 17.6–18.0×). Phases 1–3
   measured the same as before.
-- Help: every section of the Hardware Expansions window has a Learn More link
+- Help: every section of the Hardware window has a Learn More link
   to its guide page, as well as the toolbar's Guide button and Help ▸ Hardware
   Expansion Guide.
 - Not done (no reference, or not practical yet): watchpoints that report the
