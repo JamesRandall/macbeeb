@@ -359,7 +359,8 @@ extension BBCMicro {
             let (title, titleEnd) = string(from: 9)
             guard !title.isEmpty else { return nil }
             self.title = title
-            version = titleEnd < offset ? string(from: titleEnd + 1).0 : nil
+            // (Some pad it with a space: " 1.02".)
+            version = titleEnd < offset ? string(from: titleEnd + 1).0.trimmingCharacters(in: .whitespaces) : nil
             if version?.isEmpty == true { version = nil }
             var end = offset + 1
             while end < bytes.count && bytes[end] != 0 { end += 1 }

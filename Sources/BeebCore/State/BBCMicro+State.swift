@@ -61,6 +61,8 @@ extension BBCMicro {
         /// An expansion board's latches (nil in older snapshots, and on a
         /// machine without one).
         var expansion: ExpansionState?
+        /// The bigger ROMs' mappers' regions (nil in older snapshots).
+        var romRegions: [UInt8]?
 
         /// Whether the snapshot has a tape in the recorder.
         public var hasTape: Bool { tape != nil }
@@ -87,6 +89,7 @@ extension BBCMicro {
                  master512: master512?.state,
                  arm: armProcessor?.state,
                  expansion: expansionSnapshot,
+                 romRegions: mappersFitted ? (0..<16).map { romRegions[$0] } : nil,
                  crtcLastOutput: crtcLastOutput,
                  ic15Byte: ic15Byte, unit: unit)
     }
@@ -124,6 +127,9 @@ extension BBCMicro {
         romsel = s.romsel
         acccon = s.acccon
         restoreExpansion(s.expansion)
+        for bank in 0..<16 {
+            romRegions[bank] = s.romRegions.flatMap { bank < $0.count ? $0[bank] : nil } ?? 0
+        }
         updatePaging()
         pageTable = s.pageTable
         lastVideoByte = s.lastVideoByte

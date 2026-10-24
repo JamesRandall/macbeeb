@@ -247,6 +247,12 @@ public final class BBCMicro {
     /// Sideways ROM and RAM banks; nil for an empty socket.
     let sidewaysBanks: [UnsafeMutablePointer<UInt8>?]
     public let sidewaysRAMBanks: Set<Int>
+    /// Each bank's ROM mapper (standard for 16K ROMs and RAM).
+    public let romMappers: [ROMMapper]
+    /// Whether any bank has a bigger ROM, so the bus needs watching.
+    let mappersFitted: Bool
+    /// The part of each bigger ROM showing, by bank (0 at power on).
+    public internal(set) var romRegions = InlineArray<16, UInt8>(repeating: 0)
     /// Writes to ROM land here.
     let discardPage: UnsafeMutablePointer<UInt8>
     /// 4K page -> memory, for reads (nil: nothing there) and writes. Pages
@@ -355,8 +361,10 @@ public final class BBCMicro {
     public struct Configuration: Codable, Sendable, Equatable {
         public var model: Model
         public var os: [UInt8]
-        /// Sideways ROMs by bank, 0-15.
+        /// Sideways ROMs by bank, 0-15: up to 16K, or bigger with a mapper.
         public var sidewaysROMs: [Int: [UInt8]]
+        /// How the bigger ROMs are switched, by bank; standard if absent.
+        public var romMappers: [Int: ROMMapper]
         /// Banks that are RAM. (On the B+ 128K, 0, 1, 12 and 13; on the
         /// Master, 4-7.)
         public var sidewaysRAMBanks: Set<Int>
@@ -396,8 +404,9 @@ public final class BBCMicro {
                     sidewaysRAMBanks: Set<Int>? = nil, secondProcessorROM: [UInt8]? = nil,
                     discInterface: DiscInterface = .intel8271, coprocessor: Coprocessor = .mos6502,
                     startupDisc: StartupDisc? = nil, expansions: Expansions = .none, videoNuLA: Bool = false,
-                    econetStation: Int? = nil) {
+                    econetStation: Int? = nil, romMappers: [Int: ROMMapper] = [:]) {
             self.econetStation = econetStation
+            self.romMappers = romMappers
             self.discInterface = discInterface
             self.expansions = expansions
             self.videoNuLA = videoNuLA
@@ -417,7 +426,7 @@ public final class BBCMicro {
 
         enum CodingKeys: CodingKey {
             case model, os, sidewaysROMs, sidewaysRAMBanks, secondProcessorROM, discInterface, coprocessor, expansions, videoNuLA
-            case econetStation
+            case econetStation, romMappers
         }
 
         public init(from decoder: Decoder) throws {
@@ -433,6 +442,7 @@ public final class BBCMicro {
             expansions = try c.decodeIfPresent(Expansions.self, forKey: .expansions) ?? .none
             videoNuLA = try c.decodeIfPresent(Bool.self, forKey: .videoNuLA) ?? false
             econetStation = try c.decodeIfPresent(Int.self, forKey: .econetStation)
+            romMappers = try c.decodeIfPresent([Int: ROMMapper].self, forKey: .romMappers) ?? [:]
         }
 
         /// What's wrong with the expansions, if anything: bad wiring, or a
@@ -492,13 +502,21 @@ public final class BBCMicro {
         // A sideways RAM board's banks are RAM too.
         let ramBanks = configuration.sidewaysRAMBanks.union(configuration.fittedExpansions.sidewaysRAMBanks)
         sidewaysRAMBanks = ramBanks
+        // A bigger ROM's mapper; RAM is always 16K.
+        let mappers = (0..<16).map { bank in
+            ramBanks.contains(bank) || configuration.sidewaysROMs[bank] == nil ? ROMMapper.standard
+                : configuration.romMappers[bank] ?? .standard
+        }
+        romMappers = mappers
+        mappersFitted = mappers.contains { $0 != .standard }
         sidewaysBanks = (0..<16).map { bank in
             let data = configuration.sidewaysROMs[bank]
             let isRAM = ramBanks.contains(bank)
             guard data != nil || isRAM else { return nil }
-            precondition(data?.count ?? 0 <= 16384, "sideways ROM too big")
-            let p = UnsafeMutablePointer<UInt8>.allocate(capacity: 0x4000)
-            p.initialize(repeating: isRAM ? 0 : 0xFF, count: 0x4000)
+            let size = mappers[bank].size
+            precondition(data?.count ?? 0 <= size, "sideways ROM too big")
+            let p = UnsafeMutablePointer<UInt8>.allocate(capacity: size)
+            p.initialize(repeating: isRAM ? 0 : 0xFF, count: size)
             if let data {
                 p.update(from: data, count: data.count)
             }
@@ -639,13 +657,15 @@ public final class BBCMicro {
                     read = ram + (shadow || boardUpper ? Self.shadowOffset : 0) + page << 12
                     write = read
                 case 8..<12 where ariesFitted:
-                    read = ariesStorage(bank: bank).map { $0 + (page - 8) << 12 }
+                    let offset = romMappers[bank].offset(page: page - 8, region: romRegions[bank])
+                    read = ariesStorage(bank: bank).map { $0 + offset }
                     write = ariesWriteTarget().map { $0 + (page - 8) << 12 }
                 case 8..<12 where pagedRAM && page - 8 < pagedRAMPages:
                     read = ram + Self.andyOffset + (page - 8) << 12
                     write = read
                 case 8..<12:
-                    read = sidewaysBanks[bank].map { $0 + (page - 8) << 12 }
+                    let offset = romMappers[bank].offset(page: page - 8, region: romRegions[bank])
+                    read = sidewaysBanks[bank].map { $0 + offset }
                     if sidewaysRAMBanks.contains(bank) {
                         write = read
                     }
@@ -903,6 +923,17 @@ public final class BBCMicro {
                 unmappedIOWriteObserver?(address, value)
             }
         }
+    }
+
+    /// A bigger ROM's mapper sees every access to &8000-&BFFF while its
+    /// bank is selected, and may switch what's showing (before the access,
+    /// as b2 does).
+    func mapperAccess(_ address: UInt16) {
+        let bank = Int(romsel & 0x0F)
+        guard let region = romMappers[bank].region(for: address, current: romRegions[bank]),
+              region != romRegions[bank] else { return }
+        romRegions[bank] = region
+        updatePaging()
     }
 
     /// A sideways bank's storage: its socket's, or an Aries B32's pool.
@@ -1405,6 +1436,9 @@ public final class BBCMicro {
 
         if !stretch {
             let address = cpu.abus
+            if mappersFitted && address & 0xC000 == 0x8000 {
+                mapperAccess(address)
+            }
             let io = address >= 0xFC00 && address < 0xFF00
             if cpu.access == .write {
                 if io {

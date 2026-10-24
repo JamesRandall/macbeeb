@@ -10,3 +10,7 @@ DerivedData/
 
 # Local secrets (notarisation credentials).
 .env*.local
+
+# The user's own sideways ROMs (not ours to distribute); tests use them
+# when they're here.
+/roms
