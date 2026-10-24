@@ -168,6 +168,54 @@ extension NetworkSession {
         currentInvite = nil
     }
 
+    // MARK: Station numbers
+
+    /// A machine whose station number another member already has in the
+    /// room, and a number it could have instead.
+    struct RoomConflict: Identifiable, Equatable {
+        var node: UUID
+        var name: String
+        var station: Int
+        var suggestion: Int?
+        var isOn: Bool
+        var id: UUID { node }
+    }
+
+    var roomConflicts: [RoomConflict] {
+        guard let refused = room?.refused, !refused.isEmpty else { return [] }
+        return refused.keys.sorted().compactMap { station in
+            guard let node = project.stations.first(where: { $0.stationNumber == station }) else { return nil }
+            return RoomConflict(node: node.id, name: node.name, station: station, suggestion: freeRoomStation(for: node.kind),
+                                isOn: controllers[node.id] != nil)
+        }
+    }
+
+    /// A number nobody in the room has and this network isn't using: 254
+    /// down for a file server, 235 down for a printer server (their usual
+    /// numbers), else the lowest, keeping those two free.
+    func freeRoomStation(for kind: NetworkNode.Kind) -> Int? {
+        let taken = Set(room?.stations.map(\.station) ?? []).union(project.nodes.compactMap(\.stationNumber))
+        let order: [Int] = switch kind {
+        case .fileServer: Array((1...254).reversed())
+        case .printServer: Array((1...235).reversed()) + Array(236...253)
+        default: Array(1...253).filter { $0 != 235 }
+        }
+        return order.first { !taken.contains($0) }
+    }
+
+    /// Gives a machine another station number for the room. Its network
+    /// interface takes its number when it starts, so a machine that's on
+    /// starts again (its memory is lost; its discs stay).
+    func renumberForRoom(_ id: UUID, to number: Int) -> String? {
+        if let problem = setStationNumber(id, to: number) { return problem }
+        // (Off and on: a power cycle would rebuild it with its old number.)
+        if controllers[id] != nil {
+            powerOff(id, remember: false)
+            powerOn(id, remember: false)
+        }
+        return nil
+    }
+
     // MARK: Screens
 
     /// Whether this network shows its shared machines' screens.

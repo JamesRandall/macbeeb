@@ -105,6 +105,14 @@ struct NetworkStudioView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // Station numbers the network's Internet room refused, and a
+            // way out, wherever you're looking.
+            .overlay(alignment: .top) {
+                RoomConflictsView(session: session)
+                    .frame(maxWidth: 640)
+                    .padding(.top, 12)
+                    .padding(.horizontal, 12)
+            }
             if showsInspector {
                 Divider()
                 NetworkInspector(session: session, openStation: openStation, openDebugger: openDebugger, openHardware: openHardware)

@@ -168,6 +168,17 @@ struct JoinRoomView: View {
                     Text("“\(session.project.name)”, open now").tag(Target.network(session.url))
                 }
             }
+            if case .network(let url) = target, let session = NetworkSession.existing(url) {
+                let taken = Set(preview.stations.map(\.station))
+                let clashes = session.project.stations.filter { $0.stationNumber.map(taken.contains) ?? false }
+                if !clashes.isEmpty {
+                    Label("\(clashes.map { "\($0.name) (\($0.stationNumber ?? 0))" }.joined(separator: ", ")): someone in the network has that station number already. Once you've joined, MacBeeb offers a free one.",
+                          systemImage: "exclamationmark.triangle")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             TextField("Your name", text: $displayName, prompt: Text("Shown to the others"))
             if preview.room.allowsScreens {
                 Toggle("Show my machine's screen to the others", isOn: $showScreen)

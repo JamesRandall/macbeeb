@@ -180,14 +180,7 @@ struct InternetShareView: View {
                 invitation
             }
             participants
-            if let refused = room?.refused, !refused.isEmpty {
-                ForEach(refused.keys.sorted(), id: \.self) { station in
-                    Label("Station \(station) is already in the room: change this network's station \(station) to share it.",
-                          systemImage: "exclamationmark.triangle.fill")
-                        .font(.callout)
-                        .foregroundStyle(.orange)
-                }
-            }
+            RoomConflictsView(session: session)
             screensControls
             DisclosureGroup("Machines shared") {
                 machineList
@@ -354,5 +347,53 @@ struct ConnectionBadge: View {
             Circle().fill(colour).frame(width: 8, height: 8)
         }
         .font(.callout)
+    }
+}
+
+/// Machines whose station numbers someone else in the room already has,
+/// each with a number to change to: the change (and the restart it needs,
+/// for a machine that's on) only when asked.
+struct RoomConflictsView: View {
+    let session: NetworkSession
+    @State private var confirming: NetworkSession.RoomConflict?
+    @State private var problem: String?
+
+    var body: some View {
+        let conflicts = session.roomConflicts
+        if !conflicts.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(conflicts) { conflict in
+                    HStack(spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text("Someone in the network already has station \(conflict.station), so \(conflict.name) isn't in it.")
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        if let number = conflict.suggestion {
+                            Button("Change to \(number)…") { confirming = conflict }
+                                .help("Give \(conflict.name) station number \(number), which nobody in the network has")
+                        }
+                    }
+                }
+                if let problem {
+                    Text(problem).font(.caption).foregroundStyle(.red)
+                }
+            }
+            .padding(12)
+            .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+            .confirmationDialog(confirming.map { "Change \($0.name) to station \($0.suggestion ?? 0)?" } ?? "",
+                                isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } })) {
+                Button(confirming?.isOn == true ? "Change and Restart" : "Change") {
+                    if let conflict = confirming, let number = conflict.suggestion {
+                        problem = session.renumberForRoom(conflict.node, to: number)
+                    }
+                    confirming = nil
+                }
+            } message: {
+                Text(confirming?.isOn == true
+                     ? "Its network interface takes its number when it starts, so it starts again: what's in its memory is lost. Its discs stay in their drives."
+                     : "It takes the new number when it's switched on.")
+            }
+        }
     }
 }

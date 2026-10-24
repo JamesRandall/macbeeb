@@ -36,6 +36,7 @@ extension NetworkSelfTest {
             (try? await session.controllers[id]?.host.performAsync { $0.machine.screenText().joined(separator: "\n") }) ?? "(off)"
         }
         let codeFile = UserDefaults.standard.string(forKey: "MacBeebInternetSelfTestCode") ?? path.replacingOccurrences(of: ".png", with: ".code")
+        let clash = UserDefaults.standard.bool(forKey: "MacBeebInternetSelfTestClash")
 
         Task { @MainActor in
             let folder = FileManager.default.temporaryDirectory.appendingPathComponent("macbeeb-internet-selftest-\(UUID().uuidString)")
@@ -103,7 +104,9 @@ extension NetworkSelfTest {
                     let joined = try await api.join(roomId: preview.roomId, code: code, displayName: "Guest Mac")
                     var project = NetworkProject(name: preview.room.name)
                     project.nodes = [
-                        NetworkNode(kind: .station, name: "Visitor", stationNumber: 7, setup: MachineSetup(model: .modelB), position: CanvasPoint()),
+                        // (With -MacBeebInternetSelfTestClash, station 1: the host's Guide's.)
+                        NetworkNode(kind: .station, name: "Visitor", stationNumber: clash ? 1 : 7, setup: MachineSetup(model: .modelB),
+                                    position: CanvasPoint()),
                         .clock(at: CanvasPoint(x: 0, y: NetworkProject.rowSpacing)),
                     ]
                     try NetworkPackage.save(project, to: url)
@@ -115,6 +118,21 @@ extension NetworkSelfTest {
                         try? await Task.sleep(for: .seconds(1))
                     }
                     report += "Sees the server: \(session.internet?.gateway.remoteStations.sorted() ?? [])\n"
+                    if clash {
+                        for _ in 0..<20 where session.roomConflicts.isEmpty { try? await Task.sleep(for: .seconds(1)) }
+                        report += "Conflicts: \(session.roomConflicts.map { "\($0.name) \($0.station) -> \($0.suggestion ?? 0)" })\n"
+                        let banner = offscreen(NetworkStudioView(session: session, mode: .canvas), width: 1300, height: 800)
+                        try? await Task.sleep(for: .seconds(2))
+                        capture(banner, to: path.replacingOccurrences(of: ".png", with: "-clash.png"))
+                        if let conflict = session.roomConflicts.first, let number = conflict.suggestion {
+                            report += "Renumbered: \(session.renumberForRoom(conflict.node, to: number) ?? "ok")\n"
+                        }
+                        for _ in 0..<20 where !(session.room?.stations.contains { $0.participantId == session.room?.participantId } ?? false) {
+                            try? await Task.sleep(for: .seconds(1))
+                        }
+                        let mine = session.room?.stations.filter { $0.participantId == session.room?.participantId }.map(\.station) ?? []
+                        report += "In the room as: \(mine), conflicts left: \(session.roomConflicts.count)\n"
+                    }
                     guard let visitor = session.project.stations.first, let controller = session.controllers[visitor.id] else {
                         report += "No machine\n"
                         return finish()
