@@ -251,6 +251,9 @@ enum NetworkSelfTest {
             let focus = window(.focus)
             try? await Task.sleep(for: .seconds(2))
             capture(focus, to: path.replacingOccurrences(of: ".png", with: "-focus.png"))
+            let traffic = window(.traffic)
+            try? await Task.sleep(for: .seconds(2))
+            capture(traffic, to: path.replacingOccurrences(of: ".png", with: "-traffic.png"))
             for (name, text) in await screens() {
                 report += "\n== \(name)\n\(text)\n"
             }

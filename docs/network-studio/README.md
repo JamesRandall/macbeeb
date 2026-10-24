@@ -306,7 +306,7 @@ The network remembers which machine was large.
 ## Traffic
 
 Click **Traffic** in the toolbar to see every frame that's crossed the
-network, newest last. Econet sends everything as a **four-way handshake**:
+network, newest first. Econet sends everything as a **four-way handshake**:
 a **scout** asking to send (who it's for, a control byte and a port), an
 **acknowledgement**, the **data**, and another acknowledgement. The
 Traffic view reads frames that way, numbers each transaction, and names the

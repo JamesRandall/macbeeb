@@ -26,10 +26,13 @@ struct NetworkTrafficView: View {
             Divider()
             HSplitView {
                 table
-                    .frame(minWidth: 420)
+                    .frame(minWidth: 420, maxHeight: .infinity)
                 detail
-                    .frame(minWidth: 280, idealWidth: 340)
+                    .frame(minWidth: 280, idealWidth: 340, maxHeight: .infinity)
             }
+            // (Both sides fill the height: with no frame chosen, the detail's
+            // only a placeholder, which would otherwise shrink the table.)
+            .frame(maxHeight: .infinity)
         }
         .task {
             recording = session.runtime.network.isTracing
@@ -51,8 +54,9 @@ struct NetworkTrafficView: View {
         }
     }
 
+    /// The frames listed: newest first (only the latest are kept).
     private var shown: [EconetFrame] {
-        frames.filter { frame in
+        frames.reversed().filter { frame in
             if let station, frame.transmitter != UInt8(clamping: station) && frame.destinationStation != UInt8(clamping: station) {
                 return false
             }
@@ -78,6 +82,7 @@ struct NetworkTrafficView: View {
                 Label(recording ? "Recording" : "Paused", systemImage: recording ? "record.circle" : "pause.circle")
             }
             .toggleStyle(.button)
+            .fixedSize()
             .help("Record frames as they cross the line")
             Button {
                 session.runtime.network.clearTrace()
@@ -86,7 +91,9 @@ struct NetworkTrafficView: View {
                 reader = MandelbrotTraffic()
                 readings = [:]
             } label: { Label("Clear", systemImage: "trash") }
+                .fixedSize()
             Button { export() } label: { Label("Export…", systemImage: "square.and.arrow.up") }
+                .fixedSize()
                 .disabled(frames.isEmpty)
                 .help("Save the frames as JSON (MacBeeb's own format, not PCAP)")
             Divider().frame(height: 18)
@@ -100,9 +107,10 @@ struct NetworkTrafficView: View {
             }
             .fixedSize()
             Toggle("Problems only", isOn: $problemsOnly)
+                .fixedSize()
             TextField("Search bytes or text", text: $search)
                 .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 200)
+                .frame(minWidth: 110, maxWidth: 200)
             Spacer()
             totals
         }
@@ -117,6 +125,9 @@ struct NetworkTrafficView: View {
         return Text("\(frames) frames sent · \(collisions) byte-times collided")
             .font(.callout)
             .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .layoutPriority(-1)
             .help("Counted on the line since the network opened")
     }
 
