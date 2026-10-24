@@ -584,10 +584,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !NetworkSelfTest.runMCPIfRequested() {
             NetworkSelfTest.runIfRequested()
         }
+        WelcomeReturn.start()
     }
 
+    /// With the welcome screen as the opening screen, closing the last
+    /// window brings it back (WelcomeReturn), and closing it quits.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        !WelcomeReturn.applies
+    }
+
+    /// The Dock icon clicked with no windows open: the welcome screen.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows && WelcomeReturn.applies {
+            WelcomeReturn.open()
+            return false
+        }
+        return true
     }
 }
 

@@ -34,7 +34,7 @@ struct GeneralSettingsView: View {
                     }
                 }
                 .pickerStyle(.radioGroup)
-                Text("The welcome screen leads to everything: a BBC Micro, the Game Library and the Network Studio. Opening with the Game Library suits playing games: choose one and its BBC Micro opens, set up to play it. The Network Studio opens the network you used last. Takes effect the next time MacBeeb opens; Window ▸ Welcome to MacBeeb shows the welcome screen any time.")
+                Text("The welcome screen leads to everything: a BBC Micro, the Game Library and the Network Studio. With it, closing your last window brings it back, and closing it quits MacBeeb. Opening with the Game Library suits playing games: choose one and its BBC Micro opens, set up to play it. The Network Studio opens the network you used last. Takes effect the next time MacBeeb opens; Window ▸ Welcome to MacBeeb shows the welcome screen any time.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

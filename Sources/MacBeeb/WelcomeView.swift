@@ -518,6 +518,9 @@ struct WelcomeMenuItem: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        // (Menus are made at launch: the way to open the welcome screen
+        // when no window's left to do it.)
+        let _ = WelcomeReturn.remember(openWindow)
         Button("Welcome to MacBeeb") { openWindow(id: WelcomeView.windowID) }
             .keyboardShortcut("1", modifiers: [.command, .shift])
     }
@@ -571,6 +574,51 @@ private struct WideMenu: View {
 
         @objc func choose(_ item: NSMenuItem) {
             if actions.indices.contains(item.tag) { actions[item.tag]() }
+        }
+    }
+}
+
+/// With the welcome screen as the opening screen, MacBeeb is a place to
+/// come back to: closing the last other window brings the welcome screen
+/// back, and closing that quits (as closing the last window does
+/// otherwise).
+@MainActor
+enum WelcomeReturn {
+    private static var openWindow: OpenWindowAction?
+
+    static var applies: Bool { LaunchScreen.preference == .welcome && !LaunchScreen.isSelfTest }
+
+    static func remember(_ action: OpenWindowAction) {
+        openWindow = action
+    }
+
+    static func open() {
+        openWindow?(id: WelcomeView.windowID)
+    }
+
+    static func start() {
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: .main) { note in
+            let title = (note.object as? NSWindow)?.title
+            MainActor.assumeIsolated { closed(title: title) }
+        }
+    }
+
+    /// A window's closing: once it's gone (and any window it opened has
+    /// appeared, as the welcome screen's buttons open one as it closes),
+    /// if nothing's left, the welcome screen comes back, or if it was the
+    /// welcome screen, MacBeeb quits.
+    private static func closed(title: String?) {
+        guard applies else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            // (By then the closed window isn't visible.)
+            let open = NSApp.windows.contains { $0.isVisible && !($0 is NSPanel) && $0.styleMask.contains(.titled) }
+            guard !open else { return }
+            if title == "Welcome to MacBeeb" {
+                NSApp.terminate(nil)
+            } else {
+                Self.open()
+            }
         }
     }
 }
