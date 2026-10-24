@@ -58,6 +58,23 @@ enum NetworkSelfTest {
     /// works whatever windows the app restores).
     static func runIfRequested() {
         guard let path else { return }
+        if UserDefaults.standard.string(forKey: "MacBeebNetworkSelfTestTemplate") == "welcome" {
+            // The welcome screen, captured.
+            let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 1060, height: 800),
+                                  styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.contentViewController = NSHostingController(rootView: WelcomeView())
+            window.setContentSize(window.contentViewController!.view.fittingSize)
+            window.orderBack(nil)
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(3))
+                capture(window, to: path)
+                NSApp.terminate(nil)
+            }
+            return
+        }
         if UserDefaults.standard.string(forKey: "MacBeebNetworkSelfTestTemplate") == "hardware" {
             runHardware(path)
             return

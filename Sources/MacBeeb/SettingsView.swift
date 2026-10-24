@@ -6,6 +6,8 @@ import SwiftUI
 struct SettingsView: View {
     var body: some View {
         TabView {
+            GeneralSettingsView()
+                .tabItem { Label("General", systemImage: "gearshape") }
             KeyboardSettingsView()
                 .tabItem { Label("Keyboard", systemImage: "keyboard") }
             GamepadSettingsView()
@@ -16,6 +18,29 @@ struct SettingsView: View {
                 .tabItem { Label("Games", systemImage: "books.vertical") }
         }
         .frame(width: 520, height: 460)
+    }
+}
+
+/// What MacBeeb opens with.
+struct GeneralSettingsView: View {
+    @AppStorage(LaunchScreen.defaultsKey) private var launchScreen = LaunchScreen.preference
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("When MacBeeb opens, show", selection: $launchScreen) {
+                    ForEach(LaunchScreen.allCases) { screen in
+                        Text(screen.title).tag(screen)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+                Text("The welcome screen leads to everything: a BBC Micro, the Game Library and the Network Studio. Opening with the Game Library suits playing games: choose one and its BBC Micro opens, set up to play it. The Network Studio opens the network you used last. Takes effect the next time MacBeeb opens; Window ▸ Welcome to MacBeeb shows the welcome screen any time.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .formStyle(.grouped)
     }
 }
 
@@ -280,17 +305,6 @@ struct ClassicsSettingsView: View {
 
     var body: some View {
         Form {
-            Section {
-                Picker("When MacBeeb opens", selection: $classics.startsWithBookshelf) {
-                    Text("Show a BBC Micro").tag(false)
-                    Text("Show only the Game Library").tag(true)
-                }
-                .pickerStyle(.radioGroup)
-                Text("Opening with only the game library suits playing games: choose one and its BBC Micro opens, set up to play it. Takes effect the next time MacBeeb opens.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-
             Section {
                 Toggle("Add downloaded Classics automatically", isOn: Binding(
                     get: { classics.autoDetect == true },

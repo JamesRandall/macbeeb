@@ -44,24 +44,6 @@ final class ClassicsLibrary {
 
     private static let autoDetectKey = "MacBeebClassicsAutoDetect"
     private static let folderKey = "MacBeebClassicsDownloadFolder"
-    nonisolated private static let startWithBookshelfKey = "MacBeebStartWithClassics"
-
-    /// Whether MacBeeb opens with just the bookshelf, rather than a BBC
-    /// Micro (whose window then opens when a game's played).
-    var startsWithBookshelf = UserDefaults.standard.bool(forKey: startWithBookshelfKey) {
-        didSet { UserDefaults.standard.set(startsWithBookshelf, forKey: Self.startWithBookshelfKey) }
-    }
-
-    /// Whether this launch opens with the bookshelf: as the setting was
-    /// when the app started. Self-tests and window captures need a machine.
-    nonisolated static let launchesWithBookshelf: Bool = {
-        let defaults = UserDefaults.standard
-        return defaults.bool(forKey: startWithBookshelfKey)
-            && defaults.string(forKey: "MacBeebSelfTest") == nil
-            && defaults.string(forKey: "MacBeebNetworkSelfTest") == nil
-            && defaults.string(forKey: "MacBeebCaptureDirectory") == nil
-    }()
-
     /// Whether to watch for downloaded games; nil until the user's been
     /// asked. (The app preference: macOS's own permission is separate.)
     var autoDetect: Bool? {

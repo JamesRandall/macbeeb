@@ -160,7 +160,7 @@ struct BookshelfView: View {
             gridFocused = true
             // When it's the only window at launch, it's the one that says
             // what's new.
-            if ClassicsLibrary.launchesWithBookshelf && WhatsNew.shouldShowOnLaunch() {
+            if LaunchScreen.atLaunch == .games && WhatsNew.shouldShowOnLaunch() {
                 openWindow(id: WhatsNewView.windowID)
             }
         }

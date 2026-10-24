@@ -14,10 +14,10 @@ struct MacBeebApp: App {
         WindowGroup("BBC Micro", id: MachineWindow.windowID) {
             MachineWindow()
         }
-        // With Settings > Games > When MacBeeb opens set to the game
-        // library, it opens alone.
-        .defaultLaunchBehavior(ClassicsLibrary.launchesWithBookshelf ? .suppressed : .automatic)
-        .restorationBehavior(ClassicsLibrary.launchesWithBookshelf ? .disabled : .automatic)
+        // Only when Settings > General > When MacBeeb opens says a BBC
+        // Micro (otherwise it's the welcome screen or another part).
+        .defaultLaunchBehavior(LaunchScreen.atLaunch == .machine ? .automatic : .suppressed)
+        .restorationBehavior(LaunchScreen.atLaunch == .machine ? .automatic : .disabled)
         .defaultSize(width: 960, height: 768)
         .commands {
             CommandGroup(replacing: .appInfo) {
@@ -174,6 +174,7 @@ struct MacBeebApp: App {
                 Divider()
             }
             CommandGroup(before: .windowList) {
+                WelcomeMenuItem()
                 NetworkStudioMenuItem()
                 PrintCentreMenuItem()
                 Divider()
@@ -336,7 +337,16 @@ struct MacBeebApp: App {
             BookshelfView()
         }
         .defaultSize(width: 1040, height: 780)
-        .defaultLaunchBehavior(ClassicsLibrary.launchesWithBookshelf ? .presented : .automatic)
+        .defaultLaunchBehavior(LaunchScreen.atLaunch == .games ? .presented : .suppressed)
+
+        Window("Welcome to MacBeeb", id: WelcomeView.windowID) {
+            WelcomeView()
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .restorationBehavior(.disabled)
+        // The welcome screen, or on its way to the Network Studio.
+        .defaultLaunchBehavior(LaunchScreen.atLaunch == .welcome || LaunchScreen.atLaunch == .network ? .presented : .suppressed)
 
         Window("What's New", id: WhatsNewView.windowID) {
             WhatsNewView()
