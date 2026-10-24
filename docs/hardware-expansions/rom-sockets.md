@@ -20,6 +20,10 @@ MacBeeb doesn't come with these ROMs: use images of ROMs you own.
    you'd switched it off, fitted the chip and switched it on again.
 4. Type `*HELP` (or `*ROMS` on a Master) to see it there.
 
+The **Model** menu at the top of the window changes which BBC Micro it is,
+along with everything else, when you click **Restart BBC**. Each model keeps
+the ROMs you've put in its sockets, for when you switch back.
+
 To take a ROM out, choose **Empty Socket** from the socket's menu (or **Put
 Back BASIC 2** for one of the standard ROMs) and restart.
 

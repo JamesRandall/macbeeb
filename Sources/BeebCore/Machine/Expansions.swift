@@ -353,7 +353,8 @@ extension BBCMicro {
             func string(from start: Int) -> (String, Int) {
                 var end = start
                 while end < offset && bytes[end] != 0 { end += 1 }
-                let text = String(bytes[start..<end].map { $0 >= 32 && $0 < 127 ? Character(UnicodeScalar($0)) : "?" })
+                // (Control characters, as the CR some end with, are left out.)
+                let text = String(bytes[start..<end].filter { $0 >= 32 }.map { $0 < 127 ? Character(UnicodeScalar($0)) : "?" })
                 return (text, end)
             }
             let (title, titleEnd) = string(from: 9)

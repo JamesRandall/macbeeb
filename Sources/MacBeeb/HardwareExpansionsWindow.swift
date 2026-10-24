@@ -30,7 +30,7 @@ struct HardwareExpansionsWindow: View {
 
     var body: some View {
         Group {
-            if machine.model == .modelB {
+            if draft.model == .modelB {
                 content
             } else {
                 otherModel
@@ -83,14 +83,8 @@ struct HardwareExpansionsWindow: View {
     private var otherModel: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(machine.model.displayName)
-                        .font(.largeTitle.weight(.semibold))
-                    Text(machine.model == .modelA ? "16K of RAM and four ROM sockets."
-                         : "Its shadow and sideways RAM are built in.")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                }
+                modelHeader(draft.model == .modelA ? "16K of RAM and four ROM sockets."
+                            : "Its shadow and sideways RAM are built in.")
                 if draftSetup.hasROMSockets {
                     socketsSection
                 }
@@ -101,10 +95,7 @@ struct HardwareExpansionsWindow: View {
                         .foregroundStyle(.secondary)
                     Text("Sideways RAM modules, and Watford and Aries memory boards, fit the BBC Model B.")
                     Spacer()
-                    Button("Switch to a Model B") {
-                        machine.apply(draft)
-                        machine.switchToModelB(with: draft.expansions)
-                    }
+                    Button("Switch to a Model B") { draft.model = .modelB }
                 }
                 .padding(14)
                 .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
@@ -123,6 +114,7 @@ struct HardwareExpansionsWindow: View {
     /// The machine as the draft would make it.
     private var draftSetup: MachineSetup {
         var setup = machine.setup
+        setup.model = draft.model
         setup.expansions = draft.expansions
         setup.controllerROMPaths = draft.controllerROMPaths
         setup.videoNuLA = draft.videoNuLA
@@ -199,18 +191,32 @@ struct HardwareExpansionsWindow: View {
     private var expansions: BBCMicro.Expansions { draft.expansions }
 
     private var header: some View {
+        modelHeader(memorySummary(expansions))
+    }
+
+    /// The model, which can be changed here (as everything else, it takes
+    /// effect when the BBC restarts), and what it has.
+    private func modelHeader(_ summary: String) -> some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("BBC Model B")
+                Text(draft.model.displayName)
                     .font(.largeTitle.weight(.semibold))
-                Text(memorySummary(expansions))
+                    .contentTransition(.opacity)
+                Text(summary)
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
             }
+            .accessibilityElement(children: .combine)
             Spacer()
+            Picker("Model", selection: $draft.model) {
+                ForEach(BBCMicro.Model.allCases, id: \.self) { model in
+                    Text(model.displayName).tag(model)
+                }
+            }
+            .fixedSize()
+            .help("Which BBC Micro this is. It changes when the BBC restarts; discs stay in their drives.")
         }
-        .accessibilityElement(children: .combine)
     }
 
     private func memorySummary(_ e: BBCMicro.Expansions) -> String {
@@ -567,7 +573,10 @@ struct HardwareExpansionsWindow: View {
 
     private var restartTitle: String {
         let current = machine.hardwareDraft
-        if draft.expansions != current.expansions && machine.model == .modelB {
+        if draft.model != current.model {
+            return "Switching to the \(draft.model.displayName) restarts the BBC"
+        }
+        if draft.expansions != current.expansions && draft.model == .modelB {
             return "Fitting \(expansions.board == .none ? "no board" : "the " + expansions.board.displayName) restarts the BBC"
         }
         if draft.videoNuLA != current.videoNuLA {

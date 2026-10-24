@@ -653,6 +653,12 @@ final class MachineController {
         changeMachine()
     }
 
+    /// Takes on a model and remembers it, without restarting.
+    func takeModel(_ newModel: BBCMicro.Model) {
+        model = newModel
+        remember(newModel.rawValue, forKey: Self.modelDefaultsKey)
+    }
+
     /// Sets the machine up as `new` (a saved machine), in one power cycle.
     func use(_ new: MachineSetup) {
         guard new != setup else { return }

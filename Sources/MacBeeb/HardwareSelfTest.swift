@@ -48,6 +48,7 @@ extension NetworkSelfTest {
         func offscreen<V: View>(_ view: V, width: Double, height: Double) -> NSWindow {
             let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: width, height: height),
                                   styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false
             window.contentViewController = NSHostingController(rootView: view.frame(width: width, height: height))
             window.orderBack(nil)
             return window
@@ -91,6 +92,24 @@ extension NetworkSelfTest {
                 try? await Task.sleep(for: .seconds(1))
                 capture(window, to: path.replacingOccurrences(of: ".png", with: "-click2.png"))
                 click(1, segment: 0)
+            }
+            // The BBC made a Master by a draft with a new model, as the
+            // window's Model menu does, then back.
+            if let bbc = stations.first(where: { $0.setup?.model == .modelB }), let controller = session.controllers[bbc.id],
+               UserDefaults.standard.bool(forKey: "MacBeebHardwareSelfTestClicks") {
+                var draft = controller.hardwareDraft
+                draft.model = .master128
+                controller.apply(draft)
+                try? await Task.sleep(for: .seconds(4))
+                let text = (try? await controller.host.performAsync { $0.machine.screenText().joined(separator: "\n") }) ?? "?"
+                report += "BBC as a Master: model \(controller.model.displayName), network has \(session.project[bbc.id]?.setup?.model.displayName ?? "?")\n\(text)\n"
+                let window = offscreen(HardwareExpansionsWindow(machine: controller), width: 760, height: 1300)
+                try? await Task.sleep(for: .seconds(2))
+                capture(window, to: path.replacingOccurrences(of: ".png", with: "-model.png"))
+                draft = controller.hardwareDraft
+                draft.model = .modelB
+                controller.apply(draft)
+                try? await Task.sleep(for: .seconds(3))
             }
             // The Master saved as a configuration, and added to the network
             // from the palette.

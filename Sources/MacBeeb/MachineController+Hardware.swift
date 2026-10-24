@@ -40,6 +40,7 @@ extension MachineController {
     /// The hardware being chosen in the Hardware Expansions window: the
     /// board, and any controller ROMs in place of the bundled ones.
     struct HardwareDraft: Equatable {
+        var model: BBCMicro.Model
         var expansions: BBCMicro.Expansions
         var controllerROMPaths: [BBCMicro.MemoryBoard: String]
         var videoNuLA: Bool
@@ -50,7 +51,7 @@ extension MachineController {
     }
 
     var hardwareDraft: HardwareDraft {
-        HardwareDraft(expansions: expansions, controllerROMPaths: controllerROMPaths, videoNuLA: videoNuLA, sockets: sockets)
+        HardwareDraft(model: model, expansions: expansions, controllerROMPaths: controllerROMPaths, videoNuLA: videoNuLA, sockets: sockets)
     }
 
     static var savedExpansions: BBCMicro.Expansions {
@@ -91,6 +92,8 @@ extension MachineController {
     /// when it's a B again.
     func apply(_ draft: HardwareDraft) {
         guard draft != hardwareDraft, draft.expansions.problem == nil else { return }
+        let modelChanged = draft.model != model
+        if modelChanged { takeModel(draft.model) }
         setExpansionsValue(draft.expansions)
         if let data = try? JSONEncoder().encode(draft.expansions) {
             remember(data, forKey: Self.expansionsKey)
@@ -107,7 +110,7 @@ extension MachineController {
             remember(data, forKey: Self.socketsKey)
         }
         // The board matters only on a Model B; NuLA and ROMs on any model.
-        if model == .modelB || nulaChanged || socketsChanged {
+        if model == .modelB || modelChanged || nulaChanged || socketsChanged {
             restartWithHardware()
         }
     }
@@ -131,19 +134,6 @@ extension MachineController {
         var draft = hardwareDraft
         draft.expansions = new
         apply(draft)
-    }
-
-    /// Switches to a Model B with `new` (one power cycle).
-    func switchToModelB(with new: BBCMicro.Expansions) {
-        setExpansionsValue(new)
-        if let data = try? JSONEncoder().encode(new) {
-            remember(data, forKey: Self.expansionsKey)
-        }
-        if model == .modelB {
-            restartWithHardware()
-        } else {
-            setModel(.modelB)
-        }
     }
 
     /// A file to put in a sideways RAM bank at every power on (nil: none).

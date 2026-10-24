@@ -120,7 +120,10 @@ extension MachineSetup {
                 }
             }
         }
-        let roms = sockets.roms.sorted { $0.key > $1.key }.compactMap { $0.value.rom?.name }
+        // Only the sockets this model has (a Model B's choices stay while
+        // it's a Master, for when it's a B again).
+        let banks = Set(socketGroups().flatMap(\.sockets).map(\.bank))
+        let roms = sockets.roms.filter { banks.contains($0.key) }.sorted { $0.key > $1.key }.compactMap { $0.value.rom?.name }
         if !roms.isEmpty { parts.append(roms.joined(separator: ", ")) }
         if videoNuLA { parts.append("VideoNuLA") }
         return parts.joined(separator: " · ")
