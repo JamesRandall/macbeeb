@@ -68,6 +68,30 @@ extension NetworkSelfTest {
                 try? await Task.sleep(for: .seconds(2))
                 capture(window, to: path.replacingOccurrences(of: ".png", with: "-\(node.name).png"))
             }
+            // Clicking a link's control to ROM Socket and back again.
+            if let master = stations.first(where: { $0.setup?.model == .master128 }), let controller = session.controllers[master.id],
+               UserDefaults.standard.bool(forKey: "MacBeebHardwareSelfTestClicks") {
+                let window = offscreen(HardwareExpansionsWindow(machine: controller), width: 760, height: 1500)
+                try? await Task.sleep(for: .seconds(2))
+                func segmented(_ view: NSView) -> [NSSegmentedControl] {
+                    (view as? NSSegmentedControl).map { [$0] } ?? view.subviews.flatMap(segmented)
+                }
+                @MainActor func click(_ index: Int, segment: Int) {
+                    let controls = segmented(window.contentView!)
+                    report += "Segmented controls: \(controls.map { "\($0.label(forSegment: 0) ?? "")=\($0.selectedSegment)" })\n"
+                    guard index < controls.count else { return }
+                    controls[index].selectedSegment = segment
+                    controls[index].sendAction(controls[index].action, to: controls[index].target)
+                }
+                // IC41 (LK18) is the second link: currently RAM.
+                click(1, segment: 1)
+                try? await Task.sleep(for: .seconds(1))
+                capture(window, to: path.replacingOccurrences(of: ".png", with: "-click1.png"))
+                click(1, segment: 0)
+                try? await Task.sleep(for: .seconds(1))
+                capture(window, to: path.replacingOccurrences(of: ".png", with: "-click2.png"))
+                click(1, segment: 0)
+            }
             // The Master saved as a configuration, and added to the network
             // from the palette.
             if let master = stations.first(where: { $0.setup?.model == .master128 }), let setup = master.setup,

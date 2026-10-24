@@ -124,23 +124,30 @@ struct ROMSocketsSection: View {
         }
     }
 
+    // (Each makes its changes to a copy and writes it once: writes in a
+    // row through the binding each start from what it was before.)
+
     private func setCartridge(_ cartridge: Cartridge?, slot: Int) {
-        sockets.cartridges[slot] = cartridge
+        var new = sockets
+        new.cartridges[slot] = cartridge
         // Its ROMs come out with it.
         if cartridge != .roms {
-            sockets.roms[slot * 2] = nil
-            sockets.roms[slot * 2 + 1] = nil
+            new.roms[slot * 2] = nil
+            new.roms[slot * 2 + 1] = nil
         }
+        sockets = new
     }
 
     private func setLink(_ rom: Bool, bank: Int) {
+        var new = sockets
         if rom {
-            sockets.romLinks.insert(bank)
+            new.romLinks.insert(bank)
         } else {
-            sockets.romLinks.remove(bank)
-            sockets.roms[bank] = nil
-            sockets.roms[bank + 1] = nil
+            new.romLinks.remove(bank)
+            new.roms[bank] = nil
+            new.roms[bank + 1] = nil
         }
+        sockets = new
     }
 
     // MARK: Sockets
@@ -269,9 +276,11 @@ struct ROMSocketsSection: View {
     }
 
     private func plug(_ rom: UserROM, into socket: ROMSocket) {
-        sockets.roms[socket.bank] = .rom(rom.plugged)
+        var new = sockets
+        new.roms[socket.bank] = .rom(rom.plugged)
         // A two-bank chip takes the upper bank too.
-        if rom.layout == .pair { sockets.roms[socket.bank + 1] = nil }
+        if rom.layout == .pair { new.roms[socket.bank + 1] = nil }
+        sockets = new
     }
 
     private func chooseFile(for socket: ROMSocket, group: ROMSocketGroup) {
