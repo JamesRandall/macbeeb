@@ -78,10 +78,10 @@ public enum NetworkTemplate: String, CaseIterable, Sendable, Identifiable {
             var guide = station("Guide", 1, -4 * s, 0,
                                 setup: MachineSetup(model: .modelB, videoNuLA: self == .mandelbrotInColour))
             guide.bootsDisc = true
+            // The workers only switch on, to BASIC: *CLUSTER takes them
+            // over by remote control.
             project.nodes = [guide] + MandelbrotNetwork.workers.map { number in
-                var worker = station("Worker \(number)", number, Double(number - 5) * s, 0)
-                worker.bootsNetwork = true
-                return worker
+                station("Worker \(number)", number, Double(number - 5) * s, 0)
             } + [level2Server(-s / 2, 330), .clock(at: CanvasPoint(x: s / 2 + 40, y: 330))]
         case .twoBBCs:
             project.nodes = [station("BBC 1", 1, -s / 2, 0), station("BBC 2", 2, s / 2, 0), .clock(at: CanvasPoint(x: 0, y: 200))]

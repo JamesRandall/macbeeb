@@ -7,9 +7,9 @@
 \ flight for 20 seconds goes back in the queue for someone else; a late
 \ RESULT from an old assignment (epoch) isn't drawn. When the image is
 \ complete it tells the workers, and keeps the picture until a key's
-\ pressed: then a summary, and back to BASIC. While it draws, it looks
-\ for bootstraps that have appeared since CLUSTER (a worker switched on
-\ part way), one station a second, and STARTs them to join in.
+\ pressed: then a summary, and back to BASIC. While it draws, a worker
+\ that's stopped answering and is found at BASIC again (switched off and
+\ on) is started again by remote control, to join in.
 \
 \ MANDEL: &3000 up, below MODE 5's screen at &5800. MANDEL2: from PAGE
 \ (&1B00 on a Model B with DNFS) to MODE 2's screen at &3000, 5K: so it
@@ -41,7 +41,7 @@ TIMEOUT = 2000              \ centiseconds a tile may be out
 tsp = &80 : tep = &82 : scr = &84 : smp = &86 : tid = &88
 
 P_REGISTER = 0 : P_RENDER = 1 : P_DONE = 2
-W_FREE = 0 : W_REGISTERED = 1 : W_IDLE = 2 : W_BUSY = 3 : W_UNRESPONSIVE = 4
+W_FREE = 0 : W_REGISTERED = 1 : W_IDLE = 2 : W_BUSY = 3 : W_UNRESPONSIVE = 4 : W_STARTING = 5
 
 .mandel
     JSR getstn
@@ -100,7 +100,6 @@ ENDIF
     STX index
     JSR open
     DEX : BPL mandel4
-    JSR openlauncher
     LDA #1 : STA candidate
     JSR now
     LDA clk : STA started : STA lastreg
@@ -158,58 +157,30 @@ ENDIF
 .tomain
     JMP main
 
-\ Joining part way: every second, DISCOVER to the next candidate
-\ station that isn't working for us (the run's ID is the nonce), and
-\ START a bootstrap that answers.
+\ Joining again: every second, the next worker that's stopped answering
+\ (switched off, say). If nothing's listening for DISCOVER there, it isn't
+\ running WORKER: if there's a BBC (at BASIC, as one switched on again
+\ is), start it by remote control (remote.asm). It's left alone while it
+\ starts, until it says HELLO.
 .recruit
-    LDX lblk : BNE recruit00
-    JSR openlauncher : JMP recruit2
-.recruit00
-    JSR pollrx : BPL recruit2
-    LDX lblk : JSR readrx
-    LDA #LO(lbuf) : STA ptr : LDA #HI(lbuf) : STA ptr+1
-    JSR check : BCS recruit1
-    CMP #T_BOOT_HELLO : BNE recruit1
-    LDA plen : CMP #8 : BNE recruit1
-    LDA lbuf+HEADER+5 : CMP #1 : BNE recruit1
-    LDX #3
-.recruit0
-    LDA lbuf+HEADER,X : CMP runid,X : BNE recruit1
-    DEX : BPL recruit0
-    \ START nonce target coordinator
-    JSR txptr
-    JSR runnonce
-    LDA rxstn : STA txm+HEADER+4
-    LDA mystn : STA txm+HEADER+5
-    LDA #6 : STA plen
-    LDA #T_START : JSR mhdr
-    LDA rxstn : LDX #PORT_MGMT : JSR send
-.recruit1
-    JSR openlauncher
-.recruit2
     JSR now
     LDA #LO(probed) : STA tm : LDA #HI(probed) : STA tm+1
     JSR elapsed
     LDA el+1 : BNE recruit3
-    LDA el : CMP #100 : BCC recruit9
+    LDA el : CMP #100 : BCS recruit3
+    RTS
 .recruit3
     LDA clk : STA probed : LDA clk+1 : STA probed+1
-    \ The next candidate: not us, a server or a worker we have.
     LDY #16
 .recruit4
     INC candidate : LDA candidate : CMP #17 : BCC recruit5
     LDA #1 : STA candidate
 .recruit5
     DEY : BEQ recruit9
-    LDA candidate
-    CMP mystn : BEQ recruit4
-    CMP fsstn : BEQ recruit4
-    CMP psstn : BEQ recruit4
-    STA rxstn : STY index
+    LDA candidate : STA rxstn : STY index
     JSR find : LDY index
-    LDX slot : BMI recruit6
+    LDX slot : BMI recruit4
     LDA wstate,X : CMP #W_UNRESPONSIVE : BNE recruit4
-.recruit6
     \ DISCOVER nonce target launcher
     JSR txptr
     JSR runnonce
@@ -217,7 +188,16 @@ ENDIF
     LDA mystn : STA txm+HEADER+5
     LDA #6 : STA plen
     LDA #T_DISCOVER : JSR mhdr
-    LDA candidate : LDX #PORT_MGMT : JSR send
+    LDA candidate : LDX #PORT_MGMT : JSR send : BEQ recruit9
+    LDA candidate : JSR present : BNE recruit9
+    LDA mystn : STA rhand : STA rhand+5
+    LDX #3
+.recruit6
+    LDA runid,X : STA rhand+1,X
+    DEX : BPL recruit6
+    LDA #'W' : STA rhand+6
+    LDA candidate : JSR remote : BNE recruit9
+    LDX slot : LDA #W_STARTING : STA wstate,X
 .recruit9
     RTS
 
@@ -228,10 +208,6 @@ ENDIF
     DEX : BPL runnonce1
     RTS
 
-.openlauncher
-    LDA #LO(lbuf) : STA ptr : LDA #HI(lbuf) : STA ptr+1
-    LDA #PORT_LAUNCHER : JSR openrx : STA lblk
-    RTS
 
 \ Opens receive block index.
 .open
@@ -692,7 +668,6 @@ ENDIF
 .summary1
     STX index : LDA blks,X : TAX : JSR delrx
     LDX index : DEX : BPL summary1
-    LDX lblk : JSR delrx
 IF SCREEN_MODE = 2
     LDA #&40 : STA &FE22            \ VideoNuLA's standard colours again
 ENDIF
@@ -803,7 +778,6 @@ ENDIF
 .frames EQUB 0
 .shift  EQUB 0
 .blks   SKIP BLOCKS
-.lblk   EQUB 0
 .candidate EQUB 0
 .probed EQUW 0
 .wstn   SKIP NW
@@ -825,9 +799,9 @@ ENDIF
 .tstate SKIP TILES
 .tepoch SKIP TILES
 .rxbufs SKIP BLOCKS * FRAME
-.lbuf   SKIP FRAME
 
 INCLUDE "lib.asm"
+INCLUDE "remote.asm"
 IF SCREEN_MODE = 5
     SAVE "MANDEL", MANDEL_ORG, P%, MANDEL_ORG
 ELSE

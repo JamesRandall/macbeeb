@@ -53,14 +53,18 @@ Network…**, then **Distributed Mandelbrot**:
 - a **Guide** (station 1) whose screen says what to do;
 - a Level 2 file server (254) with the programs.
 
-When the file server's ready, each worker logs on as BOOT, and the server
-has it run BOOT's `!BOOT`, which loads the bootstrap, WBOOT. It shows
-*Waiting for \*CLUSTER*. The Guide logs on as GUEST.
+The workers are only switched on: each sits at BASIC with nothing loaded.
+The Guide logs on to the file server as GUEST.
 
 On the Guide, type:
 
-1. `*CLUSTER`. It finds the waiting workers over Econet and asks each to
-   start. Each loads WORKER from the file server and says it's running.
+1. `*CLUSTER`. It takes the workers over by **remote control**. For each
+   BBC it finds, it uses Econet's own immediate operations, which the
+   network filing system answers whatever the BBC's doing: it POKEs a few
+   bytes of code into the BBC's memory, then JSRs to them. The code types
+   `*NET`, `*I AM GUEST` and `*WORKER` on that BBC, and you see them
+   appear on its screen. Each worker loads WORKER from the file server
+   and says it's running.
 2. `*MANDEL`. The Guide becomes the **coordinator**. It hands out the
    picture in 320 tiles of 16 × 8 pixels, and each worker works its tile
    out in its own 6502 and sends it back. The picture builds on the Guide's
@@ -70,17 +74,19 @@ On the Guide, type:
    took and what each worker did.
 
 Any BBC can be the coordinator: press Break on it, type `*NET` and
-`*I AM GUEST`, then `*CLUSTER` and `*MANDEL`. `*WORKERS` lists the workers, and `*STOPWK` sends
-them back to waiting.
+`*I AM GUEST`, then `*CLUSTER` and `*MANDEL`. `*WORKERS` lists the
+workers, and `*STOPWK` sends them back to BASIC.
 
 Things to try:
 - **Switch a worker off part way.** Its tile is given to another after 20
   seconds (emulated), and the picture still comes out right. Switch it back
-  on: it boots, MANDEL notices it waiting and starts it, and it joins in.
+  on: MANDEL finds it at BASIC, starts it again by remote control, and it
+  joins in.
 - **Pause one worker.** It stalls, and the others carry on.
 - **Pause the whole network.** Everything stops together.
-- Watch the **Traffic** view: every ASSIGN, RESULT and ACK is there,
-  decoded, beside the Econet frames that carried it.
+- Watch the **Traffic** view: the remote control's machine type, POKE and
+  JSR, then every ASSIGN, RESULT and ACK, decoded, beside the Econet
+  frames that carried them.
 
 Everything is real. Every pixel is worked out by an emulated BBC, and every
 message goes through Acorn's network software and the emulated Econet chip.
@@ -88,8 +94,7 @@ The programs are 6502 assembly in `Examples/distributed-mandelbrot`, with
 the protocol they speak.
 
 The programs are in the server's `$.LIBRARY`, so any station that's logged
-on can run them as `*` commands. The Studio only types each worker's log-on,
-`*NET` and `*I AM BOOT`, once; the rest is BOOT's boot option (3, Exec).
+on can run them as `*` commands.
 
 ### Mandelbrot in Colour
 

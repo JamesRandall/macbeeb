@@ -1,7 +1,7 @@
 \ WORKER: computes tiles of the Mandelbrot set for a coordinator (MANDEL),
-\ in Q8.8 fixed point, on this BBC's own 6502. WBOOT loads it from the
-\ file server when a launcher says START, and leaves it the coordinator's
-\ station. It registers (HELLO), asks for work (READY), computes what it's
+\ in Q8.8 fixed point, on this BBC's own 6502. A launcher (CLUSTER) or
+\ coordinator starts it by remote control (remote.asm): it pokes in the
+\ coordinator's station and has the BBC type *WORKER. It registers (HELLO), asks for work (READY), computes what it's
 \ given (ASSIGN), and sends the counts back (RESULT) until they're taken
 \ (ACK). Its screen says what it's doing.
 \
@@ -23,7 +23,7 @@ S_WAIT = 0 : S_HELLO = 1 : S_READY = 2 : S_COMPUTING = 3 : S_SENT = 4 : S_DONE =
 
 .worker
     LDA #LO(failed) : STA BRKV : LDA #HI(failed) : STA BRKV+1
-    \ From WBOOT: the coordinator, the launcher and its nonce.
+    \ From whoever started it: the coordinator, the launcher and its nonce.
     LDA #0 : STA coord : STA launcher
     LDA HANDOFF_MARK : CMP #'W' : BNE worker2
     LDA HANDOFF_COORD : STA coord
@@ -183,7 +183,7 @@ S_WAIT = 0 : S_HELLO = 1 : S_READY = 2 : S_COMPUTING = 3 : S_SENT = 4 : S_DONE =
     LDA #S_HELLO : JSR setstate
     JSR now : JMP duenow
 
-\ STOP: say so, and go back to the bootstrap.
+\ STOP: say so, and go back to BASIC.
 .stop
     LDA plen : CMP #4 : BEQ stop0
     RTS
@@ -193,7 +193,13 @@ S_WAIT = 0 : S_HELLO = 1 : S_READY = 2 : S_COMPUTING = 3 : S_SENT = 4 : S_DONE =
     LDA #3 : JSR status
     LDX mblk : JSR delrx
     LDX cblk : JSR delrx
-    LDX #LO(wboot) : LDY #HI(wboot) : JMP OSCLI
+    LDX #0 : LDY #22 : JSR tab
+    LDA #131 : JSR OSWRCH
+    JSR pstr : EQUS "Stopped by *STOPWK: back to BASIC.", 13, 0
+    VDUS 10 : EQUB 23, 1, 1, 0, 0, 0, 0, 0, 0, 0
+    \ BASIC, entered again as a language (its program's kept).
+    LDA #&BB : LDX #0 : LDY #&FF : JSR OSBYTE
+    LDA #&8E : JMP OSBYTE
 
 .takenonce
     LDX #3
@@ -523,7 +529,6 @@ S_WAIT = 0 : S_HELLO = 1 : S_READY = 2 : S_COMPUTING = 3 : S_SENT = 4 : S_DONE =
     DEX : BPL showiterations1
     JMP pdec32
 
-.wboot  EQUS "WBOOT", 13
 .coord  EQUB 0
 .launcher EQUB 0
 .nonce  EQUD 0

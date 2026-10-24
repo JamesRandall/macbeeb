@@ -1,10 +1,11 @@
 import BeebCore
 import Foundation
 
-/// The Distributed Mandelbrot network: eight workers that boot from a
-/// Level 2 file server into WBOOT, and a Guide machine whose screen says
-/// what to do. The programs (MandelbrotGuest) are in the server's library,
-/// so any station that's logged on can *CLUSTER and *MANDEL.
+/// The Distributed Mandelbrot network: eight workers, BBCs at BASIC, that
+/// *CLUSTER takes over by remote control, a Guide machine whose screen says
+/// what to do, and a Level 2 file server. The programs (MandelbrotGuest)
+/// are in the server's library, so any station that's logged on can
+/// *CLUSTER and *MANDEL.
 public enum MandelbrotNetwork {
     /// The stations the workers have.
     public static let workers = 2...9
@@ -26,9 +27,9 @@ public enum MandelbrotNetwork {
                                   with: #"150 PRINT C$;"Workers work out 16 x 8 tiles; this""#)
             .replacingOccurrences(of: #"160 PRINT C$;"its own 6502 and sends them back.""#,
                                   with: #"160 PRINT C$;"BBC's VideoNuLA gives them 16 colours.""#)
-            .replacingOccurrences(of: #"210 PRINT C$;"A key ends MANDEL's picture. On another""#,
+            .replacingOccurrences(of: #"210 PRINT C$;"A key ends MANDEL's picture. On other""#,
                                   with: #"210 PRINT C$;"Then the colours cycle; a key ends it.""#)
-            .replacingOccurrences(of: #"220 PRINT C$;"BBC, first type *NET and *I AM GUEST.""#,
+            .replacingOccurrences(of: #"220 PRINT C$;"BBCs, first *NET and *I AM GUEST.""#,
                                   with: #"220 PRINT C$;"Elsewhere: *NET, then *I AM GUEST.""#)
             .replacingOccurrences(of: "  DISTRIBUTED MANDELBROT", with: " MANDELBROT IN COLOUR")
     }
@@ -39,10 +40,10 @@ public enum MandelbrotNetwork {
     30 Y$=CHR$131:C$=CHR$134:G$=CHR$130:W$=CHR$135
     40 FOR I%=1 TO 2:PRINT CHR$132;CHR$157;CHR$141;Y$;"  DISTRIBUTED MANDELBROT":NEXT
     50 PRINT
-    60 PRINT C$;"Eight BBC Micros on this network are"
-    70 PRINT C$;"waiting to draw the Mandelbrot set:"
-    80 PRINT C$;"each logged on as BOOT, and the file"
-    90 PRINT C$;"server ran its !BOOT: WBOOT listens."
+    60 PRINT C$;"Eight BBC Micros on this network sit"
+    70 PRINT C$;"at BASIC. *CLUSTER takes each over by"
+    80 PRINT C$;"remote control: POKEs code in over"
+    90 PRINT C$;"Econet and JSRs it, to type *WORKER."
     100 PRINT
     110 PRINT Y$;"Here (or on any BBC), type:"
     120 PRINT G$;"*CLUSTER";W$;" start the workers"
@@ -54,8 +55,8 @@ public enum MandelbrotNetwork {
     180 PRINT W$;"     way: its tile goes to another."
     190 PRINT G$;"*WORKERS";W$;" list them  ";G$;"*STOPWK";W$;" stop"
     200 PRINT Y$;"On the Mac:";W$;"Mandelbrot view, Traffic."
-    210 PRINT C$;"A key ends MANDEL's picture. On another"
-    220 PRINT C$;"BBC, first type *NET and *I AM GUEST."
+    210 PRINT C$;"A key ends MANDEL's picture. On other"
+    220 PRINT C$;"BBCs, first *NET and *I AM GUEST."
     230 PRINT
     240 PRINT CHR$132;CHR$157;W$;"This is station 1. Workers: 2 to 9  ";CHR$156
     250 *NET
@@ -65,22 +66,16 @@ public enum MandelbrotNetwork {
     290 VDU 23,1,1;0;0;0;
     """
 
-    /// What the BOOT user's boot file says: load the bootstrap.
-    public static let bootFile = "*WBOOT\r"
-
     /// The file server's disc, Level 2's:
-    /// - BOOT, whose !BOOT the server has a worker run when it logs on (boot option 3);
-    /// - GUEST, for the Guide and anyone else, with the guide programs;
+    /// - GUEST, for the Guide, the workers and anyone else, with the guide programs;
     /// - the programs in $.LIBRARY, the library everyone's given.
     public static func fileServerDisc(date: Level2FileServerDisc.Date = .today) throws -> Level2FileServerDisc {
-        var disc = try Level2FileServerDisc(name: "MANDELBROT", users: ["BOOT", "GUEST"], date: date)
+        var disc = try Level2FileServerDisc(name: "MANDELBROT", users: ["GUEST"], date: date)
         try disc.createDirectory("$.LIBRARY", date: date)
         for file in MandelbrotGuest.files {
             try disc.save("$.LIBRARY.\(file.name)", loadAddress: 0xFFFF_0000 | file.loadAddress,
                           executionAddress: 0xFFFF_0000 | file.executionAddress, contents: file.contents, access: .shared, date: date)
         }
-        try disc.setBootOption(.exec, for: "BOOT")
-        try disc.save("$.BOOT.!BOOT", contents: Array(bootFile.utf8), access: .shared, date: date)
         try disc.save("$.GUEST.GUIDE", loadAddress: 0xFFFF_1900, executionAddress: 0xFFFF_8023,
                       contents: BBCBasic.tokenise(guide(for: .mode5)), access: .shared, date: date)
         try disc.save("$.GUEST.GUIDE2", loadAddress: 0xFFFF_1900, executionAddress: 0xFFFF_8023,

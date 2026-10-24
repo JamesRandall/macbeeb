@@ -14,7 +14,7 @@ struct MandelbrotGuestTests {
     static let beebasm = BeebAsm.locate(ProcessInfo.processInfo.environment["MACBEEB_BEEBASM"])
     static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         .deletingLastPathComponent()
-    static let sources = ["wboot", "worker", "cluster", "workers", "stopwk", "mandel", "mandel2"]
+    static let sources = ["worker", "cluster", "workers", "stopwk", "mandel", "mandel2"]
 
     /// Assembles the sources: each program's name, addresses and bytes.
     static func assemble() throws -> [MandelbrotGuest.File] {

@@ -20,7 +20,7 @@ public enum MandelbrotProtocol {
         case worker = 0xB1
         /// CLUSTER and the other launchers: BOOT_HELLO, START_ACK, LAUNCH_ERROR, STATUS.
         case launcher = 0xB2
-        /// WBOOT, or a running worker's management: DISCOVER, START, STOP.
+        /// A running worker's management: DISCOVER, START, STOP.
         case bootstrap = 0xB3
 
         public var name: String {
@@ -28,7 +28,7 @@ public enum MandelbrotProtocol {
             case .coordinator: "Mandelbrot coordinator"
             case .worker: "Mandelbrot worker"
             case .launcher: "Mandelbrot launcher"
-            case .bootstrap: "Mandelbrot bootstrap"
+            case .bootstrap: "Mandelbrot management"
             }
         }
     }

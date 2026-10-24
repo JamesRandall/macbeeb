@@ -1,6 +1,6 @@
 // The Distributed Mandelbrot demo, run as its guide says: a Level 2 file
-// server with the programs, workers whose !BOOT it runs (WBOOT), and a coordinator
-// typing *CLUSTER and *MANDEL. Everything between the machines goes over
+// server with the programs, workers at BASIC, and a coordinator typing
+// *CLUSTER (which takes the workers over by remote control) and *MANDEL. Everything between the machines goes over
 // the emulated Econet through Acorn's NFS; the picture on the
 // coordinator's screen is checked against the reference, pixel by pixel.
 
@@ -14,12 +14,6 @@ extension EconetRig {
     /// Starts Level 2 on machine `index` with the Mandelbrot server disc.
     func startMandelbrotServer(_ index: Int) throws {
         try startLevel2FileServer(index, disc: MandelbrotNetwork.fileServerDisc(date: Self.level2Date))
-    }
-
-    /// Boots machine `index` from the network as the Studio does: logs on
-    /// as BOOT, and the server has it run BOOT's !BOOT.
-    func bootFromNetwork(_ index: Int) {
-        type(index, "*NET\n*I AM BOOT\n")
     }
 
     /// Logs machine `index` on as GUEST, as the guide says to.
@@ -59,22 +53,23 @@ struct MandelbrotNetworkTests {
     static let picture = MandelbrotReference.image().map { UInt8(MandelbrotReference.colour(Int($0), max: 64)) }
 
     /// Launch, render, launch again, list and stop, from the Guide (station
-    /// 1): workers on 2 and 3, and station 4 at BASIC, not prepared.
+    /// 1): BBCs at BASIC on 2 and 3, taken over by remote control, and
+    /// nothing on 4 and up.
     @Test func launchRenderAndStop() throws {
-        let rig = EconetRig([(.modelB, 254), (.modelB, 1), (.modelB, 2), (.modelB, 3), (.modelB, 4)])
+        let rig = EconetRig([(.modelB, 254), (.modelB, 1), (.modelB, 2), (.modelB, 3)])
         try rig.startMandelbrotServer(0)
         rig.machines[1].insertDisc(try Disc.fromImage(MandelbrotNetwork.guideDisc(), format: .ssd), drive: 0)
         rig.machines[1].shiftBreak()
-        for worker in [2, 3] { rig.bootFromNetwork(worker) }
-        #expect(rig.run(until: { [2, 3].allSatisfy { rig.screen($0).contains("Waiting for *CLUSTER") } }), "\(rig.screen(2))")
+        rig.run(seconds: 3)
         #expect(rig.screen(1).contains("DISTRIBUTED MANDELBROT") && rig.screen(1).contains("*CLUSTER"), "\(rig.screen(1))")
+        #expect([2, 3].allSatisfy { rig.lastLines($0, 1) == ">" }, "\(rig.screen(2))")
 
         rig.type(1, "*CLUSTER\n")
         #expect(rig.run(until: { rig.screen(1).contains("failed.") }, seconds: 60), "\(rig.screen(1))")
         let launched = rig.screen(1).replacingOccurrences(of: "\n", with: "")
-        #expect(launched.contains("02   BOOTSTRAP READY -> START  -> RUNNING"), "\(rig.screen(1))")
-        #expect(launched.contains("03   BOOTSTRAP READY -> START  -> RUNNING"), "\(rig.screen(1))")
-        #expect(launched.contains("Not prepared: 04 05"), "\(rig.screen(1))")
+        #expect(launched.contains("02   AT BASIC -> POKE+JSR  -> RUNNING"), "\(rig.screen(1))")
+        #expect(launched.contains("03   AT BASIC -> POKE+JSR  -> RUNNING"), "\(rig.screen(1))")
+        #expect(launched.contains("No BBC at: 04 05"), "\(rig.screen(1))")
         #expect(launched.contains("2 workers started. 0 failed."), "\(rig.screen(1))")
         #expect(rig.screen(2).contains("MANDELBROT WORKER") && rig.screen(2).contains("registering"), "\(rig.screen(2))")
 
@@ -96,23 +91,24 @@ struct MandelbrotNetworkTests {
         #expect(rig.screen(1).components(separatedBy: "WORKER ALREADY RUNNING").count == 3, "\(rig.screen(1))")
         #expect(rig.screen(1).contains("0 workers started. 0 failed.") && rig.screen(1).contains("2 already running."))
         rig.type(1, "*WORKERS\n")
-        #expect(rig.run(until: { rig.screen(1).contains("2 running, 0 waiting.") }, seconds: 60), "\(rig.screen(1))")
+        #expect(rig.run(until: { rig.screen(1).contains("2 running, 0 at BASIC.") }, seconds: 60), "\(rig.screen(1))")
 
-        // Stopped: back to their bootstraps, from the file server.
+        // Stopped: back to BASIC, where *WORKERS sees them, and *CLUSTER
+        // could take them over again.
         rig.type(1, "*STOPWK\n")
         #expect(rig.run(until: { rig.screen(1).contains("2 stopped.") }, seconds: 60), "\(rig.screen(1))")
-        #expect(rig.run(until: { [2, 3].allSatisfy { rig.screen($0).contains("Worker bootstrap (WBOOT)") } }),
+        #expect(rig.run(until: { [2, 3].allSatisfy { rig.screen($0).contains("back to BASIC") && rig.lastLines($0, 1) == ">" } }),
                 "\(rig.screen(2))")
+        rig.type(1, "CLS\n*WORKERS\n")
+        #expect(rig.run(until: { rig.screen(1).contains("0 running, 2 at BASIC.") }, seconds: 60), "\(rig.screen(1))")
     }
 
     /// A worker switched off part way: its tile goes to the other after
-    /// the timeout. Switched on again and booted, MANDEL starts it and it
-    /// joins in. The picture's still right.
+    /// the timeout. Switched on again, MANDEL starts it by remote control
+    /// and it joins in. The picture's still right.
     @Test func workerLostAndJoining() throws {
         let rig = EconetRig([(.modelB, 254), (.modelB, 1), (.modelB, 2), (.modelB, 3)])
         try rig.startMandelbrotServer(0)
-        for worker in [2, 3] { rig.bootFromNetwork(worker) }
-        #expect(rig.run(until: { [2, 3].allSatisfy { rig.screen($0).contains("Waiting for *CLUSTER") } }))
         rig.logOnAsGuest(1)
         rig.type(1, "*CLUSTER\n")
         #expect(rig.run(until: { rig.screen(1).contains("2 workers started.") }, seconds: 60), "\(rig.screen(1))")
@@ -120,9 +116,8 @@ struct MandelbrotNetworkTests {
         #expect(rig.run(until: { rig.tilesDone(3) >= 20 }, seconds: 90), "\(rig.screen(3))")
         rig.powerOff(3)
         rig.run(seconds: 2)
+        // Back on, at BASIC: MANDEL finds it there and starts it again.
         rig.powerOn(3)
-        rig.run(seconds: 1.5)
-        rig.bootFromNetwork(3)
         #expect(rig.run(until: { rig.screen(2).contains("run complete") }, seconds: 150), "\(rig.screen(2))")
         #expect(rig.mode5Colours(1) == Self.picture)
         // The new one was recruited and did some.
@@ -143,8 +138,6 @@ struct MandelbrotInColourTests {
         rig.machines[1].shiftBreak()
         rig.run(seconds: 3)
         try rig.startMandelbrotServer(0)
-        for worker in [2, 3] { rig.bootFromNetwork(worker) }
-        #expect(rig.run(until: { [2, 3].allSatisfy { rig.screen($0).contains("Waiting for *CLUSTER") } }))
         #expect(rig.screen(1).contains("MANDELBROT IN COLOUR") && rig.screen(1).contains("*MANDEL2"), "\(rig.screen(1))")
         rig.type(1, "*CLUSTER\n")
         #expect(rig.run(until: { rig.screen(1).contains("2 workers started.") }, seconds: 60), "\(rig.screen(1))")
@@ -182,8 +175,6 @@ struct MandelbrotBenchmark {
         let stations = Array(2..<(2 + workers))
         let rig = EconetRig([(.modelB, 254), (.modelB, 1)] + stations.map { (.modelB, $0) })
         try rig.startMandelbrotServer(0)
-        for index in 2..<(2 + workers) { rig.bootFromNetwork(index) }
-        rig.run(until: { (2..<(2 + workers)).allSatisfy { rig.screen($0).contains("Waiting for *CLUSTER") } }, seconds: 60)
         rig.logOnAsGuest(1)
         rig.type(1, "*CLUSTER\n")
         rig.run(until: { rig.screen(1).contains("failed.") }, seconds: 120)

@@ -1,12 +1,14 @@
 \ The launcher: CLUSTER, WORKERS and STOPWK are this, assembled three ways
 \ (TOOL, which cluster.asm, workers.asm and stopwk.asm set).
 \ Each asks every candidate station (1-16, not this one or the servers)
-\ what it is (DISCOVER), over Econet, then:
-\   CLUSTER (TOOL 0): STARTs each waiting bootstrap, which loads WORKER
-\     from the file server to work for this station, and waits to hear
-\     it's running. A worker running already is adopted.
+\ whether it's a worker (DISCOVER), over Econet, and if not, whether
+\ there's a BBC there at all (machine type, an immediate operation), then:
+\   CLUSTER (TOOL 0): takes over each BBC at BASIC by remote control
+\     (remote.asm: POKE and JSR), so it loads WORKER from the file server
+\     to work for this station, and waits to hear it's running. A worker
+\     running already is adopted.
 \   WORKERS (TOOL 1): lists what's there.
-\   STOPWK (TOOL 2): STOPs each worker (back to its bootstrap).
+\   STOPWK (TOOL 2): STOPs each worker (back to BASIC).
 \ Then returns to BASIC.
 
 INCLUDE "common.asm"
@@ -40,7 +42,7 @@ ELSE
     JSR pstr : EQUS "STOPPING MANDELBROT WORKERS", 13, 0
 ENDIF
     JSR colour7
-    JSR pstr : EQUS "Probing for bootstraps...", 13, 0
+    JSR pstr : EQUS "Probing stations 1 to 16...", 13, 0
     LDA #LO(rx1) : STA ptr : LDA #HI(rx1) : STA ptr+1
     LDA #PORT_LAUNCHER : JSR openrx : STA blk1
     LDA #LO(rx2) : STA ptr : LDA #HI(rx2) : STA ptr+1
@@ -53,7 +55,7 @@ ENDIF
     CMP mystn : BEQ next
     CMP fsstn : BEQ next
     CMP psstn : BEQ next
-    \ DISCOVER: are you a bootstrap or a worker?
+    \ DISCOVER: are you a worker?
     LDA #LO(txm) : STA ptr : LDA #HI(txm) : STA ptr+1
     JSR putnonce
     LDA target : STA txm+HEADER+4
@@ -61,13 +63,11 @@ ENDIF
     LDA #6 : STA plen
     LDA #T_DISCOVER : JSR mhdr
     JSR sendmgmt
-    BNE notprepared
+    BNE quiet
     LDA #T_BOOT_HELLO : LDX #100 : JSR await
     BCS notprepared
-    LDA reply+5 : STA tstate
-    JSR colour3
-    LDA target : JSR pstn
-    LDA #' ' : JSR OSWRCH : JSR OSWRCH
+    LDA reply+5 : CMP #2 : BNE notprepared
+    JSR stationline
 IF TOOL = 0
     JSR launch
 ELIF TOOL = 1
@@ -76,15 +76,29 @@ ELSE
     JSR stop
 ENDIF
     JMP next
+\ Nothing listening for workers: a BBC at BASIC, or none.
+.quiet
+    LDA target : JSR present : BNE notprepared
+    JSR stationline
+IF TOOL = 0
+    JSR launchremote
+ELSE
+    JSR colour6
+    JSR pstr : EQUS "AT BASIC", 13, 0
+    INC already
+ENDIF
+    JMP next
 .notprepared
     LDX unprepared : LDA target : STA unpreparedlist,X : INC unprepared
 .next
-    INC target : LDA target : CMP #LAST+1 : BNE probe
+    INC target : LDA target : CMP #LAST+1 : BEQ probedone
+    JMP probe
+.probedone
 
     \ The summary.
     LDA unprepared : BEQ summary2
     JSR colour6
-    JSR pstr : EQUS "Not prepared:", 0
+    JSR pstr : EQUS "No BBC at:", 0
     LDX #0
 .summary1
     STX index
@@ -109,7 +123,7 @@ ELIF TOOL = 1
     LDA started : JSR pdec8
     JSR pstr : EQUS " running, ", 0
     LDA already : JSR pdec8
-    JSR pstr : EQUS " waiting.", 13, 0
+    JSR pstr : EQUS " at BASIC.", 13, 0
 ELSE
     LDA started : JSR pdec8
     JSR pstr : EQUS " stopped.", 13, 0
@@ -117,6 +131,12 @@ ENDIF
     LDX blk1 : JSR delrx
     LDX blk2 : JSR delrx
     RTS
+
+\ The start of a station's line in the list.
+.stationline
+    JSR colour3
+    LDA target : JSR pstn
+    LDA #' ' : JSR OSWRCH : JMP OSWRCH
 
 \ Sends the message at ptr to target's management port: Z set if it
 \ went. Three tries, a few centiseconds apart: a station that's sending
@@ -135,33 +155,33 @@ ENDIF
     RTS
 
 IF TOOL = 0
-\ Starts the bootstrap at target (or adopts its worker).
+\ Adopts the worker running at target: it takes this station as its
+\ coordinator, and says so.
 .launch
-    LDA tstate : CMP #2 : BNE launch1
     JSR colour2
     JSR pstr : EQUS "WORKER ALREADY RUNNING", 13, 0
     INC already
-    \ It takes this station as its coordinator, and says so.
     JSR sendstart : BCS launch0
     LDA #T_STATUS : LDX #200 : JSR await
 .launch0
     RTS
-.launch1
+
+\ Takes over the BBC at target, at BASIC, by remote control: it loads
+\ WORKER from the file server, which says when it's running.
+.launchremote
     JSR colour6
-    JSR pstr : EQUS "BOOTSTRAP READY -> START", 0
-    JSR sendstart
-    BCS launch9
-    LDA reply+4 : BNE launch8     \ (adopted after all)
-    \ WORKER's loading from the file server: wait for it to say so.
+    JSR pstr : EQUS "AT BASIC -> POKE+JSR", 0
+    LDA mystn : STA rhand : STA rhand+5
+    LDX #3
+.launchremote1
+    LDA nonce,X : STA rhand+1,X
+    DEX : BPL launchremote1
+    LDA #'W' : STA rhand+6
+    LDA target : JSR remote : BNE launch7
     LDA #T_STATUS : LDX #0 : JSR await
     BCS launch7
-    LDA type : CMP #T_LAUNCH_ERROR : BNE launch6
-    JSR sendstart9
-    INC failures
-    RTS
-.launch6
+    LDA type : CMP #T_STATUS : BNE launch7
     LDA reply+4 : CMP #2 : BNE launch7
-.launch8
     JSR colour2
     JSR pstr : EQUS " -> RUNNING", 13, 0
     INC started
@@ -169,9 +189,6 @@ IF TOOL = 0
 .launch7
     JSR colour1
     JSR pstr : EQUS " -> NO ANSWER", 13, 0
-    INC failures
-    RTS
-.launch9
     INC failures
     RTS
 
@@ -211,25 +228,14 @@ ENDIF
 
 IF TOOL = 1
 .list
-    LDA tstate : CMP #2 : BNE list1
     JSR colour2
     JSR pstr : EQUS "WORKER RUNNING", 13, 0
     INC started
-    RTS
-.list1
-    JSR colour6
-    JSR pstr : EQUS "BOOTSTRAP WAITING", 13, 0
-    INC already
     RTS
 ENDIF
 
 IF TOOL = 2
 .stop
-    LDA tstate : CMP #2 : BEQ stop1
-    JSR colour6
-    JSR pstr : EQUS "BOOTSTRAP WAITING", 13, 0
-    RTS
-.stop1
     LDA #LO(txm) : STA ptr : LDA #HI(txm) : STA ptr+1
     JSR putnonce
     LDA #4 : STA plen
@@ -239,7 +245,7 @@ IF TOOL = 2
     LDA #T_STATUS : LDX #200 : JSR await
     BCS stop9
     JSR colour2
-    JSR pstr : EQUS "STOPPED: BACK TO WBOOT", 13, 0
+    JSR pstr : EQUS "STOPPED: BACK TO BASIC", 13, 0
     INC started
     RTS
 .stop9
@@ -329,7 +335,6 @@ ENDIF
 .nonce  EQUD 0
 .target EQUB 0
 .attempts EQUB 0
-.tstate EQUB 0
 .blk1   EQUB 0
 .blk2   EQUB 0
 .wanted EQUB 0
@@ -349,6 +354,7 @@ ENDIF
 .txm    SKIP 32
 
 INCLUDE "lib.asm"
+INCLUDE "remote.asm"
 IF TOOL = 0
     SAVE "CLUSTER", TOOL_ORG, P%, TOOL_ORG
 ELIF TOOL = 1

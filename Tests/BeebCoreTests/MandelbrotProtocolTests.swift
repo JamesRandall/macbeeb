@@ -116,7 +116,7 @@ struct MandelbrotProtocolTests {
 
     @Test func portsAreNamed() {
         #expect(MandelbrotProtocol.portName(0xB0) == "Mandelbrot coordinator")
-        #expect(MandelbrotProtocol.portName(0xB3) == "Mandelbrot bootstrap")
+        #expect(MandelbrotProtocol.portName(0xB3) == "Mandelbrot management")
         #expect(MandelbrotProtocol.portName(0x99) == nil)
     }
 

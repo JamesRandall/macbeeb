@@ -162,15 +162,16 @@ struct DemoTemplateTests {
     }
 
     /// The Distributed Mandelbrot: a Guide that boots its disc, eight
-    /// workers that boot from the network, and a Level 2 file server with
-    /// the programs in its library and BOOT's !BOOT.
+    /// workers that only switch on (*CLUSTER takes them over), and a Level 2
+    /// file server with the programs in its library.
     @Test func mandelbrotNetworkHasItsDiscs() throws {
         let url = temporaryPackage()
         defer { try? FileManager.default.removeItem(at: url) }
         let project = try NetworkPackage.create(.distributedMandelbrot, at: url)
         #expect(try NetworkPackage.load(from: url) == project)
-        let workers = project.nodes.filter { $0.bootsNetwork == true }
+        let workers = project.nodes.filter { $0.kind == .station && $0.bootsDisc != true }
         #expect(workers.compactMap(\.stationNumber) == Array(MandelbrotNetwork.workers))
+        #expect(workers.allSatisfy { $0.bootsNetwork != true && $0.discs.isEmpty })
         let guide = try #require(project.nodes.first { $0.bootsDisc == true })
         #expect(guide.stationNumber == 1)
         let server = try #require(project.nodes.first { $0.kind == .fileServer })
@@ -179,8 +180,7 @@ struct DemoTemplateTests {
         #expect(Set(try DiscVolume(disc: guideDisc).items(at: .init()).map(\.name)) == ["GUIDE", "!BOOT"])
         let disc = try Level2FileServerDisc(image: [UInt8](Data(contentsOf: NetworkPackage.url(of: #require(server.discs[0]), in: url))))
         #expect(Set(try disc.entries(in: "$.LIBRARY").map(\.name)) == Set(MandelbrotGuest.files.map(\.name)))
-        #expect(try disc.contents(of: "$.BOOT.!BOOT") == Array("*WBOOT\r".utf8))
-        #expect(disc.users.first { $0.name == "BOOT" }?.bootOption == .exec)
+        #expect(disc.users.map(\.name) == ["SYST", "GUEST"])
         #expect(try disc.entries(in: "$.GUEST").map(\.name) == ["GUIDE", "GUIDE2"])
     }
 }

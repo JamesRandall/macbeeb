@@ -158,11 +158,13 @@ enum NetworkSelfTest {
         }
         Task { @MainActor in
             var report = ""
-            let workers = stations.filter { $0.bootsNetwork == true }.map(\.name)
+            let workers = stations.filter { $0.bootsDisc != true }.map(\.name)
             let booted = await waitFor(120) { screens in
-                screens.filter { workers.contains($0.0) }.allSatisfy { $0.1.contains("Waiting for *CLUSTER") }
+                screens.filter { workers.contains($0.0) }.allSatisfy { $0.1.contains("BASIC") }
             }
-            report += "Workers booted from the network: \(booted)\n"
+            // (And the Guide logged on, once the server's up.)
+            try? await Task.sleep(for: .seconds(15))
+            report += "Workers at BASIC: \(booted)\n"
             guard let guide = stations.first(where: { $0.bootsDisc == true }), let controller = session.controllers[guide.id] else { return }
             controller.host.send(.type("*CLUSTER\n"))
             let launched = await waitFor(90) { $0.first { $0.0 == guide.name }?.1.contains("failed.") == true }
@@ -180,7 +182,7 @@ enum NetworkSelfTest {
             // The Focus view: the Guide large, the rest down the side, a
             // worker selected (for the inspector).
             session.update { $0.workspace.focus = guide.id }
-            session.selection = stations.first { $0.bootsNetwork == true }.map { [$0.id] } ?? []
+            session.selection = stations.first { $0.bootsDisc != true }.map { [$0.id] } ?? []
             let focus = window(.focus)
             try? await Task.sleep(for: .seconds(2))
             capture(focus, to: path.replacingOccurrences(of: ".png", with: "-focus.png"))

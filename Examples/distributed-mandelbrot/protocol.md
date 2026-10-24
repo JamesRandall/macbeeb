@@ -10,8 +10,9 @@ byte for byte. Change it only with a new protocol version.
 | --- | --- | --- |
 | &B0 | the coordinator (`MANDEL`) | HELLO, READY, RESULT |
 | &B1 | a worker (`WORKER`) | WELCOME, ASSIGN, ACK, COMPLETE |
-| &B2 | the launcher (`CLUSTER`, `WORKERS`, `STOPWORK`) | BOOT_HELLO, START_ACK, LAUNCH_ERROR, STATUS |
-| &B3 | a bootstrap (`WBOOT`) or worker (management) | DISCOVER, START, STOP |
+| &B2 | the launcher (`CLUSTER`, `WORKERS`, `STOPWK`) | BOOT_HELLO, START_ACK, STATUS |
+| &B3 | a worker (management) | DISCOVER, START, STOP |
+| 0 | NFS itself: immediate operations | machine type, POKE, JSR (the remote start: see README.md) |
 
 These are application choices, not Acorn-assigned ports. Frames go with
 OSWORD &10 using control byte &80. Receivers use OSWORD &11 blocks that
@@ -48,12 +49,12 @@ A receiver ignores a frame unless:
 | 6 | ACK | tileId u16, epoch u16, status u8 (0 = accepted, also for a resend of the accepted epoch, whose first ACK was lost; 1 = duplicate, done by another assignment; 2 = stale epoch or not assigned to you). **5 bytes** |
 | 8 | COMPLETE | tiles u16 (320). **2 bytes** |
 | 11 | DISCOVER | nonce u32, target u8, launcher u8. **6 bytes** |
-| 12 | BOOT_HELLO | nonce u32, station u8, state u8 (1 = bootstrap waiting, 2 = worker running), bootstrap version u8 (1), worker version u8 (0 from a bootstrap, 1 from a worker). **8 bytes** |
+| 12 | BOOT_HELLO | nonce u32, station u8, state u8 (2 = worker running; 1 was a bootstrap waiting, which there isn't now), bootstrap version u8 (1), worker version u8 (1). **8 bytes** |
 | 13 | START | nonce u32, target u8, coordinator u8. **6 bytes** |
 | 14 | START_ACK | nonce u32, status u8 (0 = loading WORKER, 1 = already running: adopted the new coordinator). **5 bytes** |
 | 15 | LAUNCH_ERROR | nonce u32, error number u8, then the error message (ASCII, at most 40 bytes, no terminator). **5 + n bytes** |
 | 16 | STOP | nonce u32. **4 bytes** |
-| 17 | STATUS | nonce u32, state u8 (2 = running, 3 = stopping: returning to the bootstrap), worker version u8, coordinator u8. **7 bytes** |
+| 17 | STATUS | nonce u32, state u8 (2 = running, 3 = stopping: returning to BASIC), worker version u8, coordinator u8. **7 bytes** |
 
 Types 7 (PROGRESS), 9 (ERROR) and 10 (CANCEL) are reserved; v1 doesn't send them.
 
@@ -91,12 +92,12 @@ return max
 ## Exchanges
 
 - **Launch** (`CLUSTER` at station C):
-  1. C probes each candidate station 1–16, except itself, the file server and the printer server, with DISCOVER on &B3. Three transmit failures, a few centiseconds apart, mean "not prepared". (A station that's transmitting just then can't take a frame, and a worker calls its coordinator often.) START and STOP are tried the same way.
-  2. C waits up to 1s for BOOT_HELLO on &B2.
-  3. C sends START and waits up to 2s for START_ACK, then up to 30s for STATUS running. Or it gets LAUNCH_ERROR.
-  4. A bootstrap opens its receive block again before it answers DISCOVER, as START can follow straight away.
-  5. A bootstrap on START: it closes its block, then does `*WORKER`, which goes through NFS and the library. The coordinator and launcher stations, and the nonce, are left for WORKER at &70 (coordinator), &71–&74 (nonce), &75 (launcher) and &76 = &57 ('W', present).
-  6. A worker that gets START (it's running already) answers START_ACK 1, takes the new coordinator, sends STATUS and starts again with HELLO.
+  1. C probes each candidate station 1–16, except itself, the file server and the printer server, with DISCOVER on &B3. Three transmit failures, a few centiseconds apart, mean nothing's listening. (A station that's transmitting just then can't take a frame, and a worker calls its coordinator often.) START and STOP are tried the same way.
+  2. A worker that's running answers BOOT_HELLO (state 2) on &B2, within 1s. C sends it START, and waits up to 2s for START_ACK. The worker answers START_ACK 1, takes the new coordinator, sends STATUS and starts again with HELLO.
+  3. Where nothing's listening, C asks NFS there for the machine type (immediate operation &88). No answer: no BBC.
+  4. A BBC: C starts it by remote control. It POKEs (&82) the hand-off to &70: the coordinator (&70), C's nonce (&71–&74), C's station (&75) and &76 = &57 ('W', present). It POKEs a stub to &0A00 and JSRs (&83) it. The stub types `*NET`, `*I AM GUEST` and `*WORKER` on that BBC.
+  5. C waits up to 30s for STATUS running: WORKER sends it when it starts and finds the hand-off.
+- **Rejoining:** while drawing, the coordinator sends DISCOVER to one worker a second that it's marked unresponsive. If nothing's listening and there's a BBC there, it starts it as in step 4, with itself as launcher and the run's ID as the nonce, and leaves it alone until its HELLO.
 - **Render:**
   - Workers send HELLO to the coordinator every 1s until WELCOME.
   - The coordinator answers HELLO with WELCOME, and keeps it registered. A worker it knew that sends HELLO again has its tile, if any, put back in the queue.
@@ -114,4 +115,5 @@ return max
   - A worker that gets COMPLETE says so, and sends HELLO every 3s, so a new run of MANDEL can take it on.
   - A worker still waiting for a RESULT's ACK ignores COMPLETE: the ACK was lost, so it resends the RESULT as usual. The ACK says whether the tile was its own to count, and its READY then gets COMPLETE.
   - The coordinator keeps its image until a key is pressed, then shows a MODE 7 summary and returns to BASIC.
-- **Stop** (`STOPWORK`): STOP to each running worker. It answers STATUS 3 and does `*WBOOT` (back to waiting).
+- **Stop** (`STOPWK`): STOP to each running worker. It answers STATUS 3 and goes back to BASIC.
+- LAUNCH_ERROR (15) came from the bootstrap that's gone; nothing sends it now.
