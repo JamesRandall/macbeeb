@@ -59,7 +59,7 @@ struct NetworkStudioView: View {
     @Environment(\.openWindow) private var openWindow
 
     enum Mode: String, CaseIterable {
-        case canvas, tiles, traffic, mandelbrot
+        case canvas, tiles, focus, traffic, mandelbrot
     }
 
     init(session: NetworkSession, mode: Mode = .canvas) {
@@ -75,6 +75,8 @@ struct NetworkStudioView: View {
                     NetworkCanvas(session: session, openStation: openStation, openDebugger: openDebugger, openHardware: openHardware)
                 case .tiles:
                     NetworkTiles(session: session, openStation: openStation)
+                case .focus:
+                    NetworkFocus(session: session, openStation: openStation)
                 case .traffic:
                     NetworkTrafficView(session: session)
                 case .mandelbrot:
@@ -115,7 +117,7 @@ struct NetworkStudioView: View {
     /// with the keyboard, or the one machine selected on the canvas.
     private var commandTarget: MachineController? {
         switch mode {
-        case .tiles:
+        case .tiles, .focus:
             return session.focused.flatMap { session.controllers[$0] }
         case .canvas, .traffic, .mandelbrot:
             guard session.selection.count == 1, let id = session.selection.first else { return nil }
@@ -146,6 +148,7 @@ struct NetworkStudioView: View {
             Picker("View", selection: $mode) {
                 Label("Canvas", systemImage: "point.3.connected.trianglepath.dotted").tag(Mode.canvas)
                 Label("Tiles", systemImage: "square.grid.2x2").tag(Mode.tiles)
+                Label("Focus", systemImage: "rectangle.leadinghalf.inset.filled").tag(Mode.focus)
                 Label("Traffic", systemImage: "waveform.path").tag(Mode.traffic)
                 Label("Mandelbrot", systemImage: "square.grid.3x3.square").tag(Mode.mandelbrot)
             }
@@ -286,6 +289,144 @@ struct NetworkTiles: View {
         .buttonStyle(.borderless)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+    }
+}
+
+/// One machine large, with the keyboard, and the others that are on in a
+/// strip down the side, live. Click one in the strip to select it (for the
+/// inspector); double-click it to make it the large one.
+struct NetworkFocus: View {
+    @Bindable var session: NetworkSession
+    var openStation: (UUID) -> Void
+
+    static let stripWidth = 210.0
+
+    var body: some View {
+        let on = session.project.stations.filter { session.isOn($0.id) }
+        let main = mainMachine(among: on)
+        VStack(spacing: 0) {
+            focusBar(main)
+            Divider()
+            if let main, let controller = session.controllers[main.id] {
+                HStack(spacing: 0) {
+                    strip(on.filter { $0.id != main.id })
+                    Divider()
+                    StationTile(session: session, node: main, controller: controller, focused: true, openStation: openStation)
+                        .aspectRatio(Renderer.aspect, contentMode: .fit)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            } else {
+                ContentUnavailableView {
+                    Label("No Machines On", systemImage: "power")
+                } description: {
+                    Text("Switch machines on in the canvas, or with Power On All.")
+                } actions: {
+                    Button("Power On All") { session.powerOnAll() }
+                }
+            }
+        }
+        .background(Color(nsColor: .underPageBackgroundColor))
+        .onAppear { if let main { session.focus(main.id) } }
+        .onChange(of: main?.id) { _, id in if let id { session.focus(id) } }
+    }
+
+    /// The one chosen, if it's on; otherwise the one with the keyboard, or
+    /// the first that's on.
+    private func mainMachine(among on: [NetworkNode]) -> NetworkNode? {
+        for id in [session.project.workspace.focus, session.focused].compactMap({ $0 }) {
+            if let node = on.first(where: { $0.id == id }) { return node }
+        }
+        return on.first
+    }
+
+    private func show(_ id: UUID) {
+        session.update { $0.workspace.focus = id }
+        session.focus(id)
+    }
+
+    private func strip(_ others: [NetworkNode]) -> some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                ForEach(others) { node in
+                    if let controller = session.controllers[node.id] {
+                        FocusThumbnail(session: session, node: node, controller: controller,
+                                       selected: session.selection.contains(node.id))
+                            .onTapGesture(count: 2) { show(node.id) }
+                            .onTapGesture { session.selection = [node.id] }
+                    }
+                }
+            }
+            .padding(10)
+        }
+        .frame(width: Self.stripWidth)
+    }
+
+    private func focusBar(_ main: NetworkNode?) -> some View {
+        HStack(spacing: 12) {
+            Text("Double-click a machine to bring it here")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button { step(false) } label: { Image(systemName: "chevron.left") }
+                .help("Show the previous machine")
+                .keyboardShortcut("[", modifiers: [.command, .option])
+            Button { step(true) } label: { Image(systemName: "chevron.right") }
+                .help("Show the next machine")
+                .keyboardShortcut("]", modifiers: [.command, .option])
+            if let main {
+                Label("\(main.name) has the keyboard", systemImage: "keyboard")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    private func step(_ forward: Bool) {
+        session.focusNext(forward)
+        if let id = session.focused { show(id) }
+    }
+}
+
+/// A machine in the Focus view's strip: its screen, live, and its name.
+struct FocusThumbnail: View {
+    let session: NetworkSession
+    let node: NetworkNode
+    let controller: MachineController
+    let selected: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            StationThumbnail(cache: session.thumbnails, id: node.id, host: controller.host)
+                .aspectRatio(Renderer.aspect, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+            HStack(spacing: 6) {
+                StationBadge(number: node.stationNumber)
+                    .scaleEffect(0.85)
+                Text(node.name)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(6)
+        .background(.background, in: RoundedRectangle(cornerRadius: 9))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9)
+                .strokeBorder(selected ? Color.accentColor : Color.secondary.opacity(0.25), lineWidth: selected ? 2.5 : 1)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 9))
+        .help("\(node.name): click to select, double-click to bring it here")
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(node.name)\(selected ? ", selected" : "")")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: "Bring Here") {
+            session.update { $0.workspace.focus = node.id }
+            session.focus(node.id)
+        }
     }
 }
 

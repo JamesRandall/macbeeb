@@ -319,6 +319,8 @@ public struct Workspace: Codable, Sendable, Equatable {
     public var tiles: [UUID] = []
     /// 0 for as many as fit.
     public var columns = 0
+    /// The machine the Focus view shows large.
+    public var focus: UUID?
 
     public init() {}
 }

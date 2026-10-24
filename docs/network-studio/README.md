@@ -237,6 +237,17 @@ ring, and it's the one you hear. ⌥⌘] and ⌥⌘[ move the keyboard to the ne
 or previous machine. **Show** chooses which machines have tiles, and
 **Columns** how they're laid out.
 
+## Focus
+
+Click **Focus** in the toolbar to use one machine large, with the others
+that are on in a strip down the side, live. The large one has the keyboard
+and is the one you hear.
+- **Click** a machine in the strip to select it: the inspector shows it, so you can change it, suspend it or switch it off without leaving the one you're using.
+- **Double-click** it to bring it into the large view.
+- ⌥⌘] and ⌥⌘[ step through the machines.
+
+The network remembers which machine was large.
+
 ## Traffic
 
 Click **Traffic** in the toolbar to see every frame that's crossed the

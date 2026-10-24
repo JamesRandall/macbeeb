@@ -177,6 +177,13 @@ enum NetworkSelfTest {
             try? await Task.sleep(for: .seconds(1))
             capture(canvas, to: path)
             capture(view, to: path.replacingOccurrences(of: ".png", with: "-mandelbrot.png"))
+            // The Focus view: the Guide large, the rest down the side, a
+            // worker selected (for the inspector).
+            session.update { $0.workspace.focus = guide.id }
+            session.selection = stations.first { $0.bootsNetwork == true }.map { [$0.id] } ?? []
+            let focus = window(.focus)
+            try? await Task.sleep(for: .seconds(2))
+            capture(focus, to: path.replacingOccurrences(of: ".png", with: "-focus.png"))
             for (name, text) in await screens() {
                 report += "\n== \(name)\n\(text)\n"
             }
