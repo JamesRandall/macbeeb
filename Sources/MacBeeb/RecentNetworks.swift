@@ -13,7 +13,33 @@ final class RecentNetworks {
     private(set) var urls: [URL]
 
     private init() {
-        urls = (UserDefaults.standard.stringArray(forKey: Self.defaultsKey) ?? []).map { URL(fileURLWithPath: $0) }
+        let saved = (UserDefaults.standard.stringArray(forKey: Self.defaultsKey) ?? []).map { URL(fileURLWithPath: $0) }
+        // Self-tests' networks (in the temporary folder) once got in.
+        urls = saved.filter { !Self.isTemporary($0) }
+        if urls.count != saved.count {
+            // They pushed the user's own off the list: fill it again from
+            // the networks folder, most recently changed first.
+            let found = (try? FileManager.default.contentsOfDirectory(at: Self.folder, includingPropertiesForKeys: [.contentModificationDateKey]))?
+                .filter { $0.pathExtension == NetworkPackage.fileExtension }
+                .sorted { Self.modified($0) > Self.modified($1) } ?? []
+            for url in found.map(\.standardizedFileURL) where !urls.contains(url) && urls.count < Self.limit {
+                urls.append(url)
+            }
+            save()
+        }
+    }
+
+    private static func modified(_ url: URL) -> Date {
+        // A package's manifest changes as the network's saved.
+        let manifest = url.appendingPathComponent("manifest.json")
+        return (try? manifest.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+            ?? (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+    }
+
+    /// Whether a network is in the temporary folder, as self-tests' are.
+    private static func isTemporary(_ url: URL) -> Bool {
+        let temporary = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().path
+        return url.resolvingSymlinksInPath().path.hasPrefix(temporary)
     }
 
     /// The ones still there.
@@ -22,6 +48,8 @@ final class RecentNetworks {
     }
 
     func add(_ url: URL) {
+        // Not a self-test's.
+        guard !Self.isTemporary(url), !LaunchScreen.isSelfTest else { return }
         let url = url.standardizedFileURL
         urls.removeAll { $0 == url }
         urls.insert(url, at: 0)

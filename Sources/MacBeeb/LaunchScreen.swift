@@ -33,13 +33,13 @@ enum LaunchScreen: String, CaseIterable, Identifiable {
 
     /// What this launch shows: the setting as it was when the app started.
     /// Self-tests and window captures need a machine.
-    nonisolated static let atLaunch: LaunchScreen = {
+    nonisolated static let atLaunch: LaunchScreen = isSelfTest ? .machine : preference
+
+    /// Whether this is a self-test or a window capture run, which mustn't
+    /// change the user's things (their recent networks).
+    nonisolated static let isSelfTest: Bool = {
         let defaults = UserDefaults.standard
-        if defaults.string(forKey: "MacBeebSelfTest") != nil || defaults.string(forKey: "MacBeebNetworkSelfTest") != nil
-            || defaults.string(forKey: "MacBeebMCPSelfTest") != nil
-            || defaults.string(forKey: "MacBeebCaptureDirectory") != nil {
-            return .machine
-        }
-        return preference
+        return ["MacBeebSelfTest", "MacBeebNetworkSelfTest", "MacBeebMCPSelfTest", "MacBeebCaptureDirectory"]
+            .contains { defaults.string(forKey: $0) != nil }
     }()
 }
