@@ -118,7 +118,7 @@ IF TOOL = 0
     JSR pstr : EQUS " already running.", 13, 0
 .summary3
     JSR colour2
-    JSR pstr : EQUS "Now *MANDEL to draw.", 13, 0
+    JSR pstr : EQUS "Now *MANDEL (or *MANDEL2) to draw.", 13, 0
 ELIF TOOL = 1
     LDA started : JSR pdec8
     JSR pstr : EQUS " running, ", 0
