@@ -40,6 +40,8 @@ struct NetworkInspector: View {
                 LabeledContent("Name") {
                     TextField("Name", text: Binding(get: { session.project.name },
                                                     set: { name in session.update { $0.name = name } }))
+                        .onSubmit { session.renameFileToMatch() }
+                        .help("The network's name; its file is renamed to match when you press Return")
                         .textFieldStyle(.roundedBorder)
                         .labelsHidden()
                 }

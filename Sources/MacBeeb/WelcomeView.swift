@@ -199,9 +199,8 @@ struct WelcomeView: View {
     }
 
     private func mandelbrot() {
-        let url = RecentNetworks.newURL(named: NetworkTemplate.mandelbrotInColour.title)
         do {
-            try NetworkPackage.create(.mandelbrotInColour, at: url)
+            let url = try NetworkStudioCommands.createDraft(.mandelbrotInColour)
             NetworkStudioCommands.open(url, openWindow: openWindow)
         } catch {
             self.error = error.localizedDescription

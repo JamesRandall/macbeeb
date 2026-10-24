@@ -15,7 +15,7 @@ struct StationWindow: View {
     let ref: Ref?
 
     var body: some View {
-        if let ref, let session = NetworkSession.open[ref.network.standardizedFileURL],
+        if let ref, let session = NetworkSession.existing(ref.network),
            let controller = session.controllers[ref.node] {
             MachineScreen(machine: controller)
                 .id(ObjectIdentifier(controller))

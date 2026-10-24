@@ -20,6 +20,11 @@ public struct NetworkProject: Codable, Sendable, Equatable {
     /// The Internet Econet room it's in, if it's shared or joined one
     /// (nothing secret: the room's credentials are in the Keychain).
     public var internetRoom: InternetRoomLink?
+    /// New and not yet kept: closing it asks whether to save it (with a
+    /// name and a place) or delete it, as a new document does.
+    public var draft: Bool?
+
+    public var isDraft: Bool { draft == true }
 
     public init(name: String, nodes: [NetworkNode] = []) {
         self.name = name

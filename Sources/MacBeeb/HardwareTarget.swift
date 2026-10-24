@@ -122,7 +122,7 @@ enum HardwareRef: Codable, Hashable {
         case .machine(let id):
             return MachineController.all[id]
         case .station(let network, let node):
-            guard let session = NetworkSession.open[network.standardizedFileURL], session.project[node] != nil else { return nil }
+            guard let session = NetworkSession.existing(network), session.project[node] != nil else { return nil }
             if let station = Self.targets[self] as? StationHardwareTarget, station.session === session { return station }
             let station = StationHardwareTarget(session: session, node: node)
             Self.targets[self] = station

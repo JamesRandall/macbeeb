@@ -57,6 +57,15 @@ final class RecentNetworks {
         save()
     }
 
+    /// A network moved (renamed): it keeps its place in the list.
+    func replace(_ old: URL, with new: URL) {
+        let old = old.standardizedFileURL, new = new.standardizedFileURL
+        guard urls.contains(old) else { return add(new) }
+        var seen: Set<URL> = []
+        urls = urls.map { $0 == old ? new : $0 }.filter { seen.insert($0).inserted }
+        save()
+    }
+
     func remove(_ url: URL) {
         urls.removeAll { $0 == url.standardizedFileURL }
         save()
@@ -72,8 +81,14 @@ final class RecentNetworks {
             .appendingPathComponent("MacBeeb Networks", isDirectory: true)
     }
 
-    /// A new package's place, named after `name` and not taken.
-    static func newURL(named name: String) -> URL {
+    /// Where new networks wait until they're kept (or deleted).
+    static var draftsFolder: URL {
+        URL.applicationSupportDirectory.appendingPathComponent("MacBeeb/Draft Networks", isDirectory: true)
+    }
+
+    /// A new package's place, named after `name` and not taken: in the
+    /// drafts folder (a new network), or `folder`.
+    static func newURL(named name: String, in folder: URL = draftsFolder) -> URL {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let clean = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
         var candidate = folder.appendingPathComponent(clean).appendingPathExtension(NetworkPackage.fileExtension)

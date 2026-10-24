@@ -43,14 +43,35 @@ final class NetworkSession: StationOwner {
     var currentInvite: Invite?
     /// What the room was told of the stations, to tell it changes.
     @ObservationIgnored var lastClaims: [StationClaim] = []
+    @ObservationIgnored private var closed = false
 
-    /// The sessions open, by package.
+    /// The sessions open, by package (one each).
     private(set) static var open: [URL: NetworkSession] = [:]
+    /// Packages that have moved (renamed or kept somewhere) since a window
+    /// was given their address: old to new.
+    private static var moves: [URL: URL] = [:]
+
+    /// A package's address as `open` keys it (a folder's URL can come with
+    /// or without its trailing slash).
+    static func key(_ url: URL) -> URL {
+        URL(fileURLWithPath: url.standardizedFileURL.path)
+    }
+
+    /// The open session for the network at `url`, or that was there.
+    static func existing(_ url: URL) -> NetworkSession? {
+        var key = key(url)
+        for _ in 0..<8 {
+            if let session = open[key] { return session }
+            guard let next = moves[key] else { return nil }
+            key = next
+        }
+        return nil
+    }
 
     /// The session for the network at `url`, opening it if it isn't.
     static func session(for url: URL) throws -> NetworkSession {
-        let key = url.standardizedFileURL
-        if let session = open[key] { return session }
+        let key = key(url)
+        if let session = existing(key) { return session }
         let session = try NetworkSession(url: key)
         open[key] = session
         return session
@@ -96,8 +117,12 @@ final class NetworkSession: StationOwner {
 
     /// Closes the network: its machines stop, and it's saved.
     func close() {
+        // Once (deleting a network closes it before its window goes).
+        guard !closed else { return }
+        closed = true
         internet?.stop()
         internet = nil
+        renameFileToMatch()
         saveNow()
         statusTimer?.invalidate()
         for controller in controllers.values {
@@ -105,7 +130,86 @@ final class NetworkSession: StationOwner {
         }
         controllers.removeAll()
         runtime.stop()
-        Self.open[url] = nil
+        for (key, session) in Self.open where session === self { Self.open[key] = nil }
+    }
+
+    /// Keeps a new network: named `name`, in `folder` (its name's own if
+    /// it's taken there), no longer a draft.
+    func keep(as name: String, in folder: URL) throws {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        update {
+            $0.name = name.isEmpty ? $0.name : name
+            $0.draft = nil
+        }
+        saveNow()
+        let clean = project.name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+        var target = folder.appendingPathComponent(clean).appendingPathExtension(NetworkPackage.fileExtension)
+        var n = 2
+        while FileManager.default.fileExists(atPath: target.path) && target.standardizedFileURL != url {
+            target = folder.appendingPathComponent("\(clean) \(n)").appendingPathExtension(NetworkPackage.fileExtension)
+            n += 1
+        }
+        guard target.standardizedFileURL != url else { return }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: url, to: target)
+        moved(to: target)
+    }
+
+    /// Deletes a new network: it closes (leaving its Internet room, if it's
+    /// in one) and goes in the Trash.
+    func discard() async {
+        if isInRoom { await leaveRoom() }
+        let package = url
+        close()
+        RecentNetworks.shared.remove(package)
+        if LaunchScreen.isSelfTest {
+            // (Not the user's Trash.)
+            try? FileManager.default.removeItem(at: package)
+        } else {
+            try? FileManager.default.trashItem(at: package, resultingItemURL: nil)
+        }
+    }
+
+    /// The package is somewhere else now.
+    private func moved(to target: URL) {
+        let old = Self.key(url)
+        url = Self.key(target)
+        runtime.packageURL = url
+        // Windows that know it by its old address still find it.
+        Self.open[old] = nil
+        Self.open[url] = self
+        Self.moves[old] = url
+        // Discs in drives write back to the package: to its new place.
+        for (id, controller) in controllers {
+            for (drive, media) in project[id]?.discs ?? [:] {
+                runtime.insert(media, drive: drive, into: controller.host)
+            }
+        }
+        RecentNetworks.shared.replace(old, with: url)
+    }
+
+    /// Renames the package to the network's name (so Open Recent and the
+    /// Finder say what the network's called), keeping it in its folder.
+    /// The name's own, if it's taken there: "Name 2".
+    func renameFileToMatch() {
+        let name = project.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+        guard !name.isEmpty, !name.hasPrefix("."), name != url.deletingPathExtension().lastPathComponent else { return }
+        saveNow()
+        let folder = url.deletingLastPathComponent()
+        var target = folder.appendingPathComponent(name).appendingPathExtension(NetworkPackage.fileExtension)
+        var n = 2
+        while FileManager.default.fileExists(atPath: target.path) {
+            target = folder.appendingPathComponent("\(name) \(n)").appendingPathExtension(NetworkPackage.fileExtension)
+            n += 1
+        }
+        do {
+            try FileManager.default.moveItem(at: url, to: target)
+        } catch {
+            saveError = "Couldn't rename the network's file: \(error.localizedDescription)"
+            return
+        }
+        moved(to: target)
     }
 
     // MARK: Saving
@@ -142,6 +246,7 @@ final class NetworkSession: StationOwner {
     func saveNow() {
         saveTask?.cancel()
         saveTask = nil
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
         do {
             try NetworkPackage.save(project, to: url)
             saveError = nil
@@ -153,16 +258,22 @@ final class NetworkSession: StationOwner {
     /// Saves a copy elsewhere and carries on with the copy.
     func saveAs(_ newURL: URL) throws {
         saveNow()
-        let key = newURL.standardizedFileURL
+        let key = Self.key(newURL)
         if FileManager.default.fileExists(atPath: key.path) {
             try FileManager.default.removeItem(at: key)
         }
         try FileManager.default.copyItem(at: url, to: key)
-        Self.open[url] = nil
+        let old = Self.key(url)
+        Self.open[old] = nil
+        Self.moves[old] = key
         url = key
         runtime.packageURL = key
         Self.open[key] = self
-        update { $0.name = key.deletingPathExtension().lastPathComponent }
+        update {
+            $0.name = key.deletingPathExtension().lastPathComponent
+            // Saved somewhere: kept.
+            $0.draft = nil
+        }
         // Discs already in drives keep writing to the old copies until
         // they're changed; put the package's copies back in.
         for (id, controller) in controllers {

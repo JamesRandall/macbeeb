@@ -50,7 +50,7 @@ struct NetworkStartView: View {
                     }
                 }
                 Spacer()
-                Text("New networks are saved in Documents ▸ MacBeeb Networks as you work.")
+                Text("New networks are saved as you work; closing one asks whether to keep it, and where.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -65,9 +65,8 @@ struct NetworkStartView: View {
     }
 
     private func create(_ template: NetworkTemplate) {
-        let url = RecentNetworks.newURL(named: template.title)
         do {
-            try NetworkPackage.create(template, at: url)
+            let url = try NetworkStudioCommands.createDraft(template)
             NetworkStudioCommands.open(url, openWindow: openWindow)
             dismissWindow(id: Self.windowID)
         } catch {
@@ -118,6 +117,16 @@ enum NetworkStudioCommands {
     /// Posted (with the package's URL) to show a network's Share Over
     /// Internet sheet.
     static let shareRequest = Notification.Name("MacBeebShareNetwork")
+
+    /// A new network from a template, as a draft: closing it asks whether
+    /// to keep it.
+    static func createDraft(_ template: NetworkTemplate) throws -> URL {
+        let url = RecentNetworks.newURL(named: template.title)
+        var project = try NetworkPackage.create(template, at: url)
+        project.draft = true
+        try NetworkPackage.save(project, to: url)
+        return url
+    }
 
     static func open(_ url: URL, openWindow: OpenWindowAction) {
         openWindow(id: NetworkStudioWindow.windowID, value: url.standardizedFileURL)

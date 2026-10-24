@@ -249,6 +249,7 @@ struct JoinRoomView: View {
             .clock(at: CanvasPoint(x: 0, y: NetworkProject.rowSpacing)),
         ]
         project.workspace.tiles = project.stations.map(\.id)
+        project.draft = true
         let url = RecentNetworks.newURL(named: preview.room.name)
         try NetworkPackage.save(project, to: url)
         return try NetworkSession.session(for: url)

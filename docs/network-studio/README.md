@@ -381,8 +381,16 @@ changed.**
 
 Networks save themselves as you work: what's on the network, each
 machine's hardware, station number, discs and place on the canvas, and the
-tiles. A network file (`.macbeebnet`) is a package. To keep a copy
-somewhere else, use **File ▸ Save Network As…**. **File ▸ Open Recent
+tiles. A network file (`.macbeebnet`) is a package.
+
+A new network is a draft until you keep it. When you close its window,
+MacBeeb asks, as for a new document: **Save** it, with a name and a place
+(Documents ▸ MacBeeb Networks unless you choose another), or **Delete** it
+(it goes in the Trash). **Cancel** leaves it open.
+
+To rename a network, change its **Name** in the inspector (with nothing
+selected on the canvas) and press Return: its file is renamed to match. To
+keep a copy somewhere else, use **File ▸ Save Network As…**. **File ▸ Open Recent
 Network** and **Window ▸ Network Studio** (⌥⌘0) bring back the last ones.
 
 What's in the machines' memory isn't saved: when you open a network again,

@@ -245,7 +245,8 @@ final class AppMachineDirectory: MachineDirectory, @unchecked Sendable {
                 return .error("invalid_value: template must be one of \(templates.keys.sorted().joined(separator: ", "))")
             }
             let given = arguments["name"]?.stringValue
-            url = RecentNetworks.newURL(named: given.flatMap { $0.isEmpty ? nil : $0 } ?? template.title)
+            // (An agent's networks are kept, in the networks folder.)
+            url = RecentNetworks.newURL(named: given.flatMap { $0.isEmpty ? nil : $0 } ?? template.title, in: RecentNetworks.folder)
             do {
                 try NetworkPackage.create(template, named: given, at: url)
             } catch {

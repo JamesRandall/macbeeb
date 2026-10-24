@@ -63,6 +63,45 @@ enum NetworkSelfTest {
             runInternet(path, host: template == "internetHost")
             return
         }
+        if UserDefaults.standard.string(forKey: "MacBeebNetworkSelfTestTemplate") == "rename" {
+            // A network renamed: its file follows, discs and all.
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("macbeeb-rename-\(UUID().uuidString)")
+            try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let url = folder.appendingPathComponent("Econet Demo.\(NetworkPackage.fileExtension)")
+            try? NetworkPackage.create(.econetDemo, at: url)
+            var report = ""
+            if let session = try? NetworkSession.session(for: url) {
+                session.update { $0.name = "Renamed: Classroom" }
+                session.renameFileToMatch()
+                report += "New file: \(session.url.lastPathComponent)\n"
+                report += "Old gone: \(!FileManager.default.fileExists(atPath: url.path)), new there: \(FileManager.default.fileExists(atPath: session.url.path))\n"
+                report += "Found by old address: \(NetworkSession.existing(url) === session)\n"
+                report += "Reopens: \((try? NetworkPackage.load(from: session.url))?.name ?? "no")\n"
+                session.close()
+            }
+            // A new network, kept: named and moved, no longer a draft.
+            let kept = folder.appendingPathComponent("Kept", isDirectory: true)
+            if let draft = try? NetworkStudioCommands.createDraft(.twoBBCs), let session = try? NetworkSession.session(for: draft) {
+                report += "Draft: \(session.project.isDraft), in drafts folder: \(draft.path.contains("Draft Networks"))\n"
+                try? session.keep(as: "My Two BBCs", in: kept)
+                report += "Kept as: \(session.url.path.replacingOccurrences(of: folder.path, with: "")), draft: \(session.project.isDraft), draft file gone: \(!FileManager.default.fileExists(atPath: draft.path))\n"
+                session.close()
+            }
+            // Another, deleted.
+            if let draft = try? NetworkStudioCommands.createDraft(.twoBBCs), let session = try? NetworkSession.session(for: draft) {
+                Task { @MainActor in
+                    await session.discard()
+                    session.close()
+                    report += "Deleted: gone \(!FileManager.default.fileExists(atPath: draft.path)), in recents \(RecentNetworks.shared.urls.contains(draft.standardizedFileURL))\n"
+                    try? report.write(toFile: path, atomically: true, encoding: .utf8)
+                    NSApp.terminate(nil)
+                }
+                return
+            }
+            try? report.write(toFile: path, atomically: true, encoding: .utf8)
+            NSApp.terminate(nil)
+            return
+        }
         if UserDefaults.standard.string(forKey: "MacBeebNetworkSelfTestTemplate") == "welcome" {
             // The welcome screen, captured.
             let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 1060, height: 800),

@@ -11,6 +11,10 @@ struct NetworkStudioWindow: View {
     @State private var session: NetworkSession?
     @State private var error: String?
     @Environment(\.dismissWindow) private var dismissWindow
+    /// A new network's window closing: keep it, or delete it?
+    @State private var askingToKeep = false
+    @State private var mayClose = false
+    @State private var window: NSWindow?
 
     var body: some View {
         Group {
@@ -27,6 +31,22 @@ struct NetworkStudioWindow: View {
             }
         }
         .frame(minWidth: 760, minHeight: 520)
+        .background(WindowCloseGuard(shouldClose: {
+            guard !mayClose, session?.project.isDraft == true else { return true }
+            askingToKeep = true
+            return false
+        }, window: { window = $0 }))
+        .sheet(isPresented: $askingToKeep) {
+            if let session {
+                KeepNetworkSheet(session: session) { close in
+                    askingToKeep = false
+                    if close {
+                        mayClose = true
+                        window?.close()
+                    }
+                }
+            }
+        }
         .onAppear(perform: load)
         .onDisappear {
             session?.close()
